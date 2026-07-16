@@ -1,0 +1,15 @@
+digraph model_layers {
+  rankdir=LR;
+  node [shape=box, style="rounded,filled", fillcolor="#eef5ff"];
+  spec [label="dtDynSpec
+editable model intent"];
+  compile [label="CompileSpec
+validate + assign addresses"];
+  model [label="dtDynModel
+immutable topology/indexing"];
+  data [label="dtDynData::Resize(model)
+preallocated runtime storage"];
+  loop [label="RT compute loop
+state + dynamics + Jacobians"];
+  spec -> compile -> model -> data -> loop;
+}

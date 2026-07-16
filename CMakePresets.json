@@ -1,0 +1,82 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 21,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "release",
+      "displayName": "Release library",
+      "description": "Configure the production dtDynamics library without tests or benchmarks.",
+      "binaryDir": "${sourceDir}/build/release",
+        "cacheVariables": {
+          "CMAKE_BUILD_TYPE": "Release",
+          "DTDYNAMICS_BUILD_TEST": "OFF",
+          "DTDYNAMICS_BUILD_BENCHMARK": "OFF",
+          "DTDYNAMICS_BUILD_REFERENCE_BENCHMARK": "OFF",
+          "BUILD_DTDYNAMICS_MUJOCO_TEST": "OFF",
+          "BUILD_DTDYNAMICS_PINOCCHIO_TEST": "OFF"
+        }
+      },
+    {
+      "name": "validation",
+      "displayName": "Release validation",
+      "description": "Configure native tests, MuJoCo/Pinocchio reference tests, and benchmarks.",
+      "binaryDir": "${sourceDir}/build/validation",
+      "cacheVariables": {
+          "CMAKE_BUILD_TYPE": "Release",
+          "DTDYNAMICS_BUILD_TEST": "ON",
+          "DTDYNAMICS_BUILD_BENCHMARK": "ON",
+          "DTDYNAMICS_BUILD_REFERENCE_BENCHMARK": "ON",
+          "BUILD_DTDYNAMICS_MUJOCO_TEST": "ON",
+          "BUILD_DTDYNAMICS_PINOCCHIO_TEST": "ON"
+        }
+    },
+    {
+      "name": "native-validation",
+      "displayName": "Release native validation",
+      "description": "Configure native tests and benchmarks without MuJoCo/Pinocchio reference executables.",
+      "binaryDir": "${sourceDir}/build/native-validation",
+      "cacheVariables": {
+          "CMAKE_BUILD_TYPE": "Release",
+          "DTDYNAMICS_BUILD_TEST": "ON",
+          "DTDYNAMICS_BUILD_BENCHMARK": "ON",
+          "DTDYNAMICS_BUILD_REFERENCE_BENCHMARK": "OFF",
+          "BUILD_DTDYNAMICS_MUJOCO_TEST": "OFF",
+          "BUILD_DTDYNAMICS_PINOCCHIO_TEST": "OFF"
+        }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "release",
+      "configurePreset": "release"
+    },
+    {
+      "name": "validation",
+      "configurePreset": "validation"
+    },
+    {
+      "name": "native-validation",
+      "configurePreset": "native-validation"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "validation",
+      "configurePreset": "validation",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "native-validation",
+      "configurePreset": "native-validation",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}

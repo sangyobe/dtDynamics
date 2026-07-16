@@ -1,0 +1,21 @@
+digraph compute_pipeline {
+  rankdir=LR;
+  node [shape=box, style="rounded,filled", fillcolor="#f8f8f8"];
+  state [label="qpos/qvel/gravity"];
+  fk [label="Forward kinematics"];
+  rnea [label="RNEA
+gravity/bias/nonlinear"];
+  ccrba [label="CCRBA
+base: M, C
+term-mask: Mdot, centroidal, CoM"];
+  jac [label="Indexed J + Jdot
+body/site/task"];
+  wbc [label="WBC ingredients
+controller-owned outputs"];
+  state -> fk;
+  fk -> rnea -> wbc;
+  fk -> ccrba -> wbc;
+  rnea -> jac [label="current spatial work"];
+  ccrba -> jac [label="current spatial work"];
+  jac -> wbc;
+}

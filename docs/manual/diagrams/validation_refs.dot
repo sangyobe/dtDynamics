@@ -1,0 +1,18 @@
+digraph validation_refs {
+  rankdir=LR;
+  node [shape=box, style="rounded,filled", fillcolor="#f8f8f8"];
+  native [label="dtDynamics production
+dtMath-only public package"];
+  tests [label="validation executables
+private deps only"];
+  mujoco [label="MuJoCo 3.8.0
+indexing/dynamics reference"];
+  pin [label="Pinocchio 3.9.0
+independent dynamics reference"];
+  controller [label="LeoQuad/runtime gate
+consumer validation"];
+  native -> tests;
+  tests -> mujoco [style=dashed];
+  tests -> pin [style=dashed];
+  native -> controller;
+}

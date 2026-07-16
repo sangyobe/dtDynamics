@@ -1,0 +1,43 @@
+# dtDynamics Doxygen manual configuration.
+PROJECT_NAME           = "dtDynamics"
+PROJECT_BRIEF          = "Standalone dynamics ingredient package for control and WBC"
+OUTPUT_DIRECTORY       = build/docs/doxygen
+CREATE_SUBDIRS         = NO
+INPUT                  = README.md include docs/manual docs/benchmark-results.md
+RECURSIVE              = YES
+USE_MDFILE_AS_MAINPAGE = docs/manual/index.md
+FILE_PATTERNS          = *.h *.hpp *.md
+EXCLUDE_PATTERNS       = */build/* */.validation_deps/*
+GENERATE_HTML          = YES
+GENERATE_LATEX         = NO
+HTML_OUTPUT            = html
+EXTRACT_ALL            = NO
+EXTRACT_PRIVATE        = NO
+EXTRACT_STATIC         = NO
+JAVADOC_AUTOBRIEF      = YES
+MARKDOWN_SUPPORT       = YES
+AUTOLINK_SUPPORT       = YES
+TOC_INCLUDE_HEADINGS   = 4
+HAVE_DOT               = YES
+DOT_IMAGE_FORMAT       = svg
+INTERACTIVE_SVG        = YES
+DOT_GRAPH_MAX_NODES    = 80
+CALL_GRAPH             = NO
+CALLER_GRAPH           = NO
+CLASS_DIAGRAMS         = YES
+UML_LOOK               = NO
+WARN_AS_ERROR          = NO
+WARN_IF_UNDOCUMENTED   = NO
+WARN_IF_DOC_ERROR      = YES
+QUIET                  = NO
+
+DOTFILE_DIRS           = docs/manual
+
+# Render LaTeX-style equations in the HTML manual.
+USE_MATHJAX          = NO
+# MATHJAX_FORMAT       = HTML-CSS
+# MATHJAX_RELPATH      = https://cdn.jsdelivr.net/npm/mathjax@2
+
+IMAGE_PATH             = docs docs/figures
+FORMULA_FONTSIZE      = 10
+EXTRA_PACKAGES         = amsmath amssymb

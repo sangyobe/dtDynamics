@@ -1,0 +1,12 @@
+digraph realtime_loop {
+  rankdir=TB;
+  node [shape=box, style="rounded,filled"];
+  setup [fillcolor="#e8f5e9", label="Setup / non-RT
+load spec, compile model, resize dtDynData, cache IDs"];
+  tick [fillcolor="#fff8e1", label="Hard RT tick
+write state, compute selected terms, no counted C++ allocation"];
+  output [fillcolor="#e3f2fd", label="Controller outputs
+M, C, g, Jacobians, CoM, centroidal terms"];
+  setup -> tick -> output;
+  tick -> tick [label="repeat"];
+}

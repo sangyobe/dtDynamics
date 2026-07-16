@@ -1,0 +1,88 @@
+# Build directories
+build/
+build-*/
+cmake-build-*/
+
+# CMake generated files when configured in-tree by mistake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+install_manifest.txt
+Makefile
+compile_commands.json
+
+# Local install/export scratch directories
+install/
+lib/
+lib64/
+bin/
+dist/
+
+# Validation-only third-party dependency cache
+.validation_deps/
+
+# Generated benchmark outputs
+*.csv
+*.log
+
+# Compiler/editor artifacts
+*.o
+*.obj
+*.a
+*.so
+*.dll
+*.dylib
+*.swp
+*.user
+.cache/
+.vscode/
+.idea/
+
+# Root-local AI assistant workspaces and tool state
+/.hermes/
+/.claude/
+/.codex/
+/.agents/
+/.cursor/
+/.continue/
+/.aider/
+/.windsurf/
+/.gemini/
+/.opencode/
+/.roo/
+/.roo-code/
+/.cline/
+/.kilocode/
+/.serena/
+/.augment/
+/.amazonq/
+/.qodo/
+
+# Python bytecode and tool caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.coverage
+.coverage.*
+htmlcov/
+.pytype/
+.tox/
+.nox/
+coverage.xml
+*.egg-info/
+.eggs/
+*.egg
+*.whl
+pip-wheel-metadata/
+.venv/
+venv/
+env/
+ENV/
+
+# Generated previews for canonical SVG architecture diagrams
+docs/figures/dtdynamics_as_is.png
+docs/figures/dtdynamics_to_be.png
