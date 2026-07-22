@@ -1,0 +1,14 @@
+################################################################################
+# Polyspace As You Code (PAYC) 전용 옵션 파일 — dtdynamics 개발자 PC 전용
+# polyspace.analysisOptions.otherAnalysisOptionsFile 로 지정
+# PC마다 경로가 다르므로 .gitignore 에 등록, 직접 관리
+################################################################################
+
+# ── 체커 선택 ────────────────────────────────────────────────────────────────
+# XML 파일로 Bug Finder 체커 + MISRA C++:2023 규칙 통합 관리
+# checkers.xml 설정: Defects High/Medium, MISRA C++:2023 Mandatory
+-checkers-activation-file polyspace/checkers.xml
+
+# ── MISRA C++ 2023 코딩 규칙 ─────────────────────────────────────────────────
+# checkers.xml 에 포함됨 (별도 지정 불필요)
+# -misra-cpp-2023 mandatory

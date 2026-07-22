@@ -1,0 +1,155 @@
+stages:
+  - lint
+  - build
+  - analyse
+
+default:
+  interruptible: true
+  image: registry.hmc.co.kr/rlab/ardg/arct/project/arch/06-cicd/art-cicd/artf-build:v1.2
+  tags:
+    - artplot-server
+
+lint-job:
+  stage: lint
+  # TODO: 전체 코드베이스 clang-format 적용 완료 후 allow_failure: false 로 변경
+  allow_failure: true
+  rules:
+    - if: $CI_COMMIT_BRANCH == "ci-test"
+  script:
+    - mkdir -p reports
+    - >
+      find include src
+        \( -name "*.cpp" -o -name "*.h" \)
+      | xargs clang-format --dry-run --Werror 2>&1
+      | tee reports/clang-format.txt || true
+  artifacts:
+    when: always
+    paths:
+      - reports/clang-format.txt
+    expire_in: 1 week
+
+build-job:
+  stage: build
+  rules:
+    - if: $CI_COMMIT_BRANCH == "ci-test"
+  script:
+    - echo "=== Build Environment ==="
+    - cat "$ARTF_INSTALL_DIR/versions.txt"
+    - echo "========================="
+    - cmake -S . -B build
+        -DCMAKE_BUILD_TYPE=Release
+        -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+        -DDTDYNAMICS_BUILD_TEST=OFF
+        -DDTDYNAMICS_BUILD_BENCHMARK=OFF
+    - cmake --build build -j"$(nproc)"
+  artifacts:
+    paths:
+      - build/
+    expire_in: 1 week
+
+polyspace-job:
+  stage: analyse
+  timeout: 3h
+  # Polyspace Bug Finder Server 는 호스트에서 Docker 볼륨으로 마운트
+  # GitLab Runner 설정 필요: /etc/gitlab-runner/config.toml 의 volumes 에 아래 항목 추가
+  #   "/usr/local/Polyspace_Server:/usr/local/Polyspace_Server:ro"
+  # Polyspace Access 업로드용 변수는 GitLab CI/CD Settings > Variables 에서 설정:
+  #   POLYSPACE_ACCESS_LOGIN, POLYSPACE_ACCESS_ENCRYPTED_PASSWORD
+  rules:
+    - if: $CI_COMMIT_BRANCH == "ci-test"
+      allow_failure: true    # 결과 확인용, 파이프라인은 계속 진행
+  needs:
+    - build-job
+  cache:
+    key: polyspace-baseline-${CI_COMMIT_REF_SLUG}
+    paths:
+      - reports/polyspace/results/
+    policy: pull-push
+  variables:
+    POLYSPACE_BIN: /usr/local/Polyspace_Server/R2026a/polyspace/bin
+    POLYSPACE_TEMPLATES: /usr/local/Polyspace_Server/R2026a/toolbox/polyspace/psrptgen/templates
+    POLYSPACE_ACCESS_HOST: "10.20.92.67"
+    POLYSPACE_ACCESS_PORT: "9443"
+  script:
+    - export PATH="${POLYSPACE_BIN}:${PATH}"
+    - polyspace-bug-finder-server -version
+    - mkdir -p reports/polyspace build-polyspace
+    - export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
+    - |
+      polyspace-configure \
+        -compilation-database build/compile_commands.json \
+        -output-options-file build-polyspace/configure.opts \
+        -allow-overwrite \
+        -prog dtdynamics
+    - |
+      polyspace-bug-finder-server \
+        -options-file polyspace/polyspace.opts \
+        -options-file build-polyspace/configure.opts \
+        -results-dir reports/polyspace/results \
+        -max-processes 4 || true
+    - test -f reports/polyspace/results/ps_results.psbf || (echo "Polyspace 분석 실패 — 결과 없음"; exit 1)
+    # CSV 결과 내보내기
+    - polyspace-results-export
+        -format csv
+        -output-name reports/polyspace
+        -results-dir reports/polyspace/results
+    # PDF 리포트 생성
+    - polyspace-report-generator
+        -template "${POLYSPACE_TEMPLATES}/Developer.rpt"
+        -format PDF
+        -output-name reports/polyspace/polyspace-report
+        -results-dir reports/polyspace/results
+        -set-language-english || true
+    # 라이선스 오류 감지
+    - |
+      PSLOG=$(ls reports/polyspace/results/Polyspace_*.log 2>/dev/null | head -1 || true)
+      if [ -n "$PSLOG" ] && grep -q "License error\|Licensing Error" "$PSLOG"; then
+        echo "ERROR: Polyspace 라이선스 오류 — 라이선스 서버(FlexLM) 연결 실패"
+        grep "Licensing Error\|Error Code\|Feature:" "$PSLOG" | head -5
+        exit 1
+      fi
+    # 요약 출력 및 종료 코드 결정
+    - |
+      REPORT="reports/polyspace/result_list.txt"
+      POLYSPACE_EXIT=0
+      if [ -f "$REPORT" ]; then
+        NO_COMPILE=$(grep -c "File does not compile" "$REPORT" || true)
+        RED=$(grep $'\tRed\t' "$REPORT" | grep -cv "File does not compile" || true)
+        echo "=============================="
+        echo "Polyspace 결과 요약"
+        echo "  Red (실제 결함): ${RED}개  (컴파일 불가 ${NO_COMPILE}개 제외)"
+        echo "  PDF: reports/polyspace/polyspace-report.pdf"
+        echo "=============================="
+        if [ "$RED" -gt 0 ]; then
+          grep $'\tRed\t' "$REPORT" | grep -v "File does not compile" \
+            | awk -F'\t' '{printf "  %-50s | %s\n", $6, $9}'
+          POLYSPACE_EXIT=1
+        fi
+      else
+        echo "결과 CSV를 찾을 수 없습니다"
+        POLYSPACE_EXIT=1
+      fi
+    # Polyspace Access 에 결과 업로드 (변수 미설정 시 건너뜀)
+    - |
+      if [ -n "${POLYSPACE_ACCESS_LOGIN}" ] && [ -n "${POLYSPACE_ACCESS_ENCRYPTED_PASSWORD}" ]; then
+        RUN_LABEL="${CI_COMMIT_SHORT_SHA} | pipeline #${CI_PIPELINE_IID} | $(date '+%Y-%m-%d %H:%M')"
+        echo "Polyspace Access 업로드: ${RUN_LABEL}"
+        polyspace-access \
+          -protocol http \
+          -host "${POLYSPACE_ACCESS_HOST}" \
+          -port "${POLYSPACE_ACCESS_PORT}" \
+          -login "${POLYSPACE_ACCESS_LOGIN}" \
+          -encrypted-password "${POLYSPACE_ACCESS_ENCRYPTED_PASSWORD}" \
+          -upload reports/polyspace/results \
+          -parent-project "public/art_ws" \
+          -project "dtdynamics_$(date '+%Y%m%d_%H%M')_${CI_COMMIT_SHORT_SHA}" \
+          && echo "업로드 완료: ${RUN_LABEL}" || echo "Polyspace Access 업로드 실패 (계속 진행)"
+      else
+        echo "POLYSPACE_ACCESS_LOGIN/POLYSPACE_ACCESS_ENCRYPTED_PASSWORD 미설정 — 업로드 건너뜀"
+      fi
+      exit "${POLYSPACE_EXIT}"
+  artifacts:
+    when: always
+    paths:
+      - reports/polyspace/    # CSV, PDF, .psbf 모두 포함
+    expire_in: 1 month

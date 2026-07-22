@@ -1,0 +1,25 @@
+################################################################################
+# Polyspace Bug Finder 옵션 파일 — dtdynamics
+# 소스/결과 경로는 .gitlab-ci.yml 에서 명령행으로 전달
+# 주의: 옵션과 같은 줄에 주석(#) 사용 불가 — 별도 줄에만 허용
+################################################################################
+
+# ── 언어 / 컴파일러 ──────────────────────────────────────────────────────────
+# GCC 11 (Ubuntu 22.04 기준)
+-lang CPP
+-cpp-version cpp17
+-compiler gnu11.x
+
+# ── 체커 선택 ────────────────────────────────────────────────────────────────
+# XML 파일로 Bug Finder 체커 + MISRA C++:2023 규칙 통합 관리
+# polyspace-checkers-selection GUI 도구로 생성한 파일 사용
+# 설정: Defects High/Medium, MISRA C++:2023 Mandatory
+-checkers-activation-file polyspace/checkers.xml
+
+# ── MISRA C++ 코딩 규칙 ───────────────────────────────────────────────────────
+# [MISRA C++ 2023] — checkers.xml 에 포함됨 (별도 지정 불필요)
+# ⚠️ -checkers-activation-file 과 동시 사용 불가 — XML 안에서 제어
+# -misra-cpp-2023 mandatory
+
+# ── 프로젝트 정보 (리포트용) ─────────────────────────────────────────────────
+-prog dtdynamics
