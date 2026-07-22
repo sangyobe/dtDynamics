@@ -4,22 +4,25 @@ The benchmark suite reports both runtime and resource-consumption diagnostics.
 
 ## Main binaries
 
-- `benchmark_dtDynamics`: two dynamics-only native scopes (`native_ccrba_all` and `native_rnea_com_pos`) plus setup/off-loop `dtDynModel_resource` and `dtDynData_resource` rows.
+- `benchmark_dtDynamics`: three dynamics-only native scopes (`native_rnea_com_pos`, `native_ccrba_reduced`, and `native_ccrba_all`) plus setup/off-loop `dtDynModel_resource` and `dtDynData_resource` rows.
 - `benchmark_dtDynamicsStages`: per-stage timing for FK, CCRBA substages, Jacobians, and WBC-style reduced update paths.
 - `benchmark_dtDynamicsReferences`: MuJoCo and Pinocchio reference timing/error rows for comparable quantities.
 
 ## Benchmark scopes
 
-### Part A: native dynamics-only
+### Part A: native dynamics and external references
 
-The native executable benchmarks both public dynamics algorithms for every fixture/state:
+Part A contains three package-native dynamics calls for every fixture/state:
 
-- `native_ccrba_all` calls `ComputeDynamicsCCRBA(model, data, gravity, DTDYN_CCRBA_TERM_ALL)`.
 - `native_rnea_com_pos` calls `ComputeDynamicsRNEA(model, data, gravity, DTDYN_RNEA_TERM_COM_POS)`.
+- `native_ccrba_reduced` calls `ComputeDynamicsCCRBA(model, data, gravity, DTDYN_CCRBA_TERM_COM_POS | DTDYN_CCRBA_TERM_CMAMAT | DTDYN_CCRBA_TERM_CENT_MOM)`.
+- `native_ccrba_all` calls `ComputeDynamicsCCRBA(model, data, gravity, DTDYN_CCRBA_TERM_ALL)`.
 
-The CSV `scope` column distinguishes these rows. Cross-engine figures use CCRBA-all. RNEA centroidal-matrix consistency columns are `nan` because those outputs are outside the RNEA contract.
+The same Part A timing figures include MuJoCo and Pinocchio reference call sequences. Those libraries do not expose an identical CCRBA output contract, so the figures are contextual timing comparisons; status-bearing reference-error rows define which numerical quantities are comparable.
 
-### Part B: LeoQuad reduced mask
+The native CSV `scope` column distinguishes all three native rows. Historical CSVs without `scope` are interpreted as full CCRBA. RNEA reports centroidal-matrix and CoM-velocity consistency as `nan`; reduced CCRBA validates centroidal momentum but reports CoM-velocity consistency as `nan`; full CCRBA validates both.
+
+### Part B: LeoQuad controller scope
 
 The controller-shaped stage uses
 

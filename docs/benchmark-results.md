@@ -52,41 +52,46 @@ Each row uses 20 warmup iterations and 200 measured iterations. Allocation count
 
 The raw benchmark CSVs retain allocation counters for regression checking. Human-readable timing tables omit allocation columns when every displayed row in that scope is zero; zero allocation is stated once in prose instead of repeated in every row.
 
-## Part A — Native dynamics-only scope
+## Part A — Native dynamics and reference scope
 
-The native benchmark is intentionally dynamics-only and emits two labeled rows for every fixture/state:
+Part A contains five timing paths. The first three are package-native dynamics-only calls; the last two are external reference call sequences:
 
-- `native_ccrba_all`: `ComputeDynamicsCCRBA(model, data, gravity, DTDYN_CCRBA_TERM_ALL)` computes the base CCRBA outputs and every optional CCRBA term.
-- `native_rnea_com_pos`: `ComputeDynamicsRNEA(model, data, gravity, DTDYN_RNEA_TERM_COM_POS)` computes the RNEA base outputs plus root CoM position.
+- `native_rnea_com_pos`: `ComputeDynamicsRNEA(model, data, gravity, DTDYN_RNEA_TERM_COM_POS)`.
+- `native_ccrba_reduced`: `ComputeDynamicsCCRBA(model, data, gravity, DTDYN_CCRBA_TERM_COM_POS | DTDYN_CCRBA_TERM_CMAMAT | DTDYN_CCRBA_TERM_CENT_MOM)`.
+- `native_ccrba_all`: `ComputeDynamicsCCRBA(model, data, gravity, DTDYN_CCRBA_TERM_ALL)`.
+- `mujoco`: the documented MuJoCo forward/dynamics/reference sequence.
+- `pinocchio`: the documented Pinocchio dynamics/centroidal reference sequence.
 
-The native CSV schema includes a `scope` column so plots and tables cannot silently mix the two algorithms. Cross-engine figures select `native_ccrba_all`; the raw CSV retains all 48 native rows (eight fixtures, three states, and two scopes). RNEA rows report centroidal-matrix product consistency fields as `nan` because RNEA does not produce `cmAmat`, `centMom`, `comJmat`, or `comVel`.
+MuJoCo and Pinocchio do not expose an identical CCRBA output contract. Their rows are contextual reference timings only, not same-output performance comparisons. Numerical comparability is handled separately by the status-bearing reference-error rows.
 
-### Nominal native timing
+The native CSV `scope` column prevents the three package-native calls from being mixed. It contains 72 native timing rows: eight fixtures, three states, and three scopes. RNEA reports centroidal-matrix and CoM-velocity consistency as `nan`; reduced CCRBA validates `centMom = cmAmat * qvel` but reports CoM-velocity consistency as `nan`; full CCRBA validates both centroidal momentum and `comVel = comJmat * qvel`.
 
-| Fixture | nq | nv | bodies | CCRBA all median / p99 us | RNEA + CoM median / p99 us |
+### Nominal Part A timing
+
+| Fixture | RNEA + CoM median / p99 us | Reduced CCRBA median / p99 us | Full CCRBA median / p99 us | MuJoCo median / p99 us | Pinocchio median / p99 us |
 |---|---:|---:|---:|---:|---:|
-| single_manipulator_fixed_base | 3 | 3 | 5 | 1.218 / 1.292 | 1.519 / 1.601 |
-| dual_manipulator_fixed_base | 4 | 4 | 6 | 1.509 / 1.599 | 1.892 / 2.009 |
-| multi_robot_fixed_base | 4 | 4 | 8 | 1.739 / 1.816 | 2.268 / 2.375 |
-| multi_robot_floating_base | 18 | 16 | 8 | 3.854 / 4.060 | 3.094 / 3.283 |
-| quadruped_floating_base | 19 | 18 | 14 | 6.412 / 10.446 | 5.758 / 8.339 |
-| fixed_body_heavy | 1 | 1 | 11 | 1.609 / 1.660 | 2.838 / 2.936 |
-| serial_chain_10 | 10 | 10 | 12 | 4.186 / 4.383 | 4.445 / 4.719 |
-| serial_chain_30 | 30 | 30 | 32 | 18.059 / 33.745 | 13.879 / 27.088 |
+| single_manipulator_fixed_base | 1.504 / 1.573 | 1.084 / 1.156 | 1.232 / 1.318 | 1.182 / 2.404 | 2.496 / 2.556 |
+| dual_manipulator_fixed_base | 1.881 / 1.967 | 1.323 / 1.410 | 1.497 / 1.600 | 1.274 / 1.322 | 3.205 / 4.157 |
+| multi_robot_fixed_base | 2.265 / 2.347 | 1.538 / 1.681 | 1.739 / 1.839 | 1.631 / 1.704 | 3.219 / 4.413 |
+| multi_robot_floating_base | 3.125 / 3.331 | 2.936 / 3.059 | 13.674 / 26.841 | 3.110 / 5.945 | 6.055 / 6.268 |
+| quadruped_floating_base | 5.809 / 6.027 | 5.032 / 5.604 | 6.365 / 6.609 | 4.888 / 5.090 | 13.229 / 73.571 |
+| fixed_body_heavy | 2.826 / 2.922 | 1.592 / 1.691 | 1.658 / 1.724 | 1.588 / 1.782 | 1.266 / 1.336 |
+| serial_chain_10 | 4.375 / 4.582 | 3.513 / 3.638 | 4.249 / 4.398 | 3.256 / 3.587 | 12.962 / 16.006 |
+| serial_chain_30 | 13.963 / 18.645 | 23.695 / 27.705 | 18.191 / 25.845 | 15.246 / 20.411 | 41.240 / 44.983 |
 
 ### Floating-base quadruped states
 
-| State | CCRBA all median / p99 us | RNEA + CoM median / p99 us |
-|---|---:|---:|
-| nominal | 6.412 / 10.446 | 5.758 / 8.339 |
-| asymmetric | 6.459 / 6.689 | 5.903 / 6.268 |
-| nonzero_velocity | 8.328 / 13.540 | 6.052 / 6.325 |
+| State | RNEA + CoM median / p99 us | Reduced CCRBA median / p99 us | Full CCRBA median / p99 us | MuJoCo median / p99 us | Pinocchio median / p99 us |
+|---|---:|---:|---:|---:|---:|
+| nominal | 5.809 / 6.027 | 5.032 / 5.604 | 6.365 / 6.609 | 4.888 / 5.090 | 13.229 / 73.571 |
+| asymmetric | 5.878 / 6.085 | 5.175 / 5.427 | 6.492 / 6.778 | 4.938 / 5.523 | 18.417 / 20.137 |
+| nonzero_velocity | 6.021 / 6.216 | 6.948 / 7.176 | 8.221 / 8.515 | 4.943 / 5.280 | 18.442 / 20.768 |
 
-For both native scopes, mass-matrix symmetry and `nonlinTorq = coriolisTorq + gravityTorq` consistency errors were zero at benchmark output precision. CCRBA-all rows additionally reported zero `centMom = cmAmat * qvel` and `comVel = comJmat * qvel` consistency errors.
+For all three native scopes, mass-matrix symmetry and `nonlinTorq = coriolisTorq + gravityTorq` consistency errors were zero at benchmark output precision. Reduced/full CCRBA additionally reported zero centroidal-momentum consistency error; full CCRBA also reported zero CoM-velocity consistency error.
 
 ### Figures
 
-The figures are generated from the same CSV outputs as the tables:
+The runtime and scaling figures include all five Part A entries. All figures are generated from the same CSV outputs as the tables:
 
 ![Nominal runtime by fixture](figures/runtime_by_fixture.png)
 
@@ -106,37 +111,37 @@ The setup-only `benchmark_dtDynamics` resource rows (`dtDynModel_resource` and `
 
 | Fixture | nq | nv | bodies | Compile median us | Compile p99 us | Data resize median us | Data resize p99 us |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| single_manipulator_fixed_base | 3 | 3 | 5 | 1.807 | 3.075 | 1.928 | 2.926 |
-| dual_manipulator_fixed_base | 4 | 4 | 6 | 2.200 | 2.483 | 2.262 | 4.032 |
-| multi_robot_fixed_base | 4 | 4 | 8 | 2.789 | 4.052 | 2.481 | 4.384 |
-| multi_robot_floating_base | 18 | 16 | 8 | 3.281 | 4.318 | 3.698 | 5.712 |
-| quadruped_floating_base | 19 | 18 | 14 | 6.876 | 9.363 | 5.415 | 7.675 |
-| fixed_body_heavy | 1 | 1 | 11 | 2.617 | 3.803 | 2.688 | 4.340 |
-| serial_chain_10 | 10 | 10 | 12 | 3.617 | 6.417 | 3.814 | 5.788 |
-| serial_chain_30 | 30 | 30 | 32 | 12.706 | 18.478 | 10.217 | 16.491 |
+| single_manipulator_fixed_base | 3 | 3 | 5 | 1.811 | 3.263 | 1.858 | 2.696 |
+| dual_manipulator_fixed_base | 4 | 4 | 6 | 2.205 | 2.342 | 2.312 | 4.180 |
+| multi_robot_fixed_base | 4 | 4 | 8 | 2.807 | 4.197 | 2.470 | 3.467 |
+| multi_robot_floating_base | 18 | 16 | 8 | 3.300 | 4.353 | 3.811 | 5.956 |
+| quadruped_floating_base | 19 | 18 | 14 | 6.824 | 8.136 | 5.558 | 7.859 |
+| fixed_body_heavy | 1 | 1 | 11 | 2.664 | 3.826 | 2.714 | 4.043 |
+| serial_chain_10 | 10 | 10 | 12 | 3.606 | 4.550 | 3.841 | 5.910 |
+| serial_chain_30 | 30 | 30 | 32 | 12.691 | 15.620 | 10.753 | 12.607 |
 
 For the floating-base quadruped fixture, the median stage times in microseconds were:
 
 | State | FK | Mass after FK | CCRBA after FK | CCRBA prereq | CCRBA extended | Body Jacobians | Site Jacobians | All Jacobians | Indexed Jacobians | Gravity | RNEA + CoM | CCRBA all |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| nominal | 2.001 | 1.575 | 4.653 | 1.122 | 3.343 | 2.548 | 0.810 | 3.462 | 0.990 | 0.062 | 5.711 | 6.344 |
-| asymmetric | 2.105 | 1.585 | 4.589 | 1.095 | 3.269 | 2.463 | 0.787 | 3.455 | 0.983 | 0.062 | 5.719 | 6.333 |
-| nonzero_velocity | 2.108 | 1.693 | 6.489 | 2.734 | 3.311 | 2.511 | 0.788 | 3.542 | 1.000 | 0.062 | 5.977 | 8.241 |
+| nominal | 2.003 | 1.564 | 4.669 | 1.128 | 3.336 | n/a | n/a | 6.951 | 1.963 | 0.045 | 4.207 | 4.637 |
+| asymmetric | 1.551 | 1.153 | 3.119 | 0.742 | 2.439 | n/a | n/a | 2.524 | 0.688 | 0.045 | 4.124 | 5.086 |
+| nonzero_velocity | 1.634 | 1.226 | 4.767 | 1.990 | 2.697 | n/a | n/a | 2.984 | 0.786 | 0.050 | 4.486 | 6.011 |
 
 A focused run for the multi-root fixtures validates the timing path for independent model parts plus fixed sensor frames. Median stage times in microseconds were:
 
 | Fixture | State | FK | Mass after FK | CCRBA after FK | CCRBA prereq | CCRBA extended | Indexed Jacobians | RNEA + CoM | CCRBA all | Reduced WBC update |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| multi_robot_fixed_base | nominal | 0.844 | 0.566 | 0.909 | 0.508 | 0.358 | 0.123 | 2.249 | 1.705 | 1.652 |
-| multi_robot_fixed_base | asymmetric | 0.878 | 0.556 | 0.917 | 0.516 | 0.356 | 0.130 | 2.342 | 1.757 | 1.717 |
-| multi_robot_fixed_base | nonzero_velocity | 0.889 | 0.575 | 1.432 | 0.995 | 0.355 | 0.130 | 2.397 | 2.265 | 2.237 |
-| multi_robot_floating_base | nominal | 0.906 | 1.133 | 3.545 | 0.703 | 2.714 | 0.725 | 3.092 | 4.065 | 3.817 |
-| multi_robot_floating_base | asymmetric | 0.947 | 1.066 | 3.532 | 0.716 | 2.724 | 0.727 | 3.050 | 4.034 | 3.817 |
-| multi_robot_floating_base | nonzero_velocity | 0.941 | 1.067 | 4.660 | 1.666 | 2.640 | 0.725 | 3.119 | 5.095 | 4.875 |
+| multi_robot_fixed_base | nominal | 0.631 | 0.420 | 0.689 | 0.381 | 0.274 | 0.091 | 1.649 | 1.253 | 1.229 |
+| multi_robot_fixed_base | asymmetric | 0.641 | 0.408 | 0.694 | 0.373 | 0.275 | 0.082 | 1.530 | 1.192 | 1.157 |
+| multi_robot_fixed_base | nonzero_velocity | 0.585 | 0.371 | 0.947 | 0.656 | 0.236 | 0.082 | 1.549 | 1.494 | 1.458 |
+| multi_robot_floating_base | nominal | 0.649 | 0.790 | 2.663 | 0.571 | 2.031 | 0.542 | 2.401 | 2.983 | 2.917 |
+| multi_robot_floating_base | asymmetric | 0.758 | 1.160 | 10.355 | 2.153 | 3.754 | 0.823 | 3.822 | 5.192 | 5.469 |
+| multi_robot_floating_base | nonzero_velocity | 0.949 | 1.102 | 4.529 | 1.627 | 2.507 | 0.687 | 3.137 | 4.789 | 4.789 |
 
-## Part B — LeoQuad reduced-mask scope
+## Part B — LeoQuad controller scope
 
-The LeoQuad controller scope is deliberately smaller than the native all-feature scope:
+Part B applies the same reduced CCRBA mask defined in Part A to the canonical LeoQuad model, then adds the controller-selected indexed Jacobians:
 
 ```cpp
 constexpr dtDynCcrbaTermFlags leoquadMask =
@@ -204,7 +209,7 @@ The old top-level spatial-array pre-clear was removed after confirming downstrea
 
 Fresh CCRBA-all nominal medians were 1.218 us for the single manipulator, 1.509 us for the dual manipulator, 1.739 us for multi-robot fixed base, 3.854 us for multi-robot floating base, and 1.609 us for the fixed-body-heavy fixture. All measured stage compute rows reported zero counted C++ `operator new` allocation; the raw stage CSV retains allocation counters for regression checks.
 
-This explains most of the remaining native-vs-MuJoCo timing difference. `DTDYN_CCRBA_TERM_ALL` computes controller-specific quantities beyond the MuJoCo overlap set. LeoQuad does not need all of those terms each control tick, so its runtime call requests only `COM_POS`, `CMAMAT`, and `CENT_MOM`; the stage benchmark includes this as `leoquad_reduced_ccrba`. The stage benchmark also includes `leoquad_wbc_update`, which runs the reduced CCRBA call followed by indexed body/site `ComputeJacobians` to match the LeoQuad runtime order. The native `compute_dynamics_rnea_com_pos` stage uses `DTDYN_RNEA_TERM_COM_POS` and is closer to MuJoCo's bias-force path and avoids the CCRBA matrices. CCRBA computes gravity, Coriolis, and nonlinear torque ingredients from the centroidal/`Cmat` pass instead of calling RNEA. In the extended substage, dense output clearing is small; `Cmat` and `MmatDot` are the main per-term matrix costs, and the standalone `Cmat*qvel` row is now a diagnostic cost avoided by the public CCRBA entry point. In the prerequisite substage, zero-velocity states are now much cheaper because the local bias matrix and zero bias products are skipped exactly, `BmatCompNonzero` avoids scanning/accumulating known-zero composite bias matrices, and zero-derivative DOF bias products write directly into `f2` without a returned temporary. Nonzero velocity states still pay the real local-bias cost, but grouped local motion-cross updates reduce that row from roughly 1.5 us to roughly 0.8 us on the current real XML fixture. A readability pass restored the local momentum calculation to the dtMath `inertia * velocity` operator form after benchmarking showed no meaningful regression. Direct in-place spatial inertia filling reduces the composite inertia row to about 0.5 us, and in-place scaled adds plus direct `cdof`/`cdof_dot` spatial writes remove small temporaries from the prerequisite path. Fixed-size spatial matrix-vector kernels in the DOF bias-force path are unrolled because those products are always 6x6. Jacobian computation is separated from dynamics computation. The indexed Jacobian overload computes the requested root/base body Jacobian plus task-site Jacobians only; for the quadruped fixture this reduces Jacobian median time from about 3.7 us to about 1.05-1.07 us without counted C++ `operator new` allocation; the raw CSV retains the zero allocation counters. Public `ComputePointJacobianTerms`, `ComputeBodyJacobianTerms`, and `ComputeSiteJacobianTerms` wrappers cover one-off task requests that need `J`, `Jdot`, and `Jdot*qvel` together. Site-only Jacobian timing is useful as a diagnostic lower bound, but it is not the LeoQuad runtime contract while the base body Jacobian remains a controller input.
+This explains most of the remaining native-vs-MuJoCo timing difference. `DTDYN_CCRBA_TERM_ALL` computes controller-specific quantities beyond the MuJoCo overlap set. The package-native `native_ccrba_reduced` scope requests only `COM_POS`, `CMAMAT`, and `CENT_MOM`. Part B applies the same mask to the canonical LeoQuad model as `leoquad_reduced_ccrba`. The stage benchmark also includes `leoquad_wbc_update`, which runs the reduced CCRBA call followed by indexed body/site `ComputeJacobians` to match the LeoQuad runtime order. The native `compute_dynamics_rnea_com_pos` stage uses `DTDYN_RNEA_TERM_COM_POS` and is closer to MuJoCo's bias-force path and avoids the CCRBA matrices. CCRBA computes gravity, Coriolis, and nonlinear torque ingredients from the centroidal/`Cmat` pass instead of calling RNEA. In the extended substage, dense output clearing is small; `Cmat` and `MmatDot` are the main per-term matrix costs, and the standalone `Cmat*qvel` row is now a diagnostic cost avoided by the public CCRBA entry point. In the prerequisite substage, zero-velocity states are now much cheaper because the local bias matrix and zero bias products are skipped exactly, `BmatCompNonzero` avoids scanning/accumulating known-zero composite bias matrices, and zero-derivative DOF bias products write directly into `f2` without a returned temporary. Nonzero velocity states still pay the real local-bias cost, but grouped local motion-cross updates reduce that row from roughly 1.5 us to roughly 0.8 us on the current real XML fixture. A readability pass restored the local momentum calculation to the dtMath `inertia * velocity` operator form after benchmarking showed no meaningful regression. Direct in-place spatial inertia filling reduces the composite inertia row to about 0.5 us, and in-place scaled adds plus direct `cdof`/`cdof_dot` spatial writes remove small temporaries from the prerequisite path. Fixed-size spatial matrix-vector kernels in the DOF bias-force path are unrolled because those products are always 6x6. Jacobian computation is separated from dynamics computation. The indexed Jacobian overload computes the requested root/base body Jacobian plus task-site Jacobians only; for the quadruped fixture this reduces Jacobian median time from about 3.7 us to about 1.05-1.07 us without counted C++ `operator new` allocation; the raw CSV retains the zero allocation counters. Public `ComputePointJacobianTerms`, `ComputeBodyJacobianTerms`, and `ComputeSiteJacobianTerms` wrappers cover one-off task requests that need `J`, `Jdot`, and `Jdot*qvel` together. Site-only Jacobian timing is useful as a diagnostic lower bound, but it is not the LeoQuad runtime contract while the base body Jacobian remains a controller input.
 
 ## Reference and validation scope
 
@@ -214,42 +219,54 @@ Pinocchio scope: `crba`, generalized gravity, nonlinear effects, Coriolis matrix
 
 | Engine | Fixture | State | nq | nv | bodies | mean us | median us | p99 us |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| mujoco | single_manipulator_fixed_base | nominal | 3 | 3 | 5 | 1.311790 | 1.309000 | 1.370000 |
-| mujoco | single_manipulator_fixed_base | asymmetric | 3 | 3 | 5 | 1.421240 | 1.419000 | 1.486000 |
-| mujoco | single_manipulator_fixed_base | nonzero_velocity | 3 | 3 | 5 | 1.417905 | 1.415000 | 1.498000 |
-| mujoco | dual_manipulator_fixed_base | nominal | 4 | 4 | 6 | 1.676770 | 1.583000 | 2.766000 |
-| mujoco | dual_manipulator_fixed_base | asymmetric | 4 | 4 | 6 | 1.733755 | 1.668000 | 3.002000 |
-| mujoco | dual_manipulator_fixed_base | nonzero_velocity | 4 | 4 | 6 | 1.724555 | 1.668000 | 2.177000 |
-| mujoco | multi_robot_fixed_base | nominal | 4 | 4 | 8 | 2.082535 | 2.035000 | 2.569000 |
-| mujoco | multi_robot_fixed_base | asymmetric | 4 | 4 | 8 | 2.182065 | 2.179000 | 2.264000 |
-| mujoco | multi_robot_fixed_base | nonzero_velocity | 4 | 4 | 8 | 2.178980 | 2.146000 | 2.374000 |
-| mujoco | multi_robot_floating_base | nominal | 18 | 16 | 8 | 3.527945 | 3.433000 | 5.424000 |
-| mujoco | multi_robot_floating_base | asymmetric | 18 | 16 | 8 | 3.671085 | 3.669000 | 3.769000 |
-| mujoco | multi_robot_floating_base | nonzero_velocity | 18 | 16 | 8 | 3.773460 | 3.730000 | 4.089000 |
-| mujoco | quadruped_floating_base | nominal | 19 | 18 | 14 | 5.660370 | 5.442000 | 7.967000 |
-| mujoco | quadruped_floating_base | asymmetric | 19 | 18 | 14 | 6.102995 | 6.060000 | 6.381000 |
-| mujoco | quadruped_floating_base | nonzero_velocity | 19 | 18 | 14 | 6.195770 | 6.101000 | 9.170000 |
-| mujoco | fixed_body_heavy | nominal | 1 | 1 | 11 | 1.922715 | 1.921000 | 2.003000 |
-| mujoco | fixed_body_heavy | asymmetric | 1 | 1 | 11 | 2.003010 | 1.958000 | 2.311000 |
-| mujoco | fixed_body_heavy | nonzero_velocity | 1 | 1 | 11 | 1.991585 | 1.962000 | 3.391000 |
-| pinocchio | single_manipulator_fixed_base | nominal | 3 | 3 | 5 | 3.219100 | 3.130000 | 4.212000 |
-| pinocchio | single_manipulator_fixed_base | asymmetric | 3 | 3 | 5 | 3.356900 | 3.213000 | 4.364000 |
-| pinocchio | single_manipulator_fixed_base | nonzero_velocity | 3 | 3 | 5 | 3.321410 | 3.222000 | 4.176000 |
-| pinocchio | dual_manipulator_fixed_base | nominal | 4 | 4 | 6 | 4.207190 | 4.022000 | 5.095000 |
-| pinocchio | dual_manipulator_fixed_base | asymmetric | 4 | 4 | 6 | 4.169210 | 4.117000 | 5.400000 |
-| pinocchio | dual_manipulator_fixed_base | nonzero_velocity | 4 | 4 | 6 | 4.186035 | 4.120000 | 5.305000 |
-| pinocchio | multi_robot_fixed_base | nominal | 4 | 4 | 8 | 4.088515 | 4.002000 | 5.257000 |
-| pinocchio | multi_robot_fixed_base | asymmetric | 4 | 4 | 8 | 4.348015 | 4.210000 | 8.888000 |
-| pinocchio | multi_robot_fixed_base | nonzero_velocity | 4 | 4 | 8 | 4.246310 | 4.123000 | 5.609000 |
-| pinocchio | multi_robot_floating_base | nominal | 18 | 16 | 8 | 7.783510 | 7.597000 | 13.166000 |
-| pinocchio | multi_robot_floating_base | asymmetric | 18 | 16 | 8 | 8.342935 | 7.725000 | 15.300000 |
-| pinocchio | multi_robot_floating_base | nonzero_velocity | 18 | 16 | 8 | 7.804655 | 7.736000 | 13.424000 |
-| pinocchio | quadruped_floating_base | nominal | 19 | 18 | 14 | 14.882575 | 14.768000 | 22.538000 |
-| pinocchio | quadruped_floating_base | asymmetric | 19 | 18 | 14 | 15.159605 | 15.086000 | 20.512000 |
-| pinocchio | quadruped_floating_base | nonzero_velocity | 19 | 18 | 14 | 15.214840 | 15.138000 | 20.843000 |
-| pinocchio | fixed_body_heavy | nominal | 1 | 1 | 11 | 1.035020 | 1.032000 | 1.086000 |
-| pinocchio | fixed_body_heavy | asymmetric | 1 | 1 | 11 | 1.061915 | 1.056000 | 1.126000 |
-| pinocchio | fixed_body_heavy | nonzero_velocity | 1 | 1 | 11 | 1.067065 | 1.054000 | 1.185000 |
+| mujoco | single_manipulator_fixed_base | nominal | 3 | 3 | 5 | 1.352030 | 1.182000 | 2.404000 |
+| mujoco | single_manipulator_fixed_base | asymmetric | 3 | 3 | 5 | 1.263435 | 1.261000 | 1.326000 |
+| mujoco | single_manipulator_fixed_base | nonzero_velocity | 3 | 3 | 5 | 1.199990 | 1.152000 | 1.461000 |
+| mujoco | dual_manipulator_fixed_base | nominal | 4 | 4 | 6 | 1.274930 | 1.274000 | 1.322000 |
+| mujoco | dual_manipulator_fixed_base | asymmetric | 4 | 4 | 6 | 1.408185 | 1.365000 | 1.419000 |
+| mujoco | dual_manipulator_fixed_base | nonzero_velocity | 4 | 4 | 6 | 1.364265 | 1.361000 | 1.423000 |
+| mujoco | multi_robot_fixed_base | nominal | 4 | 4 | 8 | 1.661830 | 1.631000 | 1.704000 |
+| mujoco | multi_robot_fixed_base | asymmetric | 4 | 4 | 8 | 1.729135 | 1.728000 | 1.779000 |
+| mujoco | multi_robot_fixed_base | nonzero_velocity | 4 | 4 | 8 | 1.943250 | 1.913000 | 1.998000 |
+| mujoco | multi_robot_floating_base | nominal | 18 | 16 | 8 | 3.899355 | 3.110000 | 5.945000 |
+| mujoco | multi_robot_floating_base | asymmetric | 18 | 16 | 8 | 3.370955 | 3.330000 | 3.391000 |
+| mujoco | multi_robot_floating_base | nonzero_velocity | 18 | 16 | 8 | 3.405825 | 3.380000 | 3.470000 |
+| mujoco | quadruped_floating_base | nominal | 19 | 18 | 14 | 4.928445 | 4.888000 | 5.090000 |
+| mujoco | quadruped_floating_base | asymmetric | 19 | 18 | 14 | 5.001920 | 4.938000 | 5.523000 |
+| mujoco | quadruped_floating_base | nonzero_velocity | 19 | 18 | 14 | 4.990995 | 4.943000 | 5.280000 |
+| mujoco | fixed_body_heavy | nominal | 1 | 1 | 11 | 1.630985 | 1.588000 | 1.782000 |
+| mujoco | fixed_body_heavy | asymmetric | 1 | 1 | 11 | 1.734105 | 1.733000 | 1.792000 |
+| mujoco | fixed_body_heavy | nonzero_velocity | 1 | 1 | 11 | 1.726350 | 1.724000 | 1.775000 |
+| mujoco | serial_chain_10 | nominal | 10 | 10 | 12 | 3.360000 | 3.256000 | 3.587000 |
+| mujoco | serial_chain_10 | asymmetric | 10 | 10 | 12 | 3.941805 | 3.852000 | 4.150000 |
+| mujoco | serial_chain_10 | nonzero_velocity | 10 | 10 | 12 | 4.124335 | 4.077000 | 4.196000 |
+| mujoco | serial_chain_30 | nominal | 30 | 30 | 32 | 15.476185 | 15.246000 | 20.411000 |
+| mujoco | serial_chain_30 | asymmetric | 30 | 30 | 32 | 16.699300 | 17.096000 | 17.592000 |
+| mujoco | serial_chain_30 | nonzero_velocity | 30 | 30 | 32 | 14.031265 | 14.006000 | 15.862000 |
+| pinocchio | single_manipulator_fixed_base | nominal | 3 | 3 | 5 | 2.520970 | 2.496000 | 2.556000 |
+| pinocchio | single_manipulator_fixed_base | asymmetric | 3 | 3 | 5 | 2.611520 | 2.588000 | 2.685000 |
+| pinocchio | single_manipulator_fixed_base | nonzero_velocity | 3 | 3 | 5 | 2.569360 | 2.565000 | 2.647000 |
+| pinocchio | dual_manipulator_fixed_base | nominal | 4 | 4 | 6 | 3.285740 | 3.205000 | 4.157000 |
+| pinocchio | dual_manipulator_fixed_base | asymmetric | 4 | 4 | 6 | 3.291540 | 3.287000 | 3.364000 |
+| pinocchio | dual_manipulator_fixed_base | nonzero_velocity | 4 | 4 | 6 | 3.303480 | 3.291000 | 3.378000 |
+| pinocchio | multi_robot_fixed_base | nominal | 4 | 4 | 8 | 3.448280 | 3.219000 | 4.413000 |
+| pinocchio | multi_robot_fixed_base | asymmetric | 4 | 4 | 8 | 3.312245 | 3.300000 | 3.403000 |
+| pinocchio | multi_robot_fixed_base | nonzero_velocity | 4 | 4 | 8 | 3.298635 | 3.296000 | 3.368000 |
+| pinocchio | multi_robot_floating_base | nominal | 18 | 16 | 8 | 6.114680 | 6.055000 | 6.268000 |
+| pinocchio | multi_robot_floating_base | asymmetric | 18 | 16 | 8 | 6.203855 | 6.179000 | 6.299000 |
+| pinocchio | multi_robot_floating_base | nonzero_velocity | 18 | 16 | 8 | 6.989210 | 6.873000 | 9.269000 |
+| pinocchio | quadruped_floating_base | nominal | 19 | 18 | 14 | 23.836755 | 13.229000 | 73.571000 |
+| pinocchio | quadruped_floating_base | asymmetric | 19 | 18 | 14 | 18.466810 | 18.417000 | 20.137000 |
+| pinocchio | quadruped_floating_base | nonzero_velocity | 19 | 18 | 14 | 18.537940 | 18.442000 | 20.768000 |
+| pinocchio | fixed_body_heavy | nominal | 1 | 1 | 11 | 1.283040 | 1.266000 | 1.336000 |
+| pinocchio | fixed_body_heavy | asymmetric | 1 | 1 | 11 | 1.299155 | 1.293000 | 1.368000 |
+| pinocchio | fixed_body_heavy | nonzero_velocity | 1 | 1 | 11 | 1.300605 | 1.294000 | 1.362000 |
+| pinocchio | serial_chain_10 | nominal | 10 | 10 | 12 | 13.008545 | 12.962000 | 16.006000 |
+| pinocchio | serial_chain_10 | asymmetric | 10 | 10 | 12 | 15.037515 | 13.335000 | 24.241000 |
+| pinocchio | serial_chain_10 | nonzero_velocity | 10 | 10 | 12 | 13.439960 | 13.373000 | 16.796000 |
+| pinocchio | serial_chain_30 | nominal | 30 | 30 | 32 | 41.389495 | 41.240000 | 44.983000 |
+| pinocchio | serial_chain_30 | asymmetric | 30 | 30 | 32 | 42.402835 | 42.207000 | 45.930000 |
+| pinocchio | serial_chain_30 | nonzero_velocity | 30 | 30 | 32 | 42.415560 | 42.254000 | 45.977000 |
 
 ## Reference Error Summary
 
@@ -276,7 +293,7 @@ All Pinocchio max/RMS errors were `0.000000` at benchmark output precision for `
 
 ## Current Interpretation
 
-The native implementation has no counted C++ `operator new` allocation in the documented steady-state dynamics rows for the tested fixtures. The synthetic floating-base quadruped remains a package-local proxy, while the opt-in canonical external XML provides the LeoQuad-specific reduced-mask scope without creating an installed-package dependency. In the fresh canonical XML run, reduced-CCRBA medians were 5.128/5.373/6.884 us and reduced-CCRBA-plus-indexed-Jacobian medians were 7.673/9.096/9.416 us for nominal/asymmetric/nonzero-velocity states. The separately recorded headless controller profile is retained as historical end-to-end evidence and is not mixed into these fresh dynamics-scope numbers.
+The native implementation has no counted C++ `operator new` allocation in the documented steady-state dynamics rows for the tested fixtures. The reduced CCRBA mask is now a package-native Part A scope across every fixture. Part B applies that same mask to the opt-in canonical LeoQuad XML and adds indexed Jacobians without creating an installed-package dependency. In the fresh canonical XML run, reduced-CCRBA medians were 5.128/5.373/6.884 us and reduced-CCRBA-plus-indexed-Jacobian medians were 7.673/9.096/9.416 us for nominal/asymmetric/nonzero-velocity states. The separately recorded headless controller profile is retained as historical end-to-end evidence and is not mixed into these fresh dynamics-scope numbers.
 
 A focused allocation-instrumentation rerun of `benchmark_dtDynamics` keeps allocation counters in the CSV for regression checks. Human-facing runtime tables omit all-zero compute allocation columns; the diagnostic setup allocation counts remain summarized below only to explain initialization resource behavior:
 
@@ -296,9 +313,3 @@ Interpretation: zero allocation columns are correct for the measured steady-stat
 The MuJoCo reference path is still faster for the overlapping reference scope, but the Release comparison is about 2.4-2.9x on the floating-base quadruped median path, not the roughly 30x ratio implied by an unoptimized native build. MuJoCo also does not compute all CCRBA outputs in the same form. The Pinocchio reference path is close to native for the quadruped under this call sequence and currently serves mainly as an analytic centroidal/dynamics validation reference.
 
 The p99 values are still noisy because the benchmark is a simple process-local timer without CPU isolation or realtime priority. Use `DTDYNAMICS_BENCHMARK_BATCHES=N` to record repeated batches and prefer the batch-summary median of per-batch means/medians when comparing small changes.
-
-## Benchmark Completion Status
-
-The benchmark and validation scope is complete for the current redesign phase: the native benchmarks, stage benchmarks, MuJoCo 3.8.0 reference timing, Pinocchio 3.9.0 reference timing, repeated-batch metadata, multi-robot fixed/floating fixtures, derivative-like quantity figures, and LeoQuad headless runtime timing are implemented and documented.
-
-The remaining nonzero-velocity local-bias matrix row is now an optional future optimization target, not a release blocker. Reducing it further would likely require replacing readable `ComputeBiasMatrix` assembly helpers with a larger hand-expanded formula. That tradeoff should be treated as a separate design decision because the current implementation keeps zero counted C++ allocation in the documented steady-state compute benchmarks, passes MuJoCo/Pinocchio validation, and preserves source readability.

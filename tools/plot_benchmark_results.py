@@ -108,6 +108,9 @@ def native_ccrba_rows(rows):
 def display_engine_label(name):
     labels = {
         "native": "dtDynamics",
+        "native_rnea_com_pos": "dtDynamics RNEA + CoM",
+        "native_ccrba_reduced": "dtDynamics reduced CCRBA",
+        "native_ccrba_all": "dtDynamics full CCRBA",
         "pinocchio": "Pinocchio",
         "pinocchio_independent": "Pinocchio independent",
         "mujoco": "MuJoCo",
@@ -115,11 +118,20 @@ def display_engine_label(name):
     return labels.get(name, name.replace("_", " "))
 
 
+PART_A_COLORS = {
+    "native_rnea_com_pos": "#1f77b4",
+    "native_ccrba_reduced": "#17becf",
+    "native_ccrba_all": "#9467bd",
+    "mujoco": "#2ca02c",
+    "pinocchio": "#d62728",
+}
+
+
 def save_runtime_by_fixture(native_rows, reference_rows, out_dir):
     if plt is None:
         return
     native = {
-        row["fixture"]: as_float(row, "median_us")
+        (row.get("scope", "native_ccrba_all"), row["fixture"]): as_float(row, "median_us")
         for row in native_rows
         if row.get("state") == "nominal"
     }
@@ -129,63 +141,82 @@ def save_runtime_by_fixture(native_rows, reference_rows, out_dir):
             continue
         references[(row["engine"], row["fixture"])] = as_float(row, "median_us")
 
-    fixtures = list(native.keys())
-    engines = ["native", "mujoco", "pinocchio"]
-    colors = {"native": "#1f77b4", "mujoco": "#2ca02c", "pinocchio": "#d62728"}
-    x = list(range(len(fixtures)))
-    width = 0.24
+    fixtures = []
+    for row in native_rows:
+        if row.get("state") == "nominal" and row["fixture"] not in fixtures:
+            fixtures.append(row["fixture"])
+    engines = [
+        "native_rnea_com_pos",
+        "native_ccrba_reduced",
+        "native_ccrba_all",
+        "mujoco",
+        "pinocchio",
+    ]
 
-    fig, ax = plt.subplots(figsize=(11.0, 5.2))
+    x = list(range(len(fixtures)))
+    width = 0.16
+
+    fig, ax = plt.subplots(figsize=(12.4, 5.4))
     for engine_index, engine in enumerate(engines):
         values = []
         for fixture in fixtures:
-            if engine == "native":
-                values.append(native.get(fixture, math.nan))
+            if engine.startswith("native_"):
+                values.append(native.get((engine, fixture), math.nan))
             else:
                 values.append(references.get((engine, fixture), math.nan))
-        offset = (engine_index - 1) * width
-        ax.bar([pos + offset for pos in x], values, width=width, label=display_engine_label(engine), color=colors[engine])
+        offset = (engine_index - (len(engines) - 1) / 2.0) * width
+        ax.bar([pos + offset for pos in x], values, width=width, label=display_engine_label(engine), color=PART_A_COLORS[engine])
 
-    ax.set_title("Nominal Runtime By Fixture")
+    ax.set_title("Part A Nominal Dynamics Runtime By Fixture")
     ax.set_ylabel("median runtime (us)")
     ax.set_xticks(x)
     ax.set_xticklabels([fixture_label(name) for name in fixtures], rotation=25, ha="right")
     ax.grid(axis="y", alpha=0.25)
-    ax.legend(frameon=False)
+    ax.legend(frameon=False, ncol=2)
     fig.tight_layout()
     fig.savefig(out_dir / "runtime_by_fixture.png", dpi=180)
     plt.close(fig)
 
-
 def save_scaling_by_dof(native_rows, reference_rows, out_dir):
     if plt is None:
         return
-    series = {"native": [], "mujoco": [], "pinocchio": []}
+    series = {
+        "native_rnea_com_pos": [],
+        "native_ccrba_reduced": [],
+        "native_ccrba_all": [],
+        "mujoco": [],
+        "pinocchio": [],
+    }
     for row in native_rows:
         if row.get("state") == "nominal":
-            series["native"].append((as_int(row, "nv"), as_float(row, "median_us"), fixture_label(row["fixture"])))
+            scope = row.get("scope", "native_ccrba_all")
+            if scope in series:
+                series[scope].append((as_int(row, "nv"), as_float(row, "median_us"), fixture_label(row["fixture"])))
     for row in reference_rows:
-        if row.get("state") == "nominal":
-            series.setdefault(row["engine"], []).append(
+        if row.get("state") == "nominal" and row.get("engine") in {"mujoco", "pinocchio"}:
+            series[row["engine"]].append(
                 (as_int(row, "nv"), as_float(row, "median_us"), fixture_label(row["fixture"]))
             )
 
-    fig, ax = plt.subplots(figsize=(8.6, 5.0))
+    fig, ax = plt.subplots(figsize=(9.6, 5.2))
     for engine, values in series.items():
         values = sorted(values)
         if not values:
             continue
-        ax.plot([item[0] for item in values], [item[1] for item in values], marker="o", label=display_engine_label(engine))
+        ax.plot([item[0] for item in values],
+                [item[1] for item in values],
+                marker="o",
+                label=display_engine_label(engine),
+                color=PART_A_COLORS[engine])
 
-    ax.set_title("Runtime Scaling By Velocity Dimension")
+    ax.set_title("Part A Runtime Scaling By Velocity Dimension")
     ax.set_xlabel("nv")
     ax.set_ylabel("nominal median runtime (us)")
     ax.grid(alpha=0.25)
-    ax.legend(frameon=False)
+    ax.legend(frameon=False, ncol=2)
     fig.tight_layout()
     fig.savefig(out_dir / "scaling_by_dof.png", dpi=180)
     plt.close(fig)
-
 
 def save_stage_breakdown(stage_rows, out_dir):
     if plt is None:
@@ -597,8 +628,8 @@ def main():
 
     if plt is None:
         print("warning: matplotlib is not installed; skipping figure generation and writing tables only if requested")
-    save_runtime_by_fixture(native_ccrba_timing_rows, reference_timing, args.out)
-    save_scaling_by_dof(native_ccrba_timing_rows, reference_timing, args.out)
+    save_runtime_by_fixture(native_timing_rows, reference_timing, args.out)
+    save_scaling_by_dof(native_timing_rows, reference_timing, args.out)
     save_stage_breakdown(stage_rows, args.out)
     save_reference_error(reference_error, args.out)
     save_latency_cdf(reference_rows_all, stage_rows, args.out)

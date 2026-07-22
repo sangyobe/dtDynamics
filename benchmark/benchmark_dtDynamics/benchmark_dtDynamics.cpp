@@ -134,13 +134,23 @@ struct Scenario
 
 enum class NativeScope
 {
-    CcrbaAll,
     RneaComPos,
+    CcrbaReduced,
+    CcrbaAll,
 };
 
 const char *NativeScopeName(const NativeScope scope)
 {
-    return scope == NativeScope::CcrbaAll ? "native_ccrba_all" : "native_rnea_com_pos";
+    switch (scope)
+    {
+    case NativeScope::RneaComPos:
+        return "native_rnea_com_pos";
+    case NativeScope::CcrbaReduced:
+        return "native_ccrba_reduced";
+    case NativeScope::CcrbaAll:
+        return "native_ccrba_all";
+    }
+    std::abort();
 }
 
 void ComputeNativeScope(const NativeScope scope,
@@ -148,12 +158,26 @@ void ComputeNativeScope(const NativeScope scope,
                         dtDynData &data,
                         const dt::Math::Vector3<dtDynReal> &gravity)
 {
+    if (scope == NativeScope::RneaComPos)
+    {
+        ComputeDynamicsRNEA(model, data, gravity, DTDYN_RNEA_TERM_COM_POS);
+        return;
+    }
+    if (scope == NativeScope::CcrbaReduced)
+    {
+        constexpr dtDynCcrbaTermFlags reducedMask =
+            DTDYN_CCRBA_TERM_COM_POS |
+            DTDYN_CCRBA_TERM_CMAMAT |
+            DTDYN_CCRBA_TERM_CENT_MOM;
+        ComputeDynamicsCCRBA(model, data, gravity, reducedMask);
+        return;
+    }
     if (scope == NativeScope::CcrbaAll)
     {
         ComputeDynamicsCCRBA(model, data, gravity, DTDYN_CCRBA_TERM_ALL);
         return;
     }
-    ComputeDynamicsRNEA(model, data, gravity, DTDYN_RNEA_TERM_COM_POS);
+    std::abort();
 }
 
 struct Result
@@ -734,9 +758,12 @@ Result RunScenario(Scenario &scenario,
         allocationBytesMax = std::max(allocationBytesMax, allocationBytes);
         UpdateWorst(massSymmetry, MassSymmetryError(data));
         UpdateWorst(nonlinConsistency, NonlinearConsistencyError(data));
-        if (scope == NativeScope::CcrbaAll)
+        if (scope != NativeScope::RneaComPos)
         {
             UpdateWorst(centroidalMomentum, CentroidalMomentumConsistencyError(data));
+        }
+        if (scope == NativeScope::CcrbaAll)
+        {
             UpdateWorst(comVelocity, ComVelocityConsistencyError(data));
         }
     }
@@ -770,8 +797,8 @@ Result RunScenario(Scenario &scenario,
     result.nonlinConsistencyMax = nonlinConsistency.max;
     result.nonlinConsistencyRms = nonlinConsistency.rms;
     const double notApplicable = std::numeric_limits<double>::quiet_NaN();
-    result.centroidalMomentumMax = scope == NativeScope::CcrbaAll ? centroidalMomentum.max : notApplicable;
-    result.centroidalMomentumRms = scope == NativeScope::CcrbaAll ? centroidalMomentum.rms : notApplicable;
+    result.centroidalMomentumMax = scope != NativeScope::RneaComPos ? centroidalMomentum.max : notApplicable;
+    result.centroidalMomentumRms = scope != NativeScope::RneaComPos ? centroidalMomentum.rms : notApplicable;
     result.comVelocityMax = scope == NativeScope::CcrbaAll ? comVelocity.max : notApplicable;
     result.comVelocityRms = scope == NativeScope::CcrbaAll ? comVelocity.rms : notApplicable;
     return result;
@@ -920,7 +947,11 @@ int main()
     std::cout << std::fixed << std::setprecision(6);
     for (Scenario &scenario : scenarios)
     {
-        const NativeScope scopes[] = {NativeScope::CcrbaAll, NativeScope::RneaComPos};
+        const NativeScope scopes[] = {
+            NativeScope::RneaComPos,
+            NativeScope::CcrbaReduced,
+            NativeScope::CcrbaAll,
+        };
         for (const NativeScope scope : scopes)
         {
             dtArray<double> meanUs;

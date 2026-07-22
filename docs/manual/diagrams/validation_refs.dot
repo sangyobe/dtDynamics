@@ -2,8 +2,8 @@ digraph validation_refs {
   rankdir=LR;
   node [shape=box, style="rounded,filled", fillcolor="#f8f8f8"];
   native [label="dtDynamics production\ndtMath-only public package"];
-  native_bench [label="Native dynamics-only benchmarks\nCCRBA all | RNEA + CoM"];
-  leo_bench [label="Optional LeoQuad scope\nreduced CCRBA + indexed Jacobians"];
+  native_bench [label="Part A native dynamics\nRNEA | reduced/full CCRBA"];
+  leo_bench [label="Part B LeoQuad controller\nreduced CCRBA + indexed Jacobians"];
   tests [label="validation executables\nprivate deps only"];
   mujoco [label="MuJoCo 3.8.0\nindexing/dynamics reference"];
   pin [label="Pinocchio 3.9.0\nindependent dynamics reference"];
@@ -11,7 +11,9 @@ digraph validation_refs {
   native -> native_bench;
   native -> leo_bench;
   native -> tests;
-  tests -> mujoco [style=dashed];
-  tests -> pin [style=dashed];
+  native_bench -> mujoco [style=dashed, label="timing context"];
+  native_bench -> pin [style=dashed, label="timing context"];
+  tests -> mujoco [style=dashed, label="numerical reference"];
+  tests -> pin [style=dashed, label="numerical reference"];
   leo_bench -> controller;
 }

@@ -258,11 +258,11 @@ Benchmark states should include nominal stance, asymmetric stance, nonzero base 
 
 The current benchmark targets are:
 
-- `benchmark_dtDynamics`: separate dynamics-only `native_ccrba_all` (`ComputeDynamicsCCRBA(..., DTDYN_CCRBA_TERM_ALL)`) and `native_rnea_com_pos` (`ComputeDynamicsRNEA(..., DTDYN_RNEA_TERM_COM_POS)`) timing rows, internal consistency checks, and setup/off-loop resource rows for `CompileSpec(spec)` and fresh `dtDynData::Resize(model)`.
+- `benchmark_dtDynamics`: separate dynamics-only `native_rnea_com_pos` (`ComputeDynamicsRNEA(..., DTDYN_RNEA_TERM_COM_POS)`), `native_ccrba_reduced` (`ComputeDynamicsCCRBA(..., COM_POS | CMAMAT | CENT_MOM)`), and `native_ccrba_all` (`ComputeDynamicsCCRBA(..., DTDYN_CCRBA_TERM_ALL)`) timing rows, internal consistency checks, and setup/off-loop resource rows for `CompileSpec(spec)` and fresh `dtDynData::Resize(model)`.
 - `benchmark_dtDynamicsStages`: per-stage timing for forward kinematics, mass matrix, `compute_dynamics_rnea_com_pos`, `compute_dynamics_ccrba_all_terms`, internal CCRBA substages, full/indexed Jacobians, `leoquad_reduced_ccrba`, and `leoquad_wbc_update`.
 - `benchmark_dtDynamicsReferences`: MuJoCo 3.8.0 and Pinocchio 3.9.0 reference-path timing plus native-vs-reference max/RMS error rows using the private validation cache.
 
-The benchmark report is separated into two scopes. Part A is dynamics-only and emits `native_ccrba_all` plus `native_rnea_com_pos` rows for every native fixture/state. Part B is controller-shaped: `leoquad_reduced_ccrba` uses `COM_POS | CMAMAT | CENT_MOM`, and `leoquad_wbc_update` adds indexed root/body/site Jacobians. The native CSV includes an explicit `scope` column; RNEA centroidal-matrix consistency fields are `nan` because those outputs are not produced by RNEA.
+The benchmark report is separated into two scopes. Part A includes three package-native dynamics calls (`native_rnea_com_pos`, `native_ccrba_reduced`, and `native_ccrba_all`) together with MuJoCo and Pinocchio reference call sequences. The external rows are contextual timings because their output contracts are not identical to CCRBA; reference-error rows define numerical comparability. Part B applies the same reduced mask to the canonical LeoQuad model: `leoquad_reduced_ccrba` measures dynamics only, and `leoquad_wbc_update` adds indexed root/body/site Jacobians. The native CSV includes an explicit `scope` column. RNEA centroidal fields are `nan`; reduced CCRBA validates centroidal momentum but leaves CoM-velocity consistency N/A; full CCRBA validates both.
 
 Build and run them with:
 
