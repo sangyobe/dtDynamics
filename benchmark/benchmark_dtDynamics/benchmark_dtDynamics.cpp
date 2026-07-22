@@ -13,6 +13,7 @@
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <new>
 #include <string>
 
@@ -131,10 +132,35 @@ struct Scenario
     dtDynSpec spec;
 };
 
+enum class NativeScope
+{
+    CcrbaAll,
+    RneaComPos,
+};
+
+const char *NativeScopeName(const NativeScope scope)
+{
+    return scope == NativeScope::CcrbaAll ? "native_ccrba_all" : "native_rnea_com_pos";
+}
+
+void ComputeNativeScope(const NativeScope scope,
+                        const dtDynModel &model,
+                        dtDynData &data,
+                        const dt::Math::Vector3<dtDynReal> &gravity)
+{
+    if (scope == NativeScope::CcrbaAll)
+    {
+        ComputeDynamicsCCRBA(model, data, gravity, DTDYN_CCRBA_TERM_ALL);
+        return;
+    }
+    ComputeDynamicsRNEA(model, data, gravity, DTDYN_RNEA_TERM_COM_POS);
+}
+
 struct Result
 {
     std::string fixture;
     std::string state;
+    std::string scope;
     dtDynIndex nq = 0;
     dtDynIndex nv = 0;
     dtDynIndex nbody = 0;
@@ -655,7 +681,10 @@ ErrorSummary ComVelocityConsistencyError(const dtDynData &data)
     return MakeErrorSummary(maxError, squaredError, count);
 }
 
-Result RunScenario(Scenario &scenario, const int warmup, const int iterations)
+Result RunScenario(Scenario &scenario,
+                   const NativeScope scope,
+                   const int warmup,
+                   const int iterations)
 {
     const dtDynModel model = CompileSpec(scenario.spec);
     dtDynData data;
@@ -669,7 +698,7 @@ Result RunScenario(Scenario &scenario, const int warmup, const int iterations)
 
     for (int i = 0; i < warmup; ++i)
     {
-        ComputeDynamicsCCRBA(model, data, gravity, DTDYN_CCRBA_TERM_ALL);
+        ComputeNativeScope(scope, model, data, gravity);
     }
 
     dtArray<double> samples;
@@ -690,7 +719,7 @@ Result RunScenario(Scenario &scenario, const int warmup, const int iterations)
         const unsigned long long allocationBytesBefore = g_allocationBytes.load(std::memory_order_relaxed);
         g_countAllocations.store(true, std::memory_order_relaxed);
         const auto start = Clock::now();
-        ComputeDynamicsCCRBA(model, data, gravity, DTDYN_CCRBA_TERM_ALL);
+        ComputeNativeScope(scope, model, data, gravity);
         const auto finish = Clock::now();
         g_countAllocations.store(false, std::memory_order_relaxed);
         const unsigned long long allocations =
@@ -705,8 +734,11 @@ Result RunScenario(Scenario &scenario, const int warmup, const int iterations)
         allocationBytesMax = std::max(allocationBytesMax, allocationBytes);
         UpdateWorst(massSymmetry, MassSymmetryError(data));
         UpdateWorst(nonlinConsistency, NonlinearConsistencyError(data));
-        UpdateWorst(centroidalMomentum, CentroidalMomentumConsistencyError(data));
-        UpdateWorst(comVelocity, ComVelocityConsistencyError(data));
+        if (scope == NativeScope::CcrbaAll)
+        {
+            UpdateWorst(centroidalMomentum, CentroidalMomentumConsistencyError(data));
+            UpdateWorst(comVelocity, ComVelocityConsistencyError(data));
+        }
     }
 
     std::sort(samples.begin(), samples.end());
@@ -719,6 +751,7 @@ Result RunScenario(Scenario &scenario, const int warmup, const int iterations)
     Result result;
     result.fixture = scenario.fixture;
     result.state = scenario.state;
+    result.scope = NativeScopeName(scope);
     result.nq = model.nq;
     result.nv = model.nv;
     result.nbody = model.nbody;
@@ -736,10 +769,11 @@ Result RunScenario(Scenario &scenario, const int warmup, const int iterations)
     result.massSymmetryRms = massSymmetry.rms;
     result.nonlinConsistencyMax = nonlinConsistency.max;
     result.nonlinConsistencyRms = nonlinConsistency.rms;
-    result.centroidalMomentumMax = centroidalMomentum.max;
-    result.centroidalMomentumRms = centroidalMomentum.rms;
-    result.comVelocityMax = comVelocity.max;
-    result.comVelocityRms = comVelocity.rms;
+    const double notApplicable = std::numeric_limits<double>::quiet_NaN();
+    result.centroidalMomentumMax = scope == NativeScope::CcrbaAll ? centroidalMomentum.max : notApplicable;
+    result.centroidalMomentumRms = scope == NativeScope::CcrbaAll ? centroidalMomentum.rms : notApplicable;
+    result.comVelocityMax = scope == NativeScope::CcrbaAll ? comVelocity.max : notApplicable;
+    result.comVelocityRms = scope == NativeScope::CcrbaAll ? comVelocity.rms : notApplicable;
     return result;
 }
 
@@ -879,66 +913,71 @@ int main()
     dtArray<Scenario> scenarios = MakeScenarios();
     dtArray<std::string> batchSummaryRows;
 
-    std::cout << "fixture,state,nq,nv,nbody,iterations,mean_us,median_us,p99_us,"
+    std::cout << "fixture,state,scope,nq,nv,nbody,iterations,mean_us,median_us,p99_us,"
                  "allocation_mean,allocation_max,allocation_bytes_mean,allocation_bytes_max,mass_symmetry_max,mass_symmetry_rms,"
                  "nonlin_consistency_max,nonlin_consistency_rms,centroidal_momentum_max,"
                  "centroidal_momentum_rms,com_velocity_max,com_velocity_rms\n";
     std::cout << std::fixed << std::setprecision(6);
     for (Scenario &scenario : scenarios)
     {
-        dtArray<double> meanUs;
-        dtArray<double> medianUs;
-        dtArray<double> p99Us;
-        meanUs.resize(batchCount);
-        medianUs.resize(batchCount);
-        p99Us.resize(batchCount);
-        unsigned long long allocationMax = 0;
-
-        for (int batch = 0; batch < batchCount; ++batch)
+        const NativeScope scopes[] = {NativeScope::CcrbaAll, NativeScope::RneaComPos};
+        for (const NativeScope scope : scopes)
         {
-            const Result result = RunScenario(scenario, warmup, iterations);
-            meanUs[batch] = result.meanUs;
-            medianUs[batch] = result.medianUs;
-            p99Us[batch] = result.p99Us;
-            allocationMax = std::max(allocationMax, result.allocationMax);
+            dtArray<double> meanUs;
+            dtArray<double> medianUs;
+            dtArray<double> p99Us;
+            meanUs.resize(batchCount);
+            medianUs.resize(batchCount);
+            p99Us.resize(batchCount);
+            unsigned long long allocationMax = 0;
 
-            if (batch == 0)
+            for (int batch = 0; batch < batchCount; ++batch)
             {
-                std::cout << result.fixture << ','
-                          << result.state << ','
-                          << result.nq << ','
-                          << result.nv << ','
-                          << result.nbody << ','
-                          << result.iterations << ','
-                          << result.meanUs << ','
-                          << result.medianUs << ','
-                          << result.p99Us << ','
-                          << result.allocationMean << ','
-                          << result.allocationMax << ','
-                          << result.allocationBytesMean << ','
-                          << result.allocationBytesMax << ','
-                          << result.massSymmetryMax << ','
-                          << result.massSymmetryRms << ','
-                          << result.nonlinConsistencyMax << ','
-                          << result.nonlinConsistencyRms << ','
-                          << result.centroidalMomentumMax << ','
-                          << result.centroidalMomentumRms << ','
-                          << result.comVelocityMax << ','
-                          << result.comVelocityRms << '\n';
-            }
-        }
+                const Result result = RunScenario(scenario, scope, warmup, iterations);
+                meanUs[batch] = result.meanUs;
+                medianUs[batch] = result.medianUs;
+                p99Us[batch] = result.p99Us;
+                allocationMax = std::max(allocationMax, result.allocationMax);
 
-        if (batchCount > 1)
-        {
-            batchSummaryRows.push_back(dt::Dynamics::benchmark::BuildBatchSummaryRow("benchmark_dtDynamics",
-                                                                                     scenario.fixture,
-                                                                                     scenario.state,
-                                                                                     "dynamics",
-                                                                                     batchCount,
-                                                                                     meanUs,
-                                                                                     medianUs,
-                                                                                     p99Us,
-                                                                                     allocationMax));
+                if (batch == 0)
+                {
+                    std::cout << result.fixture << ','
+                              << result.state << ','
+                              << result.scope << ','
+                              << result.nq << ','
+                              << result.nv << ','
+                              << result.nbody << ','
+                              << result.iterations << ','
+                              << result.meanUs << ','
+                              << result.medianUs << ','
+                              << result.p99Us << ','
+                              << result.allocationMean << ','
+                              << result.allocationMax << ','
+                              << result.allocationBytesMean << ','
+                              << result.allocationBytesMax << ','
+                              << result.massSymmetryMax << ','
+                              << result.massSymmetryRms << ','
+                              << result.nonlinConsistencyMax << ','
+                              << result.nonlinConsistencyRms << ','
+                              << result.centroidalMomentumMax << ','
+                              << result.centroidalMomentumRms << ','
+                              << result.comVelocityMax << ','
+                              << result.comVelocityRms << '\n';
+                }
+            }
+
+            if (batchCount > 1)
+            {
+                batchSummaryRows.push_back(dt::Dynamics::benchmark::BuildBatchSummaryRow("benchmark_dtDynamics",
+                                                                                         scenario.fixture,
+                                                                                         scenario.state,
+                                                                                         NativeScopeName(scope),
+                                                                                         batchCount,
+                                                                                         meanUs,
+                                                                                         medianUs,
+                                                                                         p99Us,
+                                                                                         allocationMax));
+            }
         }
     }
 

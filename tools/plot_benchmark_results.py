@@ -92,11 +92,22 @@ def fixture_label(name):
     return labels.get(name, name.replace("_", " "))
 
 
+def native_ccrba_rows(rows):
+    """Return all-feature CCRBA rows for native-vs-reference figures.
+
+    CSVs from before the explicit scope column are treated as CCRBA-all for
+    backward compatibility.
+    """
+    return [
+        row for row in rows
+        if row.get("scope", "native_ccrba_all") == "native_ccrba_all"
+    ]
+
 
 
 def display_engine_label(name):
     labels = {
-        "native": "proposed",
+        "native": "dtDynamics",
         "pinocchio": "Pinocchio",
         "pinocchio_independent": "Pinocchio independent",
         "mujoco": "MuJoCo",
@@ -165,8 +176,6 @@ def save_scaling_by_dof(native_rows, reference_rows, out_dir):
         if not values:
             continue
         ax.plot([item[0] for item in values], [item[1] for item in values], marker="o", label=display_engine_label(engine))
-        for nv, median, label in values:
-            ax.annotate(label, (nv, median), textcoords="offset points", xytext=(4, 4), fontsize=7)
 
     ax.set_title("Runtime Scaling By Velocity Dimension")
     ax.set_xlabel("nv")
@@ -187,8 +196,9 @@ def save_stage_breakdown(stage_rows, out_dir):
         "ccrba_prerequisites_after_fk",
         "ccrba_extended_after_prereq",
         "indexed_jacobians_after_ccrba",
-        "compute_dynamics_rnea",
-        "compute_dynamics_ccrba",
+        "compute_dynamics_rnea_com_pos",
+        "compute_dynamics_ccrba_all_terms",
+        "leoquad_reduced_ccrba",
         "leoquad_wbc_update",
     ]
     stage_labels = {
@@ -196,8 +206,9 @@ def save_stage_breakdown(stage_rows, out_dir):
         "ccrba_prerequisites_after_fk": "CCRBA prereq",
         "ccrba_extended_after_prereq": "CCRBA extra",
         "indexed_jacobians_after_ccrba": "indexed J",
-        "compute_dynamics_rnea": "RNEA",
-        "compute_dynamics_ccrba": "CCRBA",
+        "compute_dynamics_rnea_com_pos": "RNEA + CoM",
+        "compute_dynamics_ccrba_all_terms": "CCRBA all",
+        "leoquad_reduced_ccrba": "LeoQuad mask",
         "leoquad_wbc_update": "WBC update",
     }
     normal_stage_rows = [row for row in stage_rows if row.get("_section") == "native_or_stage"]
@@ -256,6 +267,15 @@ def save_reference_error(error_rows, out_dir):
     ax.set_xticklabels([fixture_label(name) for name in fixtures], rotation=25, ha="right")
     ax.grid(axis="y", alpha=0.25)
     ax.legend(frameon=False, ncol=3)
+    if values and all(value == 0.0 for value in values.values()):
+        ax.text(0.5,
+                0.5,
+                "All reported max absolute errors are zero at CSV precision",
+                transform=ax.transAxes,
+                ha="center",
+                va="center",
+                fontsize=10,
+                bbox={"boxstyle": "round,pad=0.4", "facecolor": "white", "edgecolor": "#777777"})
     fig.tight_layout()
     fig.savefig(out_dir / "reference_error_summary.png", dpi=180)
     plt.close(fig)
@@ -456,7 +476,7 @@ def save_sota_ablation_table(stage_rows, out_dir):
         ("ccrba_centroidal_matrices_after_prereq", "centroidal"),
         ("ccrba_mass_matrix_dot_after_prereq", "$\\dot M$"),
         ("indexed_jacobians_after_ccrba", "indexed $J$"),
-        ("compute_dynamics_ccrba_wbc_terms", "WBC mask"),
+        ("leoquad_reduced_ccrba", "LeoQuad mask"),
         ("compute_dynamics_ccrba_all_terms", "all terms"),
     ]
     by_stage = {row.get("stage"): row for row in stage_rows
@@ -573,16 +593,17 @@ def main():
     reference_error = [row for row in reference_rows_all if row["_section"] == "reference_error"]
     resource_rows = [row for row in native_rows if row.get("_section") in {"dtdynmodel_resource", "dtdyndata_resource"}]
     native_timing_rows = [row for row in native_rows if row.get("_section") == "native_or_stage"]
+    native_ccrba_timing_rows = native_ccrba_rows(native_timing_rows)
 
     if plt is None:
         print("warning: matplotlib is not installed; skipping figure generation and writing tables only if requested")
-    save_runtime_by_fixture(native_timing_rows, reference_timing, args.out)
-    save_scaling_by_dof(native_timing_rows, reference_timing, args.out)
+    save_runtime_by_fixture(native_ccrba_timing_rows, reference_timing, args.out)
+    save_scaling_by_dof(native_ccrba_timing_rows, reference_timing, args.out)
     save_stage_breakdown(stage_rows, args.out)
     save_reference_error(reference_error, args.out)
     save_latency_cdf(reference_rows_all, stage_rows, args.out)
     if args.tables_out is not None:
-        save_tables(reference_timing, reference_error, stage_rows, args.tables_out, native_timing_rows, resource_rows)
+        save_tables(reference_timing, reference_error, stage_rows, args.tables_out, native_ccrba_timing_rows, resource_rows)
 
 
 if __name__ == "__main__":

@@ -1066,20 +1066,20 @@ void RunLeoQuadWbcUpdate(const dtDynModel &model,
     ComputeJacobians(model, data, bodyIds, siteIds);
 }
 
-void RunFullDynamicsRNEA(const dtDynModel &model,
-                         dtDynData &data,
-                         const dt::Math::Vector3<dtDynReal> &gravity,
-                         const dtArray<dtDynIndex> &,
-                         const dtArray<dtDynIndex> &)
+void RunFullDynamicsRNEAComPos(const dtDynModel &model,
+                               dtDynData &data,
+                               const dt::Math::Vector3<dtDynReal> &gravity,
+                               const dtArray<dtDynIndex> &,
+                               const dtArray<dtDynIndex> &)
 {
-    ComputeDynamicsRNEA(model, data, gravity);
+    ComputeDynamicsRNEA(model, data, gravity, DTDYN_RNEA_TERM_COM_POS);
 }
 
-void RunFullDynamicsCCRBA(const dtDynModel &model,
-                          dtDynData &data,
-                          const dt::Math::Vector3<dtDynReal> &gravity,
-                          const dtArray<dtDynIndex> &,
-                          const dtArray<dtDynIndex> &)
+void RunFullDynamicsCCRBABaseTerms(const dtDynModel &model,
+                                   dtDynData &data,
+                                   const dt::Math::Vector3<dtDynReal> &gravity,
+                                   const dtArray<dtDynIndex> &,
+                                   const dtArray<dtDynIndex> &)
 {
     ComputeDynamicsCCRBA(model, data, gravity);
 }
@@ -1115,9 +1115,9 @@ dtArray<Stage> MakeStages()
             {"all_jacobians_after_ccrba", PrepareCentroidal, RunAllJacobians},
             {"indexed_jacobians_after_ccrba", PrepareCentroidal, RunIndexedJacobians},
             {"gravity_after_ccrba", PrepareCentroidal, RunGravityForces},
-            {"compute_dynamics_rnea", PrepareNone, RunFullDynamicsRNEA},
-            {"compute_dynamics_ccrba", PrepareNone, RunFullDynamicsCCRBA},
-            {"compute_dynamics_ccrba_wbc_terms", PrepareNone, RunFullDynamicsCCRBAWbcTerms},
+            {"compute_dynamics_rnea_com_pos", PrepareNone, RunFullDynamicsRNEAComPos},
+            {"compute_dynamics_ccrba_base_terms", PrepareNone, RunFullDynamicsCCRBABaseTerms},
+            {"leoquad_reduced_ccrba", PrepareNone, RunFullDynamicsCCRBAWbcTerms},
             {"leoquad_wbc_update", PrepareNone, RunLeoQuadWbcUpdate},
             {"compute_dynamics_ccrba_all_terms", PrepareNone, RunFullDynamicsCCRBAAllTerms}};
 }

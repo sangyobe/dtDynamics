@@ -4,9 +4,32 @@ The benchmark suite reports both runtime and resource-consumption diagnostics.
 
 ## Main binaries
 
-- `benchmark_dtDynamics`: native CCRBA benchmark plus setup/off-loop `dtDynModel_resource` and `dtDynData_resource` rows.
+- `benchmark_dtDynamics`: two dynamics-only native scopes (`native_ccrba_all` and `native_rnea_com_pos`) plus setup/off-loop `dtDynModel_resource` and `dtDynData_resource` rows.
 - `benchmark_dtDynamicsStages`: per-stage timing for FK, CCRBA substages, Jacobians, and WBC-style reduced update paths.
 - `benchmark_dtDynamicsReferences`: MuJoCo and Pinocchio reference timing/error rows for comparable quantities.
+
+## Benchmark scopes
+
+### Part A: native dynamics-only
+
+The native executable benchmarks both public dynamics algorithms for every fixture/state:
+
+- `native_ccrba_all` calls `ComputeDynamicsCCRBA(model, data, gravity, DTDYN_CCRBA_TERM_ALL)`.
+- `native_rnea_com_pos` calls `ComputeDynamicsRNEA(model, data, gravity, DTDYN_RNEA_TERM_COM_POS)`.
+
+The CSV `scope` column distinguishes these rows. Cross-engine figures use CCRBA-all. RNEA centroidal-matrix consistency columns are `nan` because those outputs are outside the RNEA contract.
+
+### Part B: LeoQuad reduced mask
+
+The controller-shaped stage uses
+
+```cpp
+DTDYN_CCRBA_TERM_COM_POS |
+DTDYN_CCRBA_TERM_CMAMAT |
+DTDYN_CCRBA_TERM_CENT_MOM
+```
+
+`leoquad_reduced_ccrba` times only that dynamics call. `leoquad_wbc_update` adds indexed Jacobians for the selected root body and four foot sites. External LeoQuad XML timing is opt-in and does not make LeoQuad an installed-package dependency.
 
 ## Resource columns
 
@@ -49,12 +72,45 @@ python3 tools/plot_benchmark_results.py \
   --tables-out /tmp/dtdyn_tables
 ```
 
+## Publishing generated Doxygen in GitLab
+
+Yes. Generated Doxygen can be published immediately as a GitLab CI job artifact without committing HTML. A private GitLab Pages site is also the preferred stable URL when the self-managed instance has Pages enabled. This project requests private Pages access, but no Pages deployment currently exists and the API response does not prove that the instance-level Pages service is configured; confirm that service with the GitLab administrator before relying on a Pages URL.
+
+Keep generated HTML out of Git. The CI runner must provide Doxygen, Graphviz, and the LaTeX/Ghostscript tools required by this repository's local formula-image configuration. A guaranteed artifact job shape is:
+
+```yaml
+doxygen-artifact:
+  stage: build
+  script:
+    - tools/validate_docs.sh
+  artifacts:
+    paths:
+      - build/docs/doxygen/html/
+```
+
+When instance-level Pages is confirmed, add `deploy` to the pipeline's `stages` list and publish the generated directory:
+
+```yaml
+doxygen-pages:
+  stage: deploy
+  script:
+    - tools/validate_docs.sh
+    - mkdir -p public
+    - cp -a build/docs/doxygen/html/. public/
+  pages:
+    publish: public
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+```
+
+Pin a project-approved image or runner toolchain before enabling either job. Validate the first pipeline, download the artifact, and verify private Pages access before treating either output as a release artifact.
+
 
 ## Current benchmark evidence snapshot
 
 @ref md_docs_benchmark_results contains the longer benchmark report and generated figures. The current manual keeps only a compact evidence snapshot so the API contract is not tied to stale performance numbers.
 
-From the recorded real-XML LeoQuad fixture snapshot, the combined reduced-CCRBA-plus-indexed-Jacobian benchmark reported batch-summary medians of `6.210 us` for nominal, `6.503 us` for asymmetric, and `7.830 us` for nonzero-velocity states. In the recorded installed-package headless LeoQuad profile snapshot, `Robot::UpdateDynamics` mean runtime was `15.589 us`, including `12.663 us` native mean split into `10.232 us` CCRBA and `2.432 us` indexed Jacobians, plus `2.794 us` controller-facing export.
+In the fresh canonical real-XML scope, reduced-CCRBA medians were `5.128 us`, `5.373 us`, and `6.884 us` for nominal, asymmetric, and nonzero-velocity states. Reduced CCRBA plus indexed Jacobians reported `7.673 us`, `9.096 us`, and `9.416 us`. These are 200-iteration evidence snapshots. The separately recorded installed-package headless profile remains useful end-to-end evidence, but it is not mixed into the fresh dynamics-scope table.
 
 These values are evidence snapshots, not release-wide guarantees. They depend on compiler flags, CPU scheduling, model XML, selected CCRBA term mask, indexed body/site task set, and whether the process runs with CPU isolation or realtime priority. For new comparisons, regenerate CSVs and tables from the benchmark binaries instead of mixing historic and current rows.
 

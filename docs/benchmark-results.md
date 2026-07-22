@@ -23,13 +23,13 @@ tools/audit_release_readiness.sh
 cmake --preset validation
 cmake --build --preset validation -- -j2
 ctest --preset validation
-build/validation/bin/benchmark_dtDynamics
-build/validation/bin/benchmark_dtDynamicsStages
-build/validation/bin/benchmark_dtDynamicsReferences
+build/validation/bin/benchmark_dtDynamics > /tmp/native.csv
+build/validation/bin/benchmark_dtDynamicsStages > /tmp/stages.csv
+build/validation/bin/benchmark_dtDynamicsReferences > /tmp/references.csv
 python3 tools/plot_benchmark_results.py \
-  --native /tmp/codex_native_multi_floating.csv \
-  --stages /tmp/codex_stages_multi_floating.csv \
-  --references /tmp/codex_ref_multi_floating_pin.csv \
+  --native /tmp/native.csv \
+  --stages /tmp/stages.csv \
+  --references /tmp/references.csv \
   --out docs/figures
 
 DTDYNAMICS_BENCHMARK_ONLY_EXTERNAL=1 \
@@ -52,51 +52,53 @@ Each row uses 20 warmup iterations and 200 measured iterations. Allocation count
 
 The raw benchmark CSVs retain allocation counters for regression checking. Human-readable timing tables omit allocation columns when every displayed row in that scope is zero; zero allocation is stated once in prose instead of repeated in every row.
 
-## Native Baseline
+## Part A — Native dynamics-only scope
 
-Native scope: dynamics-only `ComputeDynamicsCCRBA(model, data, gravity, DTDYN_CCRBA_TERM_ALL)`. LeoQuad runtime now requests a smaller mask: `COM_POS | CMAMAT | CENT_MOM`, then computes indexed body/site Jacobians through the indexed `ComputeJacobians` wrapper. The indexed wrapper is intentionally retained instead of switching to `ComputeSiteJacobians`, because LeoQuad still needs the root/base body Jacobian in the same control update.
+The native benchmark is intentionally dynamics-only and emits two labeled rows for every fixture/state:
 
-| Fixture | State | nq | nv | bodies | mean us | median us | p99 us |
-|---|---|---:|---:|---:|---:|---:|---:|
-| single_manipulator_fixed_base | nominal | 3 | 3 | 5 | 1.568560 | 1.567000 | 1.726000 |
-| single_manipulator_fixed_base | asymmetric | 3 | 3 | 5 | 1.331600 | 1.356000 | 1.757000 |
-| single_manipulator_fixed_base | nonzero_velocity | 3 | 3 | 5 | 1.326440 | 1.324000 | 1.387000 |
-| dual_manipulator_fixed_base | nominal | 4 | 4 | 6 | 1.227340 | 1.226000 | 1.294000 |
-| dual_manipulator_fixed_base | asymmetric | 4 | 4 | 6 | 1.341885 | 1.267000 | 1.883000 |
-| dual_manipulator_fixed_base | nonzero_velocity | 4 | 4 | 6 | 1.711540 | 1.648000 | 2.696000 |
-| multi_robot_fixed_base | nominal | 4 | 4 | 8 | 1.422080 | 1.419000 | 1.487000 |
-| multi_robot_fixed_base | asymmetric | 4 | 4 | 8 | 1.472530 | 1.444000 | 1.676000 |
-| multi_robot_fixed_base | nonzero_velocity | 4 | 4 | 8 | 1.857435 | 1.857000 | 1.898000 |
-| multi_robot_floating_base | nominal | 18 | 16 | 8 | 3.170610 | 3.148000 | 3.498000 |
-| multi_robot_floating_base | asymmetric | 18 | 16 | 8 | 3.186170 | 3.169000 | 3.435000 |
-| multi_robot_floating_base | nonzero_velocity | 18 | 16 | 8 | 4.195815 | 4.142000 | 5.854000 |
-| quadruped_floating_base | nominal | 19 | 18 | 14 | 5.319970 | 5.273000 | 7.671000 |
-| quadruped_floating_base | asymmetric | 19 | 18 | 14 | 5.345090 | 5.305000 | 7.539000 |
-| quadruped_floating_base | nonzero_velocity | 19 | 18 | 14 | 6.775280 | 6.728000 | 9.476000 |
-| fixed_body_heavy | nominal | 1 | 1 | 11 | 1.311965 | 1.312000 | 1.362000 |
-| fixed_body_heavy | asymmetric | 1 | 1 | 11 | 1.328080 | 1.311000 | 1.822000 |
-| fixed_body_heavy | nonzero_velocity | 1 | 1 | 11 | 1.571690 | 1.569000 | 1.615000 |
+- `native_ccrba_all`: `ComputeDynamicsCCRBA(model, data, gravity, DTDYN_CCRBA_TERM_ALL)` computes the base CCRBA outputs and every optional CCRBA term.
+- `native_rnea_com_pos`: `ComputeDynamicsRNEA(model, data, gravity, DTDYN_RNEA_TERM_COM_POS)` computes the RNEA base outputs plus root CoM position.
 
-For all native rows, these internal consistency errors were reported as zero at benchmark output precision:
+The native CSV schema includes a `scope` column so plots and tables cannot silently mix the two algorithms. Cross-engine figures select `native_ccrba_all`; the raw CSV retains all 48 native rows (eight fixtures, three states, and two scopes). RNEA rows report centroidal-matrix product consistency fields as `nan` because RNEA does not produce `cmAmat`, `centMom`, `comJmat`, or `comVel`.
 
-- mass-matrix symmetry max/RMS
-- `nonlinTorq = coriolisTorq + gravityTorq`
-- `centMom = cmAmat * qvel`
-- `comVel = comJmat * qvel`
+### Nominal native timing
 
-## Figures
+| Fixture | nq | nv | bodies | CCRBA all median / p99 us | RNEA + CoM median / p99 us |
+|---|---:|---:|---:|---:|---:|
+| single_manipulator_fixed_base | 3 | 3 | 5 | 1.218 / 1.292 | 1.519 / 1.601 |
+| dual_manipulator_fixed_base | 4 | 4 | 6 | 1.509 / 1.599 | 1.892 / 2.009 |
+| multi_robot_fixed_base | 4 | 4 | 8 | 1.739 / 1.816 | 2.268 / 2.375 |
+| multi_robot_floating_base | 18 | 16 | 8 | 3.854 / 4.060 | 3.094 / 3.283 |
+| quadruped_floating_base | 19 | 18 | 14 | 6.412 / 10.446 | 5.758 / 8.339 |
+| fixed_body_heavy | 1 | 1 | 11 | 1.609 / 1.660 | 2.838 / 2.936 |
+| serial_chain_10 | 10 | 10 | 12 | 4.186 / 4.383 | 4.445 / 4.719 |
+| serial_chain_30 | 30 | 30 | 32 | 18.059 / 33.745 | 13.879 / 27.088 |
+
+### Floating-base quadruped states
+
+| State | CCRBA all median / p99 us | RNEA + CoM median / p99 us |
+|---|---:|---:|
+| nominal | 6.412 / 10.446 | 5.758 / 8.339 |
+| asymmetric | 6.459 / 6.689 | 5.903 / 6.268 |
+| nonzero_velocity | 8.328 / 13.540 | 6.052 / 6.325 |
+
+For both native scopes, mass-matrix symmetry and `nonlinTorq = coriolisTorq + gravityTorq` consistency errors were zero at benchmark output precision. CCRBA-all rows additionally reported zero `centMom = cmAmat * qvel` and `comVel = comJmat * qvel` consistency errors.
+
+### Figures
 
 The figures are generated from the same CSV outputs as the tables:
 
-\image html runtime_by_fixture.png "Nominal runtime by fixture" width=100%
+![Nominal runtime by fixture](figures/runtime_by_fixture.png)
 
-\image html scaling_by_dof.png "Runtime scaling by velocity dimension" width=100%
+![Runtime scaling by velocity dimension](figures/scaling_by_dof.png)
 
-\image html stage_breakdown.png "Nominal stage breakdown" width=100%
+![Nominal stage breakdown](figures/stage_breakdown.png)
 
-\image html reference_error_summary.png "MuJoCo reference errors for derivative-like outputs" width=100%
+![Reference error summary](figures/reference_error_summary.png)
 
-## Native Stage Breakdown
+![Quadruped nonzero-velocity latency distribution](figures/latency_cdf.png)
+
+### Native stage breakdown
 
 `benchmark_dtDynamicsStages` splits the native pipeline into public API stages and internal CCRBA/RNEA substages. Each stage starts from the prerequisite state needed by that API, so the rows are diagnostic timings rather than additive exclusive profiler samples.
 
@@ -104,47 +106,59 @@ The setup-only `benchmark_dtDynamics` resource rows (`dtDynModel_resource` and `
 
 | Fixture | nq | nv | bodies | Compile median us | Compile p99 us | Data resize median us | Data resize p99 us |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| single_manipulator_fixed_base | 3 | 3 | 5 | 1.832 | 2.453 | 1.887 | 3.510 |
-| dual_manipulator_fixed_base | 4 | 4 | 6 | 2.258 | 2.750 | 2.206 | 3.185 |
-| multi_robot_fixed_base | 4 | 4 | 8 | 2.773 | 3.065 | 2.442 | 4.642 |
-| multi_robot_floating_base | 18 | 16 | 8 | 3.293 | 3.870 | 3.702 | 5.882 |
-| quadruped_floating_base | 19 | 18 | 14 | 6.679 | 9.244 | 5.360 | 7.468 |
-| fixed_body_heavy | 1 | 1 | 11 | 2.698 | 3.147 | 2.736 | 4.198 |
-| serial_chain_10 | 10 | 10 | 12 | 3.650 | 4.704 | 3.919 | 6.438 |
-| serial_chain_30 | 30 | 30 | 32 | 12.455 | 15.673 | 10.312 | 13.829 |
+| single_manipulator_fixed_base | 3 | 3 | 5 | 1.807 | 3.075 | 1.928 | 2.926 |
+| dual_manipulator_fixed_base | 4 | 4 | 6 | 2.200 | 2.483 | 2.262 | 4.032 |
+| multi_robot_fixed_base | 4 | 4 | 8 | 2.789 | 4.052 | 2.481 | 4.384 |
+| multi_robot_floating_base | 18 | 16 | 8 | 3.281 | 4.318 | 3.698 | 5.712 |
+| quadruped_floating_base | 19 | 18 | 14 | 6.876 | 9.363 | 5.415 | 7.675 |
+| fixed_body_heavy | 1 | 1 | 11 | 2.617 | 3.803 | 2.688 | 4.340 |
+| serial_chain_10 | 10 | 10 | 12 | 3.617 | 6.417 | 3.814 | 5.788 |
+| serial_chain_30 | 30 | 30 | 32 | 12.706 | 18.478 | 10.217 | 16.491 |
 
 For the floating-base quadruped fixture, the median stage times in microseconds were:
 
-| State | FK | Mass after FK | CCRBA after FK | CCRBA prereq | CCRBA extended | Body Jacobians | Site Jacobians | All Jacobians | Indexed Jacobians | Gravity | RNEA dynamics | CCRBA dynamics |
+| State | FK | Mass after FK | CCRBA after FK | CCRBA prereq | CCRBA extended | Body Jacobians | Site Jacobians | All Jacobians | Indexed Jacobians | Gravity | RNEA + CoM | CCRBA all |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| nominal | 1.625 | 1.322 | 3.694 | 0.923 | 2.934 | 2.296 | 0.746 | 3.217 | 0.912 | 0.055 | 5.058 | 4.134 |
-| asymmetric | 1.740 | 1.294 | 3.763 | 0.896 | 2.889 | 2.253 | 0.741 | 3.226 | 0.896 | 0.055 | 5.193 | 4.461 |
-| nonzero_velocity | 1.742 | 1.388 | 6.503 | 2.249 | 2.858 | 2.256 | 0.742 | 3.201 | 0.891 | 0.055 | 5.263 | 5.735 |
+| nominal | 2.001 | 1.575 | 4.653 | 1.122 | 3.343 | 2.548 | 0.810 | 3.462 | 0.990 | 0.062 | 5.711 | 6.344 |
+| asymmetric | 2.105 | 1.585 | 4.589 | 1.095 | 3.269 | 2.463 | 0.787 | 3.455 | 0.983 | 0.062 | 5.719 | 6.333 |
+| nonzero_velocity | 2.108 | 1.693 | 6.489 | 2.734 | 3.311 | 2.511 | 0.788 | 3.542 | 1.000 | 0.062 | 5.977 | 8.241 |
 
 A focused run for the multi-root fixtures validates the timing path for independent model parts plus fixed sensor frames. Median stage times in microseconds were:
 
-| Fixture | State | FK | Mass after FK | CCRBA after FK | CCRBA prereq | CCRBA extended | Indexed Jacobians | RNEA dynamics | CCRBA dynamics | WBC Update |
+| Fixture | State | FK | Mass after FK | CCRBA after FK | CCRBA prereq | CCRBA extended | Indexed Jacobians | RNEA + CoM | CCRBA all | Reduced WBC update |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| multi_robot_fixed_base | nominal | 0.689 | 0.461 | 0.741 | 0.425 | 0.298 | 0.100 | 1.850 | 1.192 | 1.364 |
-| multi_robot_fixed_base | asymmetric | 0.718 | 0.458 | 0.736 | 0.424 | 0.292 | 0.101 | 1.869 | 1.212 | 1.386 |
-| multi_robot_fixed_base | nonzero_velocity | 0.723 | 0.464 | 1.172 | 0.802 | 0.295 | 0.101 | 1.895 | 1.615 | 1.791 |
-| multi_robot_floating_base | nominal | 0.737 | 0.858 | 2.664 | 0.571 | 2.138 | 0.643 | 2.653 | 2.292 | 3.245 |
-| multi_robot_floating_base | asymmetric | 0.859 | 0.925 | 2.710 | 0.570 | 2.239 | 0.668 | 2.692 | 2.312 | 3.336 |
-| multi_robot_floating_base | nonzero_velocity | 0.850 | 0.944 | 3.581 | 1.369 | 2.188 | 0.640 | 2.804 | 3.199 | 4.221 |
+| multi_robot_fixed_base | nominal | 0.844 | 0.566 | 0.909 | 0.508 | 0.358 | 0.123 | 2.249 | 1.705 | 1.652 |
+| multi_robot_fixed_base | asymmetric | 0.878 | 0.556 | 0.917 | 0.516 | 0.356 | 0.130 | 2.342 | 1.757 | 1.717 |
+| multi_robot_fixed_base | nonzero_velocity | 0.889 | 0.575 | 1.432 | 0.995 | 0.355 | 0.130 | 2.397 | 2.265 | 2.237 |
+| multi_robot_floating_base | nominal | 0.906 | 1.133 | 3.545 | 0.703 | 2.714 | 0.725 | 3.092 | 4.065 | 3.817 |
+| multi_robot_floating_base | asymmetric | 0.947 | 1.066 | 3.532 | 0.716 | 2.724 | 0.727 | 3.050 | 4.034 | 3.817 |
+| multi_robot_floating_base | nonzero_velocity | 0.941 | 1.067 | 4.660 | 1.666 | 2.640 | 0.725 | 3.119 | 5.095 | 4.875 |
 
-A focused rerun after adding the LeoQuad-shaped combined stage reported the following evidence snapshot. Treat these numbers as run-specific timing evidence, not a timeless performance guarantee:
+## Part B — LeoQuad reduced-mask scope
 
-| State | Indexed Jacobians | WBC CCRBA Terms | LeoQuad WBC Update |
-| --- | ---: | ---: | ---: |
-| nominal | 1.042 | 11.423 | 12.657 |
-| asymmetric | 1.033 | 10.683 | 11.776 |
-| nonzero_velocity | 1.078 | 10.561 | 11.733 |
+The LeoQuad controller scope is deliberately smaller than the native all-feature scope:
 
-`LeoQuad WBC Update` is `ComputeDynamicsCCRBA(model, data, gravity, COM_POS | CMAMAT | CENT_MOM)` followed by indexed body/site `ComputeJacobians(model, data, bodyIds, siteIds)`. In the benchmark fixture, `bodyIds` contains the root body and `siteIds` contains all four foot sites.
+```cpp
+constexpr dtDynCcrbaTermFlags leoquadMask =
+    DTDYN_CCRBA_TERM_COM_POS |
+    DTDYN_CCRBA_TERM_CMAMAT |
+    DTDYN_CCRBA_TERM_CENT_MOM;
 
-The stage benchmark also accepts an opt-in external XML fixture through `DTDYNAMICS_BENCHMARK_XML`. This is used for real LeoQuad timing without making the standalone dtDynamics package depend on LeoQuad assets. `DTDYNAMICS_BENCHMARK_ONLY_EXTERNAL=1` restricts the run to that external fixture, and `DTDYNAMICS_BENCHMARK_XML_NAME` controls the CSV fixture label.
+ComputeDynamicsCCRBA(model, data, gravity, leoquadMask);
+ComputeJacobians(model, data, bodyIds, siteIds);
+```
 
-After replacing temporary 6x6 cross-matrix construction in the CCRBA bias-force assembly with direct sparse cross-term accumulation, removing the redundant local `Bmat` scratch array, computing local bias directly into `BmatComp`, fusing the public CCRBA `Cmat*qvel` product into the `Cmat` fill loop, skipping zero-velocity local bias construction, skipping zero bias-force products, avoiding redundant nonzero-body inertia clears, grouping local motion-cross updates by spatial-inertia column, combining paired DOF 6x6-vector products, filling body spatial inertia directly in place, replacing scaled spatial temporaries with in-place scaled adds, caching compiled body/inertial/site rotation matrices, using a data-internal combined indexed `J`/`Jdot` writer for controller-selected body/site Jacobians, moving diff-motion zeroing to exact write sites with exact-zero cross-product skips, writing `cdof` and nonzero `cdof_dot` directly, keeping the local momentum multiply inside `ComputeBiasMatrix` in dtMath operator form after benchmark-confirming no meaningful regression, carrying a per-body `BmatCompNonzero` flag through composite bias accumulation, skipping redundant `BmatComp` clears when the flag prevents reads, writing zero-derivative DOF bias products directly into `f2` with `SpatialMulInto`, and unrolling fixed-size 6x6 spatial matrix-vector products in the DOF bias-force path, representative real LeoQuad XML batch-summary medians are:
+`bodyIds` contains the root/base body and `siteIds` contains the four foot sites. The dynamics-only reduced call is labeled `leoquad_reduced_ccrba`; the combined controller-shaped call is `leoquad_wbc_update`. The following fresh 200-iteration medians use the canonical current `leoquad-control/model/LeoQuad_QD1.xml` fixture and are evidence snapshots rather than platform-independent guarantees:
+
+| State | CCRBA all median us | RNEA + CoM median us | Reduced CCRBA median us | Reduced CCRBA + indexed Jacobians median us |
+|---|---:|---:|---:|---:|
+| nominal | 6.392 | 5.942 | 5.128 | 7.673 |
+| asymmetric | 6.646 | 5.943 | 5.373 | 9.096 |
+| nonzero_velocity | 8.053 | 6.016 | 6.884 | 9.416 |
+
+The external fixture remains opt-in through `DTDYNAMICS_BENCHMARK_XML`; `DTDYNAMICS_BENCHMARK_ONLY_EXTERNAL=1` restricts the run to that XML and `DTDYNAMICS_BENCHMARK_XML_NAME` controls the CSV fixture label. The standalone package therefore does not depend on LeoQuad assets.
+
+After replacing temporary 6x6 cross-matrix construction in the CCRBA bias-force assembly with direct sparse cross-term accumulation, removing the redundant local `Bmat` scratch array, computing local bias directly into `BmatComp`, fusing the public CCRBA `Cmat*qvel` product into the `Cmat` fill loop, skipping zero-velocity local bias construction, skipping zero bias-force products, avoiding redundant nonzero-body inertia clears, grouping local motion-cross updates by spatial-inertia column, combining paired DOF 6x6-vector products, filling body spatial inertia directly in place, replacing scaled spatial temporaries with in-place scaled adds, caching compiled body/inertial/site rotation matrices, using a data-internal combined indexed `J`/`Jdot` writer for controller-selected body/site Jacobians, moving diff-motion zeroing to exact write sites with exact-zero cross-product skips, writing `cdof` and nonzero `cdof_dot` directly, keeping the local momentum multiply inside `ComputeBiasMatrix` in dtMath operator form after benchmark-confirming no meaningful regression, carrying a per-body `BmatCompNonzero` flag through composite bias accumulation, skipping redundant `BmatComp` clears when the flag prevents reads, writing zero-derivative DOF bias products directly into `f2` with `SpatialMulInto`, and unrolling fixed-size 6x6 spatial matrix-vector products in the DOF bias-force path, the following historical optimization batch-summary medians were recorded before the fresh scope run above:
 
 | State | CCRBA prereq | Local bias matrices | Bias accumulation | DOF bias forces | CCRBA bias forces | WBC CCRBA Terms | LeoQuad WBC Update |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -176,21 +190,23 @@ The native block was further split as:
 
 The CCRBA extended stage is further split as:
 
-| State | Dense clear | Root CoM | CMM/CMMdot | Mmat | MmatDot | Cmat | CoM J/Jdot | CMM*qvel | CoM J*qvel | Cmat*qvel | Products |
+| State | Dense clear | Root CoM | CMM/CMMdot | Mmat | MmatDot | Cmat | CoM J/Jdot | CMM*qvel | CoM J*qvel | Cmat*qvel | Combined products |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | nominal | 0.105 | 0.023 | 0.148 | 0.347 | 0.598 | 0.717 | 0.170 | 0.207 | 0.131 | 0.533 | 0.817 |
 | asymmetric | 0.115 | 0.024 | 0.150 | 0.344 | 0.618 | 0.689 | 0.169 | 0.203 | 0.126 | 0.501 | 0.775 |
 | nonzero_velocity | 0.105 | 0.023 | 0.146 | 0.346 | 0.597 | 0.689 | 0.169 | 0.202 | 0.126 | 0.500 | 0.776 |
 
+`Combined products` is one timed stage that executes the three matrix-vector products sequentially: `centMom = cmAmat * qvel`, `comVel = comJmat * qvel`, and the standalone diagnostic `coriolisTorq = Cmat * qvel`. It is not a fourth mathematical output, and its measured median need not equal the arithmetic sum of the three separately timed medians because each row has independent timer/cache effects.
+
 The `Cmat*qvel` row remains in the stage benchmark as a diagnostic standalone product. The public `ComputeDynamicsCCRBA` path no longer pays that separate dense pass: it accumulates `coriolisTorq` while filling `Cmat`, then forms `nonlinTorq = gravityTorq + coriolisTorq`.
 
 The old top-level spatial-array pre-clear was removed after confirming downstream stages overwrite the spatial work arrays (`cdof`, `cdof_dot`, `cvel`, `cinert`, `crb`, `BmatComp`, and `f1/f2/f3`). Dense output matrix clearing remains inside the CCRBA path because non-ancestor entries in `Mmat`, `MmatDot`, and `Cmat` are intentionally not written by the parent-chain loops and must remain zero.
 
-The single-manipulator nominal median path was 1.567 us for full `ComputeDynamicsCCRBA(..., DTDYN_CCRBA_TERM_ALL)`; the dual-manipulator nominal path was 1.226 us; the multi-robot fixed-base nominal path was 1.419 us; the multi-robot floating-base nominal path was 3.148 us; the fixed-body-heavy nominal path was 1.312 us. All measured stage compute rows reported zero counted C++ `operator new` allocation; the raw stage CSV retains allocation counters for regression checks.
+Fresh CCRBA-all nominal medians were 1.218 us for the single manipulator, 1.509 us for the dual manipulator, 1.739 us for multi-robot fixed base, 3.854 us for multi-robot floating base, and 1.609 us for the fixed-body-heavy fixture. All measured stage compute rows reported zero counted C++ `operator new` allocation; the raw stage CSV retains allocation counters for regression checks.
 
-This explains most of the remaining native-vs-MuJoCo timing difference. `DTDYN_CCRBA_TERM_ALL` computes controller-specific quantities beyond the MuJoCo overlap set. LeoQuad does not need all of those terms each control tick, so its runtime call requests only `COM_POS`, `CMAMAT`, and `CENT_MOM`; the stage benchmark includes this as `compute_dynamics_ccrba_wbc_terms`. The stage benchmark also includes `leoquad_wbc_update`, which runs the reduced CCRBA call followed by indexed body/site `ComputeJacobians` to match the LeoQuad runtime order. The lighter `ComputeDynamicsRNEA` path is closer to MuJoCo's bias-force path and avoids the CCRBA matrices. CCRBA computes gravity, Coriolis, and nonlinear torque ingredients from the centroidal/`Cmat` pass instead of calling RNEA. In the extended substage, dense output clearing is small; `Cmat` and `MmatDot` are the main per-term matrix costs, and the standalone `Cmat*qvel` row is now a diagnostic cost avoided by the public CCRBA entry point. In the prerequisite substage, zero-velocity states are now much cheaper because the local bias matrix and zero bias products are skipped exactly, `BmatCompNonzero` avoids scanning/accumulating known-zero composite bias matrices, and zero-derivative DOF bias products write directly into `f2` without a returned temporary. Nonzero velocity states still pay the real local-bias cost, but grouped local motion-cross updates reduce that row from roughly 1.5 us to roughly 0.8 us on the current real XML fixture. A readability pass restored the local momentum calculation to the dtMath `inertia * velocity` operator form after benchmarking showed no meaningful regression. Direct in-place spatial inertia filling reduces the composite inertia row to about 0.5 us, and in-place scaled adds plus direct `cdof`/`cdof_dot` spatial writes remove small temporaries from the prerequisite path. Fixed-size spatial matrix-vector kernels in the DOF bias-force path are unrolled because those products are always 6x6. Jacobian computation is separated from dynamics computation. The indexed Jacobian overload computes the requested root/base body Jacobian plus task-site Jacobians only; for the quadruped fixture this reduces Jacobian median time from about 3.7 us to about 1.05-1.07 us without counted C++ `operator new` allocation; the raw CSV retains the zero allocation counters. Public `ComputePointJacobianTerms`, `ComputeBodyJacobianTerms`, and `ComputeSiteJacobianTerms` wrappers cover one-off task requests that need `J`, `Jdot`, and `Jdot*qvel` together. Site-only Jacobian timing is useful as a diagnostic lower bound, but it is not the LeoQuad runtime contract while the base body Jacobian remains a controller input.
+This explains most of the remaining native-vs-MuJoCo timing difference. `DTDYN_CCRBA_TERM_ALL` computes controller-specific quantities beyond the MuJoCo overlap set. LeoQuad does not need all of those terms each control tick, so its runtime call requests only `COM_POS`, `CMAMAT`, and `CENT_MOM`; the stage benchmark includes this as `leoquad_reduced_ccrba`. The stage benchmark also includes `leoquad_wbc_update`, which runs the reduced CCRBA call followed by indexed body/site `ComputeJacobians` to match the LeoQuad runtime order. The native `compute_dynamics_rnea_com_pos` stage uses `DTDYN_RNEA_TERM_COM_POS` and is closer to MuJoCo's bias-force path and avoids the CCRBA matrices. CCRBA computes gravity, Coriolis, and nonlinear torque ingredients from the centroidal/`Cmat` pass instead of calling RNEA. In the extended substage, dense output clearing is small; `Cmat` and `MmatDot` are the main per-term matrix costs, and the standalone `Cmat*qvel` row is now a diagnostic cost avoided by the public CCRBA entry point. In the prerequisite substage, zero-velocity states are now much cheaper because the local bias matrix and zero bias products are skipped exactly, `BmatCompNonzero` avoids scanning/accumulating known-zero composite bias matrices, and zero-derivative DOF bias products write directly into `f2` without a returned temporary. Nonzero velocity states still pay the real local-bias cost, but grouped local motion-cross updates reduce that row from roughly 1.5 us to roughly 0.8 us on the current real XML fixture. A readability pass restored the local momentum calculation to the dtMath `inertia * velocity` operator form after benchmarking showed no meaningful regression. Direct in-place spatial inertia filling reduces the composite inertia row to about 0.5 us, and in-place scaled adds plus direct `cdof`/`cdof_dot` spatial writes remove small temporaries from the prerequisite path. Fixed-size spatial matrix-vector kernels in the DOF bias-force path are unrolled because those products are always 6x6. Jacobian computation is separated from dynamics computation. The indexed Jacobian overload computes the requested root/base body Jacobian plus task-site Jacobians only; for the quadruped fixture this reduces Jacobian median time from about 3.7 us to about 1.05-1.07 us without counted C++ `operator new` allocation; the raw CSV retains the zero allocation counters. Public `ComputePointJacobianTerms`, `ComputeBodyJacobianTerms`, and `ComputeSiteJacobianTerms` wrappers cover one-off task requests that need `J`, `Jdot`, and `Jdot*qvel` together. Site-only Jacobian timing is useful as a diagnostic lower bound, but it is not the LeoQuad runtime contract while the base body Jacobian remains a controller input.
 
-## Reference Paths
+## Reference and validation scope
 
 MuJoCo scope: `mj_forward`, `mj_subtreeVel`, `mj_fullM`, site Jacobians, site `Jdot`, subtree CoM Jacobian, and angular momentum matrix.
 
@@ -260,7 +276,7 @@ All Pinocchio max/RMS errors were `0.000000` at benchmark output precision for `
 
 ## Current Interpretation
 
-The native implementation has no counted C++ `operator new` allocation in the documented realtime dynamics benchmark rows for the tested fixtures. The synthetic floating-base quadruped remains a useful package-local proxy for the LeoQuad WBC path, and the opt-in external XML fixture records the real `LeoQuad_QD1.xml` model without coupling the standalone package to LeoQuad. The timing tables above are evidence snapshots from the stated benchmark/profile runs; compare future work against freshly regenerated CSVs and logs rather than mixing historic representative values. In the recorded real-XML combined reduced-CCRBA-plus-indexed-Jacobian snapshot, batch-summary medians were 6.210/6.503 us for nominal/asymmetric zero-velocity states and 7.830 us for the nonzero-velocity state. In the recorded isolated-prefix installed-package headless LeoQuad profile snapshot, `Robot::UpdateDynamics` mean runtime was 15.589 us, including 12.663 us native mean split into 10.232 us CCRBA and 2.432 us indexed Jacobians, plus 2.794 us controller-facing export.
+The native implementation has no counted C++ `operator new` allocation in the documented steady-state dynamics rows for the tested fixtures. The synthetic floating-base quadruped remains a package-local proxy, while the opt-in canonical external XML provides the LeoQuad-specific reduced-mask scope without creating an installed-package dependency. In the fresh canonical XML run, reduced-CCRBA medians were 5.128/5.373/6.884 us and reduced-CCRBA-plus-indexed-Jacobian medians were 7.673/9.096/9.416 us for nominal/asymmetric/nonzero-velocity states. The separately recorded headless controller profile is retained as historical end-to-end evidence and is not mixed into these fresh dynamics-scope numbers.
 
 A focused allocation-instrumentation rerun of `benchmark_dtDynamics` keeps allocation counters in the CSV for regression checks. Human-facing runtime tables omit all-zero compute allocation columns; the diagnostic setup allocation counts remain summarized below only to explain initialization resource behavior:
 
