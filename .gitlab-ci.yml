@@ -141,7 +141,7 @@ polyspace-job:
           -login "${POLYSPACE_ACCESS_LOGIN}" \
           -encrypted-password "${POLYSPACE_ACCESS_ENCRYPTED_PASSWORD}" \
           -upload reports/polyspace/results \
-          -parent-project "public/art_ws" \
+          -parent-project "art_ws/dtdynamics" \
           -project "dtdynamics_$(date '+%Y%m%d_%H%M')_${CI_COMMIT_SHORT_SHA}" \
           && echo "업로드 완료: ${RUN_LABEL}" || echo "Polyspace Access 업로드 실패 (계속 진행)"
       else
