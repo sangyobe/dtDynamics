@@ -239,8 +239,8 @@ def save_stage_breakdown(stage_rows, out_dir):
         "indexed_jacobians_after_ccrba": "indexed J",
         "compute_dynamics_rnea_com_pos": "RNEA + CoM",
         "compute_dynamics_ccrba_all_terms": "CCRBA all",
-        "leoquad_reduced_ccrba": "LeoQuad mask",
-        "leoquad_wbc_update": "WBC update",
+        "leoquad_reduced_ccrba": "reduced CCRBA",
+        "leoquad_wbc_update": "reduced + indexed J",
     }
     normal_stage_rows = [row for row in stage_rows if row.get("_section") == "native_or_stage"]
     data = {
@@ -265,50 +265,6 @@ def save_stage_breakdown(stage_rows, out_dir):
     ax.legend(frameon=False)
     fig.tight_layout()
     fig.savefig(out_dir / "stage_breakdown.png", dpi=180)
-    plt.close(fig)
-
-
-def save_reference_error(error_rows, out_dir):
-    if plt is None:
-        return
-    quantities = ["Mmat", "cdof_dot", "site_jacp_dot", "site_jacr_dot", "cmAmat", "centMom"]
-    fixtures = []
-    values = {}
-    for row in error_rows:
-        if row.get("comparison_reference", row.get("reference", "")) != "mujoco" or row.get("state") != "nonzero_velocity":
-            continue
-        if row.get("status") != "ok" or row.get("quantity") not in quantities:
-            continue
-        fixture = row["fixture"]
-        if fixture not in fixtures:
-            fixtures.append(fixture)
-        values[(fixture, row["quantity"])] = as_float(row, "max_error")
-
-    fig, ax = plt.subplots(figsize=(10.5, 5.0))
-    x = list(range(len(fixtures)))
-    width = 0.12
-    for quantity_index, quantity in enumerate(quantities):
-        offset = (quantity_index - (len(quantities) - 1) / 2.0) * width
-        data = [values.get((fixture, quantity), 0.0) for fixture in fixtures]
-        ax.bar([pos + offset for pos in x], data, width=width, label=quantity)
-
-    ax.set_title("MuJoCo Reference Errors For Derivative-Like Outputs")
-    ax.set_ylabel("max abs error")
-    ax.set_xticks(x)
-    ax.set_xticklabels([fixture_label(name) for name in fixtures], rotation=25, ha="right")
-    ax.grid(axis="y", alpha=0.25)
-    ax.legend(frameon=False, ncol=3)
-    if values and all(value == 0.0 for value in values.values()):
-        ax.text(0.5,
-                0.5,
-                "All reported max absolute errors are zero at CSV precision",
-                transform=ax.transAxes,
-                ha="center",
-                va="center",
-                fontsize=10,
-                bbox={"boxstyle": "round,pad=0.4", "facecolor": "white", "edgecolor": "#777777"})
-    fig.tight_layout()
-    fig.savefig(out_dir / "reference_error_summary.png", dpi=180)
     plt.close(fig)
 
 
@@ -446,7 +402,7 @@ def save_latency_cdf(reference_rows, stage_rows, out_dir):
     else:
         ax.set_ylabel("empirical CDF")
         ax.set_xlabel("runtime (us)")
-    ax.set_title("Quadruped Nonzero-Velocity Latency")
+    ax.set_title("Quadruped Nonzero-Velocity Latency Summary")
     ax.grid(alpha=0.25)
     ax.legend(frameon=False)
     fig.tight_layout()
@@ -631,7 +587,6 @@ def main():
     save_runtime_by_fixture(native_timing_rows, reference_timing, args.out)
     save_scaling_by_dof(native_timing_rows, reference_timing, args.out)
     save_stage_breakdown(stage_rows, args.out)
-    save_reference_error(reference_error, args.out)
     save_latency_cdf(reference_rows_all, stage_rows, args.out)
     if args.tables_out is not None:
         save_tables(reference_timing, reference_error, stage_rows, args.tables_out, native_ccrba_timing_rows, resource_rows)

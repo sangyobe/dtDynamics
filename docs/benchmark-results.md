@@ -89,19 +89,17 @@ The native CSV `scope` column prevents the three package-native calls from being
 
 For all three native scopes, mass-matrix symmetry and `nonlinTorq = coriolisTorq + gravityTorq` consistency errors were zero at benchmark output precision. Reduced/full CCRBA additionally reported zero centroidal-momentum consistency error; full CCRBA also reported zero CoM-velocity consistency error.
 
-### Figures
-
-The runtime and scaling figures include all five Part A entries. All figures are generated from the same CSV outputs as the tables:
+#### Nominal runtime by fixture
 
 ![Nominal runtime by fixture](figures/runtime_by_fixture.png)
 
+`runtime_by_fixture.png` is a grouped-bar view of the nominal median rows in the Part A table. Each fixture group contains the three dtDynamics calls plus MuJoCo and Pinocchio. Lower bars mean less elapsed time for that specific measured call sequence on this host. The gaps among RNEA, reduced CCRBA, and full CCRBA show the cost of requesting progressively different native outputs; the MuJoCo and Pinocchio bars remain contextual because their output contracts are not identical. Tail behavior is intentionally left in the table's p99 columns rather than encoded in this median-only figure.
+
+#### Runtime scaling by velocity dimension
+
 ![Runtime scaling by velocity dimension](figures/scaling_by_dof.png)
 
-![Nominal stage breakdown](figures/stage_breakdown.png)
-
-![Reference error summary](figures/reference_error_summary.png)
-
-![Quadruped nonzero-velocity latency distribution](figures/latency_cdf.png)
+`scaling_by_dof.png` plots the same nominal medians against `nv`. Every marker is a different fixture, so the connecting lines are visual guides rather than fitted complexity curves. Equal `nv` does not imply equal work: floating-base topology, body count, fixed bodies, sites, and requested outputs can change runtime. Use this plot to see broad size trends, and use the fixture table for exact morphology-aware comparisons.
 
 ### Native stage breakdown
 
@@ -138,6 +136,12 @@ A focused run for the multi-root fixtures validates the timing path for independ
 | multi_robot_floating_base | nominal | 0.649 | 0.790 | 2.663 | 0.571 | 2.031 | 0.542 | 2.401 | 2.983 | 2.917 |
 | multi_robot_floating_base | asymmetric | 0.758 | 1.160 | 10.355 | 2.153 | 3.754 | 0.823 | 3.822 | 5.192 | 5.469 |
 | multi_robot_floating_base | nonzero_velocity | 0.949 | 1.102 | 4.529 | 1.627 | 2.507 | 0.687 | 3.137 | 4.789 | 4.789 |
+
+#### Nominal stage breakdown figure
+
+![Nominal stage breakdown](figures/stage_breakdown.png)
+
+`stage_breakdown.png` compares independently timed nominal stages for the fixed-base multi-robot, floating-base multi-robot, and floating-base quadruped fixtures. It is not a stacked profile: each bar starts from the prerequisite state documented by its stage, so the bars must not be summed to reconstruct a public call. `FK`, `CCRBA prereq`, and `CCRBA extra` isolate pipeline components; `indexed J` measures selected Jacobians after dynamics preparation; `RNEA + CoM`, `CCRBA all`, and `reduced CCRBA` are complete dynamics calls with their stated masks; `reduced + indexed J` adds the selected body/site Jacobians after reduced CCRBA. The fixture-to-fixture gaps reflect topology and requested-work differences, not only `nv`.
 
 ## Part B — LeoQuad controller scope
 
@@ -268,9 +272,17 @@ Pinocchio scope: `crba`, generalized gravity, nonlinear effects, Coriolis matrix
 | pinocchio | serial_chain_30 | asymmetric | 30 | 30 | 32 | 42.402835 | 42.207000 | 45.930000 |
 | pinocchio | serial_chain_30 | nonzero_velocity | 30 | 30 | 32 | 42.415560 | 42.254000 | 45.977000 |
 
+### Quadruped nonzero-velocity latency summary
+
+![Quadruped nonzero-velocity latency summary](figures/latency_cdf.png)
+
+This figure summarizes the median and p99 latency of the reference benchmark's floating-base quadruped nonzero-velocity rows. It compares the dtDynamics reference call sequence with MuJoCo, Pinocchio, and the independent Pinocchio path; it is not the three-native-scope Part A figure. Median bars show typical measured latency, while p99 bars expose the observed tail in this process-local run. The values are evidence snapshots without CPU isolation or realtime scheduling.
+
 ## Reference Error Summary
 
 `benchmark_dtDynamicsReferences` now emits numerical error rows after the timing table. Rows with `status=ok` are numerical comparisons. Rows with `status=skipped` are explicit diagnostics for intentionally non-comparable quantities.
+
+No reference-error figure is generated because every `status=ok` max/RMS error in this run is `0.000000` at CSV output precision. The status-bearing CSV rows and the coverage/skip explanations below carry more information than an all-zero chart.
 
 MuJoCo comparisons cover:
 
