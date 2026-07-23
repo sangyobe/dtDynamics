@@ -568,43 +568,30 @@ def save_setup_resource_table(resource_rows, out_dir):
     resize_rows = {row.get("fixture"): row for row in resource_rows if row.get("_section") == "dtdyndata_resource"}
     fixtures = sorted(set(compile_rows) | set(resize_rows))
     lines = [
-        r"\begin{tabular}{lrrrr}",
+        r"\begin{tabular}{lrrrrr}",
         r"\toprule",
-        r"Fixture & Compile med. us & Compile p99 us & Resize med. us & Resize p99 us \\",
+        r"Fixture & Compile med. us & Compile p99 us & Resize med. us & Resize p99 us & Resize alloc. \\",
         r"\midrule",
     ]
     if not fixtures:
-        lines.append(r"\multicolumn{5}{c}{setup resource rows not generated yet.} \\")
+        lines.append(r"\multicolumn{6}{c}{setup resource rows not generated yet.} \\")
     for fixture in fixtures:
         compile_row = compile_rows.get(fixture, {})
         resize_row = resize_rows.get(fixture, {})
         lines.append(
             f"{latex_escape(fixture_label(fixture))} & "
             f"{as_float(compile_row, 'median_us'):.3f} & {as_float(compile_row, 'p99_us'):.3f} & "
-            f"{as_float(resize_row, 'median_us'):.3f} & {as_float(resize_row, 'p99_us'):.3f} " + r"\\")
+            f"{as_float(resize_row, 'median_us'):.3f} & {as_float(resize_row, 'p99_us'):.3f} & "
+            f"{as_float(resize_row, 'allocation_mean'):.0f} " + r"\\")
     lines += [r"\bottomrule", r"\end{tabular}", ""]
     write_text(out_dir / "setup_resource_summary.tex", "\n".join(lines))
 
-def save_dtdyndata_resource_table(resource_rows, out_dir):
-    rows = [row for row in resource_rows if row.get("_section") == "dtdyndata_resource"]
-    lines = [
-        r"\begin{tabular}{lrrrr}",
-        r"\toprule",
-        r"Fixture & Resize med. us & Resize p99 us & Resize alloc. mean & Resize bytes mean \\",
-        r"\midrule",
-    ]
-    if not rows:
-        lines.append(r"\multicolumn{5}{c}{dtDynData resource rows not generated yet.} \\")
-    for row in rows:
-        lines.append(
-            f"{latex_escape(fixture_label(row.get('fixture', 'unknown')))} & "
-            f"{as_float(row, 'median_us'):.3f} & {as_float(row, 'p99_us'):.3f} & "
-            f"{as_float(row, 'allocation_mean'):.1f} & {as_float(row, 'allocation_bytes_mean'):.0f} " + r"\\")
-    lines += [r"\bottomrule", r"\end{tabular}", ""]
-    write_text(out_dir / "dtdyndata_resource_summary.tex", "\n".join(lines))
 
 def save_tables(reference_timing, reference_error, stage_rows, tables_out, native_rows_for_tables, resource_rows):
     tables_out.mkdir(parents=True, exist_ok=True)
+    obsolete_resource_table = tables_out / "dtdyndata_resource_summary.tex"
+    if obsolete_resource_table.exists():
+        obsolete_resource_table.unlink()
     save_runtime_same_scope_table(reference_timing, tables_out)
     save_validation_summary_table(reference_error, tables_out)
     save_latency_tail_table(reference_timing, stage_rows, tables_out)
@@ -612,7 +599,6 @@ def save_tables(reference_timing, reference_error, stage_rows, tables_out, nativ
     save_sota_ablation_table(stage_rows, tables_out)
     save_sota_tail_table(reference_timing, stage_rows, tables_out)
     save_setup_resource_table(resource_rows, tables_out)
-    save_dtdyndata_resource_table(resource_rows, tables_out)
 
 
 def main():

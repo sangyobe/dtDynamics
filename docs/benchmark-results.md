@@ -92,13 +92,21 @@ Native dtDynamics and the MuJoCo fixture retain that nested body topology. The h
 
 ### Floating-base quadruped states
 
+The three states are deterministic coverage conditions rather than named controller modes:
+
+- `nominal`: model-default positions, identity free/ball-joint orientations, and zero generalized velocity.
+- `asymmetric`: deterministic nonuniform position/orientation perturbations with zero generalized velocity, isolating configuration-dependent paths without velocity terms.
+- `nonzero_velocity`: its own deterministic perturbed pose plus nonzero free-, ball-, and scalar-joint velocities, activating velocity-dependent Coriolis, bias, `MmatDot`, and centroidal-derivative paths. It is not the asymmetric state with velocity simply added.
+
+Each engine adapter applies these semantics through its coordinate mapping; the contextual timing rows should not be read as one shared raw `qpos` memory layout.
+
 | State | RNEA + CoM median / p99 us | Reduced CCRBA median / p99 us | Full CCRBA median / p99 us | MuJoCo median / p99 us | Pinocchio median / p99 us |
 |---|---:|---:|---:|---:|---:|
 | nominal | 4.499 / 4.680 | 4.102 / 4.302 | 5.116 / 7.552 | 5.023 / 5.253 | 11.784 / 13.663 |
 | asymmetric | 4.596 / 6.409 | 4.159 / 4.327 | 5.161 / 5.359 | 5.003 / 5.715 | 13.363 / 15.723 |
 | nonzero_velocity | 4.711 / 4.967 | 5.464 / 5.658 | 6.466 / 6.861 | 5.610 / 5.792 | 12.104 / 14.378 |
 
-For all three native scopes, mass-matrix symmetry and `nonlinTorq = coriolisTorq + gravityTorq` consistency errors were zero at benchmark output precision. Reduced/full CCRBA additionally reported zero centroidal-momentum consistency error; full CCRBA also reported zero CoM-velocity consistency error.
+For all three native scopes, mass-matrix symmetry and `nonlinTorq = coriolisTorq + gravityTorq` consistency errors were zero at benchmark output precision. Reduced/full CCRBA additionally reported zero centroidal-momentum consistency error; full CCRBA also reported zero CoM-velocity consistency error. MuJoCo and Pinocchio timings remain contextual rather than same-output speed ratios because their call sequences do not compute every native CCRBA output in the same form; their primary role is numerical validation over the documented overlap set.
 
 #### Nominal runtime by fixture
 
@@ -116,18 +124,20 @@ For all three native scopes, mass-matrix symmetry and `nonlinTorq = coriolisTorq
 
 `benchmark_dtDynamicsStages` splits the native pipeline into public API stages and internal CCRBA/RNEA substages. Each stage starts from the prerequisite state needed by that API, so the rows are diagnostic timings rather than additive exclusive profiler samples.
 
-The setup-only `benchmark_dtDynamics` resource rows (`dtDynModel_resource` and `dtDynData_resource`) inspect model compilation and data resize cost outside the realtime loop. These rows are included here to make setup cost explicit; they are not part of the controller update timing. The human-facing table omits allocation columns because compute allocation columns are all zero and setup allocation counts are diagnostic counter values rather than time. The CSV still keeps allocation counters for regression checks.
+The setup-only `benchmark_dtDynamics` resource rows (`dtDynModel_resource` and `dtDynData_resource`) inspect model compilation and data resize cost outside the realtime loop. These rows are included here to make setup cost explicit; they are not part of the controller update timing. `Resize allocations` is the counted number of C++ global allocation calls during one fresh `dtDynData::Resize(model)` path; it is a count, not a time. Each of the 200 repeated resize iterations counted 31 calls, so one integer is sufficient. Requested allocation bytes remain in the raw CSV but are omitted here because they are not needed for the timing interpretation.
 
-| Fixture | nq | nv | bodies | Compile median us | Compile p99 us | Data resize median us | Data resize p99 us |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| single_manipulator_fixed_base | 3 | 3 | 5 | 1.444 | 2.401 | 1.552 | 3.090 |
-| dual_manipulator_fixed_base | 4 | 4 | 6 | 1.725 | 1.819 | 1.804 | 2.359 |
-| multi_robot_fixed_base | 4 | 4 | 8 | 2.202 | 2.554 | 1.988 | 3.611 |
-| multi_robot_floating_base | 18 | 16 | 8 | 2.659 | 4.525 | 2.942 | 3.341 |
-| quadruped_floating_base | 19 | 18 | 14 | 5.263 | 11.240 | 4.249 | 4.983 |
-| fixed_body_heavy | 1 | 1 | 11 | 2.122 | 3.353 | 2.229 | 2.878 |
-| serial_chain_10 | 10 | 10 | 12 | 2.879 | 4.030 | 3.219 | 5.120 |
-| serial_chain_30 | 30 | 30 | 32 | 10.332 | 14.655 | 8.491 | 11.730 |
+| Fixture | nq | nv | bodies | Compile median us | Compile p99 us | Data resize median us | Data resize p99 us | Resize allocations |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| single_manipulator_fixed_base | 3 | 3 | 5 | 1.444 | 2.401 | 1.552 | 3.090 | 31 |
+| dual_manipulator_fixed_base | 4 | 4 | 6 | 1.725 | 1.819 | 1.804 | 2.359 | 31 |
+| multi_robot_fixed_base | 4 | 4 | 8 | 2.202 | 2.554 | 1.988 | 3.611 | 31 |
+| multi_robot_floating_base | 18 | 16 | 8 | 2.659 | 4.525 | 2.942 | 3.341 | 31 |
+| quadruped_floating_base | 19 | 18 | 14 | 5.263 | 11.240 | 4.249 | 4.983 | 31 |
+| fixed_body_heavy | 1 | 1 | 11 | 2.122 | 3.353 | 2.229 | 2.878 | 31 |
+| serial_chain_10 | 10 | 10 | 12 | 2.879 | 4.030 | 3.219 | 5.120 | 31 |
+| serial_chain_30 | 30 | 30 | 32 | 10.332 | 14.655 | 8.491 | 11.730 | 31 |
+
+The measured steady-state dynamics and stage rows reported zero counted C++ `operator new` allocations. This distinguishes the tested compute scope from setup, but it is not a complete heap-allocation proof: dtMath containers or external libraries can use `malloc`-family paths outside this counter.
 
 For the floating-base quadruped fixture, the median stage times in microseconds were:
 
@@ -313,26 +323,3 @@ Pinocchio comparisons cover:
 - floating-base multi-robot `Mmat`, `gravityTorq`, `coriolisTorq`, and `nonlinTorq`
 
 All Pinocchio max/RMS errors were `0.000000` at benchmark output precision for `status=ok` rows. The fixed-base multi-robot Pinocchio reference includes matching armature values so its mass matrix is comparable to the MuJoCo/native fixture. The multi-floating Pinocchio reference now uses explicit free-joint qpos/qvel maps for both independent roots. Its whole-system mass, gravity, nonlinear, and Coriolis terms are comparable to native `dtDynamics`; multi-root centroidal rows are emitted as `status=skipped` because native `dtDynamics` stores those outputs per-root stacked, while Pinocchio exposes whole-system centroidal quantities for the hand-built reference model. Pinocchio centroidal rows for fixed-base benchmark fixtures are also emitted as `status=skipped` because the benchmark XML includes world-fixed inertial bodies; those bodies affect native/MuJoCo whole-subtree centroidal references but are not represented in the current hand-built fixed-base Pinocchio models.
-
-## Current Interpretation
-
-The native implementation has no counted C++ `operator new` allocation in the documented steady-state dynamics rows for the tested fixtures. The reduced CCRBA mask is now a package-native Part A scope across every fixture. Part B applies that same mask to the opt-in canonical LeoQuad XML and adds indexed Jacobians without creating an installed-package dependency. In the fresh canonical XML run, reduced-CCRBA central medians were 5.162/5.255/6.917 us and reduced-CCRBA-plus-indexed-Jacobian central medians were 7.501/7.630/9.213 us for nominal/asymmetric/nonzero-velocity states. The separately recorded headless controller profile is retained as historical end-to-end evidence and is not mixed into these fresh dynamics-scope numbers.
-
-A focused allocation-instrumentation rerun of `benchmark_dtDynamics` keeps allocation counters in the CSV for regression checks. Human-facing runtime tables omit all-zero compute allocation columns; the diagnostic setup allocation counts remain summarized below only to explain initialization resource behavior:
-
-| Fixture | nq | nv | bodies | resize alloc mean | resize alloc max | resize bytes mean | resize bytes max |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| single_manipulator_fixed_base | 3 | 3 | 5 | 31 | 31 | 8900 | 8900 |
-| dual_manipulator_fixed_base | 4 | 4 | 6 | 31 | 31 | 10936 | 10936 |
-| multi_robot_fixed_base | 4 | 4 | 8 | 31 | 31 | 14112 | 14112 |
-| multi_robot_floating_base | 18 | 16 | 8 | 31 | 31 | 17600 | 17600 |
-| quadruped_floating_base | 19 | 18 | 14 | 31 | 31 | 27720 | 27720 |
-| fixed_body_heavy | 1 | 1 | 11 | 31 | 31 | 17116 | 17116 |
-| serial_chain_10 | 10 | 10 | 12 | 31 | 31 | 21696 | 21696 |
-| serial_chain_30 | 30 | 30 | 32 | 31 | 31 | 58256 | 58256 |
-
-Interpretation: zero allocation columns are correct for the measured steady-state compute scope under the benchmark C++ allocation counter, not for setup and not as a complete heap-allocation proof. In the resource table, `resize alloc mean/max` are allocation-call counts, not microseconds; `resize bytes mean/max` are requested bytes; only the timing columns are in microseconds. Mean and max are equal in the current resource rows because every fresh `dtDynData` resize for a fixed model takes the same counted allocation path. The benchmark counters cover C++ global allocation operators in the executable; dtMath dynamic containers and external libraries may allocate through direct `malloc`/`calloc`/`realloc` paths that require a malloc-family interposer, fail-on-allocation guard, sanitizer, or OS heap/profiler tooling for certification.
-
-For the floating-base quadruped nominal row, the seven-batch central medians are 5.116 us for full native CCRBA, 5.023 us for the MuJoCo reference sequence, and 11.784 us for the Pinocchio reference sequence. These are contextual timings, not same-output speed ratios: MuJoCo and Pinocchio do not compute every native CCRBA output in the same form. Their primary role remains numerical dynamics/centroidal validation for the documented overlap set.
-
-The p99 values remain process-local evidence rather than hard-realtime bounds. CPU affinity and the median of seven batch-level p99 values reduce migration and one-off scheduling distortion, but the host frequency governor was not locked and the process had no realtime priority. The raw batch-summary min/max fields should accompany small-change comparisons.

@@ -22,6 +22,8 @@ The same Part A timing figures include MuJoCo and Pinocchio reference call seque
 
 The native CSV `scope` column distinguishes all three native rows. Historical CSVs without `scope` are interpreted as full CCRBA. RNEA reports centroidal-matrix and CoM-velocity consistency as `nan`; reduced CCRBA validates centroidal momentum but reports CoM-velocity consistency as `nan`; full CCRBA validates both.
 
+The deterministic state labels separate configuration and velocity coverage. `nominal` uses model-default positions with identity free/ball orientations and zero velocity. `asymmetric` applies nonuniform position/orientation perturbations while keeping velocity zero. `nonzero_velocity` uses a different perturbed pose plus nonzero generalized velocities, activating velocity-dependent dynamics; it is not the asymmetric pose with velocity simply added. Reference adapters apply those semantics through their engine-specific coordinate mappings.
+
 `fixed_body_heavy` is a one-DOF fixed-topology stress fixture: the canonical 11-body morphology contains a world-fixed base, eight nested fixed mounts, and one terminal revolute link. Native dtDynamics and MuJoCo retain the nested body topology. The hand-built Pinocchio reference folds the fixed offsets into the terminal joint placement and therefore performs less body-recursion work; its timing is representation-specific rather than a same-morphology throughput comparison. The reported `nbody=11` remains the canonical fixture metadata.
 
 ### Part B: LeoQuad controller scope
@@ -119,9 +121,9 @@ Pin a project-approved image or runner toolchain before enabling either job. Val
 
 @ref md_docs_benchmark_results contains the longer benchmark report and generated figures. The current manual keeps only a compact evidence snapshot so the API contract is not tied to stale performance numbers.
 
-In the fresh canonical real-XML scope, reduced-CCRBA medians were `5.128 us`, `5.373 us`, and `6.884 us` for nominal, asymmetric, and nonzero-velocity states. Reduced CCRBA plus indexed Jacobians reported `7.673 us`, `9.096 us`, and `9.416 us`. These are 200-iteration evidence snapshots. The separately recorded installed-package headless profile remains useful end-to-end evidence, but it is not mixed into the fresh dynamics-scope table.
+In the current CPU-affined seven-batch canonical real-XML scope, reduced-CCRBA central medians were `5.162 us`, `5.255 us`, and `6.917 us` for nominal, asymmetric, and nonzero-velocity states. Reduced CCRBA plus indexed Jacobians reported `7.501 us`, `7.630 us`, and `9.213 us`. Each batch contains 200 measured iterations. The separately recorded installed-package headless profile remains useful end-to-end evidence, but it is not mixed into the fresh dynamics-scope table.
 
-These values are evidence snapshots, not release-wide guarantees. They depend on compiler flags, CPU scheduling, model XML, selected CCRBA term mask, indexed body/site task set, and whether the process runs with CPU isolation or realtime priority. For new comparisons, regenerate CSVs and tables from the benchmark binaries instead of mixing historic and current rows.
+These values are evidence snapshots, not release-wide guarantees. They depend on compiler flags, CPU scheduling, model XML, selected CCRBA term mask, indexed body/site task set, CPU affinity, frequency policy, and realtime priority. For new comparisons, regenerate CSVs and tables from the benchmark binaries instead of mixing historic and current rows.
 
 The current benchmark resource extension also emits setup rows. `dtDynModel_resource` rows measure `CompileSpec(spec)`, and `dtDynData_resource` rows measure setup-time construction plus `dtDynData::Resize(model)` for each fixture, separately from realtime compute rows. Use them to size initialization cost and memory behavior; do not include them in per-tick controller timing.
 
