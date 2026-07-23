@@ -138,7 +138,7 @@ def fixture_label(name):
         "multi_robot_fixed_base": "multi fixed",
         "multi_robot_floating_base": "multi floating",
         "quadruped_floating_base": "quadruped",
-        "fixed_body_heavy": "fixed heavy",
+        "fixed_body_heavy": "fixed-chain stress",
         "serial_chain_10": "chain-10",
         "serial_chain_30": "chain-30",
     }

@@ -22,6 +22,8 @@ The same Part A timing figures include MuJoCo and Pinocchio reference call seque
 
 The native CSV `scope` column distinguishes all three native rows. Historical CSVs without `scope` are interpreted as full CCRBA. RNEA reports centroidal-matrix and CoM-velocity consistency as `nan`; reduced CCRBA validates centroidal momentum but reports CoM-velocity consistency as `nan`; full CCRBA validates both.
 
+`fixed_body_heavy` is a one-DOF fixed-topology stress fixture: the canonical 11-body morphology contains a world-fixed base, eight nested fixed mounts, and one terminal revolute link. Native dtDynamics and MuJoCo retain the nested body topology. The hand-built Pinocchio reference folds the fixed offsets into the terminal joint placement and therefore performs less body-recursion work; its timing is representation-specific rather than a same-morphology throughput comparison. The reported `nbody=11` remains the canonical fixture metadata.
+
 ### Part B: LeoQuad controller scope
 
 The controller-shaped stage uses

@@ -84,6 +84,12 @@ The native CSV `scope` column prevents the three package-native calls from being
 | serial_chain_10 | 3.501 / 3.719 | 2.730 / 2.853 | 3.279 / 3.425 | 3.251 / 3.344 | 9.502 / 9.684 |
 | serial_chain_30 | 10.999 / 13.963 | 11.388 / 14.573 | 14.417 / 19.076 | 13.887 / 16.153 | 29.965 / 32.565 |
 
+### Why `fixed_body_heavy` differs
+
+`fixed_body_heavy` is a fixed-topology stress fixture, not a representative high-DOF robot. Its canonical `nbody=11`, `nq=1`, `nv=1` model contains the world, a world-fixed base, eight nested fixed mounts, and one terminal revolute link. The base has mass 4.0, each fixed mount has mass 0.05, and the terminal link has mass 1.2. The fixture tests whether an engine handles a long welded/fixed-body chain correctly even though only the final joint contributes a generalized coordinate.
+
+Native dtDynamics and the MuJoCo fixture retain that nested body topology. The hand-built Pinocchio reference instead sums the eight fixed offsets into one placement and instantiates only the terminal revolute body; it does not traverse eight separate fixed mounts. The `nbody=11` shown for its row is the canonical fixture count used as report metadata, not Pinocchio's internal recursion count. That representation difference explains why Pinocchio is unusually fast for this fixture. Treat its timing as engine-specific fixed-body representation behavior, not as a same-morphology throughput comparison. Joint-space comparable quantities remain validation targets, while fixed-base centroidal rows that are not semantically equivalent are already emitted as `status=skipped`.
+
 ### Floating-base quadruped states
 
 | State | RNEA + CoM median / p99 us | Reduced CCRBA median / p99 us | Full CCRBA median / p99 us | MuJoCo median / p99 us | Pinocchio median / p99 us |
@@ -93,21 +99,6 @@ The native CSV `scope` column prevents the three package-native calls from being
 | nonzero_velocity | 4.711 / 4.967 | 5.464 / 5.658 | 6.466 / 6.861 | 5.610 / 5.792 | 12.104 / 14.378 |
 
 For all three native scopes, mass-matrix symmetry and `nonlinTorq = coriolisTorq + gravityTorq` consistency errors were zero at benchmark output precision. Reduced/full CCRBA additionally reported zero centroidal-momentum consistency error; full CCRBA also reported zero CoM-velocity consistency error.
-
-### Seven-batch spread for the questioned rows
-
-The current central values are medians across seven batch-level medians/p99 values. The min/median/max spread below makes scheduler/frequency sensitivity visible instead of hiding it:
-
-| Path | Fixture | Batch median min / median / max us | Batch p99 min / median / max us |
-|---|---|---:|---:|
-| Reduced CCRBA | multi_robot_floating_base | 2.290 / 2.301 / 2.314 | 2.426 / 2.451 / 2.501 |
-| Full CCRBA | multi_robot_floating_base | 3.021 / 3.042 / 3.080 | 3.145 / 3.183 / 5.078 |
-| Reduced CCRBA | serial_chain_30 | 11.299 / 11.388 / 11.568 | 11.603 / 14.573 / 16.715 |
-| Full CCRBA | serial_chain_30 | 14.258 / 14.417 / 14.475 | 17.065 / 19.076 / 20.828 |
-| Full CCRBA | quadruped_floating_base | 5.067 / 5.116 / 5.189 | 5.360 / 7.552 / 8.408 |
-| Pinocchio | quadruped_floating_base | 11.044 / 11.784 / 13.109 | 12.162 / 13.663 / 16.854 |
-
-All 24 fixture/state central medians preserve the expected ordering: reduced CCRBA is faster than full CCRBA. The earlier reduced/full inversion and the 13.674 us multi-floating full-CCRBA median did not reproduce under fixed CPU affinity and repeated batches.
 
 #### Nominal runtime by fixture
 
