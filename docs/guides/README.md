@@ -1,40 +1,42 @@
 # Presentation guides
 
-This directory is the canonical editable source for the dtDynamics presentation guides that are distributed as PDFs to downstream controller repositories.
+This directory publishes the dtDynamics presentation guides as PDFs for direct viewing in GitLab. The editable Marp slide Markdown files are maintained locally and intentionally ignored so they are not displayed in the repository.
 
-## Contents
+## Published guides
 
-- `model_guide/mjcf-xml-dtdynspec-dtdynmodel-guide.md`: MJCF-like XML, `dtDynSpec`, `dtDynModel`, `dtDynData`, and structural update guide.
-- `usage_guide/dtdynamics-usage-migration-guide.md`: package usage, algorithms, LeoQuad migration, validation, and benchmark guide.
-- `themes/hmg.css`: shared Marp theme.
+- [`model_guide/mjcf-xml-dtdynspec-dtdynmodel-guide.pdf`](model_guide/mjcf-xml-dtdynspec-dtdynmodel-guide.pdf): MJCF-like XML, `dtDynSpec`, `dtDynModel`, `dtDynData`, and structural update guide.
+- [`usage_guide/dtdynamics-usage-migration-guide.pdf`](usage_guide/dtdynamics-usage-migration-guide.pdf): package usage, algorithms, LeoQuad migration, validation, and benchmark guide.
 
-Referenced SVG files stay beside each guide under its `figures/` directory. Generated HTML, PPTX, and PDF files are not committed here. The current package manual is under `docs/manual/`; benchmark numbers and scope definitions are authoritative in `docs/benchmark-results.md`.
+The shared theme and referenced SVG assets remain tracked under `themes/` and each guide's `figures/` directory. The current package manual is under `docs/manual/`; benchmark numbers and scope definitions are authoritative in `docs/benchmark-results.md`.
 
-## Build
+## Local rebuild
 
-From the repository root:
+The following ignored source files must exist in the maintainer worktree:
+
+- `docs/guides/model_guide/mjcf-xml-dtdynspec-dtdynmodel-guide.md`
+- `docs/guides/usage_guide/dtdynamics-usage-migration-guide.md`
+
+From the repository root, rebuild the tracked PDFs with:
 
 ```bash
-marp --allow-local-files \
-  --theme docs/guides/themes/hmg.css \
-  --pdf \
+npx --yes @marp-team/marp-cli \
   docs/guides/model_guide/mjcf-xml-dtdynspec-dtdynmodel-guide.md \
-  -o /tmp/mjcf-xml-dtdynspec-dtdynmodel-guide.pdf
+  --pdf --allow-local-files --theme=docs/guides/themes/hmg.css \
+  -o /tmp/dtdyn-model-guide.pdf
 
-marp --allow-local-files \
-  --theme docs/guides/themes/hmg.css \
-  --pdf \
+npx --yes @marp-team/marp-cli \
   docs/guides/usage_guide/dtdynamics-usage-migration-guide.md \
-  -o /tmp/dtdynamics-usage-migration-guide.pdf
+  --pdf --allow-local-files --theme=docs/guides/themes/hmg.css \
+  -o /tmp/dtdyn-usage-guide.pdf
+
+install -m 0644 /tmp/dtdyn-model-guide.pdf \
+  docs/guides/model_guide/mjcf-xml-dtdynspec-dtdynmodel-guide.pdf
+install -m 0644 /tmp/dtdyn-usage-guide.pdf \
+  docs/guides/usage_guide/dtdynamics-usage-migration-guide.pdf
 ```
 
-Run Marp from the repository root so relative image references resolve through each Markdown file's directory. Before distributing rebuilt PDFs, verify page count, embedded text, local images, and visual overflow.
+Before committing rebuilt PDFs, verify page counts, embedded text, local images, and visual overflow.
 
 ## Downstream distribution
 
-`leoquad-control/docs/dtdynamics/` is a PDF-only distribution location. Copy only these rebuilt outputs there:
-
-- `mjcf-xml-dtdynspec-dtdynmodel-guide.pdf`
-- `dtdynamics-usage-migration-guide.pdf`
-
-Do not edit downstream copies or restore stale package manuals, benchmark reports, paper drafts, source decks, backups, HTML, or PPTX files there.
+`leoquad-control/docs/dtdynamics/` remains a PDF-only distribution location. Copy only the two published PDFs there; do not restore source decks, package manuals, benchmark reports, paper drafts, backups, HTML, or PPTX files.

@@ -152,6 +152,7 @@ install(DIRECTORY include/dtDynamics
 if(EXISTS "${PROJECT_SOURCE_DIR}/docs")
     install(DIRECTORY docs/
         DESTINATION ${CMAKE_INSTALL_DOCDIR}
+        REGEX "/guides/(model_guide|usage_guide)/[^/]+\\.md$" EXCLUDE
     )
 endif()
 
