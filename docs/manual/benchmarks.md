@@ -59,9 +59,11 @@ Human-facing benchmark tables may omit allocation columns when all rows in the d
 cd /path/to/dtDynamics
 cmake --preset native-validation
 cmake --build --preset native-validation -- -j2
-build/native-validation/bin/benchmark_dtDynamics > /tmp/native.csv
-build/native-validation/bin/benchmark_dtDynamicsStages > /tmp/stages.csv
-build/native-validation/bin/benchmark_dtDynamicsReferences > /tmp/references.csv
+export DTDYNAMICS_BENCHMARK_CPU=0
+export DTDYNAMICS_BENCHMARK_BATCHES=7
+taskset -c "$DTDYNAMICS_BENCHMARK_CPU" build/native-validation/bin/benchmark_dtDynamics > /tmp/native.csv
+taskset -c "$DTDYNAMICS_BENCHMARK_CPU" build/native-validation/bin/benchmark_dtDynamicsStages > /tmp/stages.csv
+taskset -c "$DTDYNAMICS_BENCHMARK_CPU" build/native-validation/bin/benchmark_dtDynamicsReferences > /tmp/references.csv
 ```
 
 Then generate tables/figures from those fresh CSVs:
@@ -74,6 +76,8 @@ python3 tools/plot_benchmark_results.py \
   --out /tmp/dtdyn_figures \
   --tables-out /tmp/dtdyn_tables
 ```
+
+With multi-batch CSVs, the plotting tool uses the median of the per-batch mean, median, and p99 summaries for human tables and figures. It leaves single-batch/historical CSV behavior unchanged. The raw CSV retains the first timing row plus batch-summary min/max spread. Fixing one logical CPU reduces migration noise, but CPU affinity is not frequency locking or realtime isolation; record the governor and scheduling conditions with published numbers.
 
 ## Publishing generated Doxygen in GitLab
 

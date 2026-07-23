@@ -39,6 +39,16 @@ def read_rows(path):
                 item["_section"] = "benchmark_sample"
                 rows.append(item)
                 continue
+            if raw[0] == "benchmark_batch_summary":
+                if len(raw) > 1 and raw[1] == "benchmark":
+                    batch_header = raw
+                    section = None
+                    continue
+                item = dict(zip(batch_header, raw))
+                item["_section"] = "batch_summary"
+                rows.append(item)
+                section = None
+                continue
             if raw[0] in {"dtDynModel_resource", "dtDynModel_compile", "dtDynData_resource"}:
                 if len(raw) > 1 and raw[1] == "fixture":
                     section = None
@@ -62,6 +72,49 @@ def read_rows(path):
             item["_section"] = section
             rows.append(item)
     return rows
+
+
+def prefer_batch_summaries(rows, benchmark_name):
+    """Promote robust batch medians into timing rows when summaries exist.
+
+    The raw first-batch rows and batch min/max fields remain in the source CSV.
+    Single-batch and historical CSVs are returned unchanged.
+    """
+    summaries = {
+        (row["fixture"], row["state"], row["stage"]): row
+        for row in rows
+        if row.get("_section") == "batch_summary" and row.get("benchmark") == benchmark_name
+    }
+    if not summaries:
+        return rows
+
+    promoted = []
+    for row in rows:
+        key = None
+        if benchmark_name == "benchmark_dtDynamics" and row.get("_section") == "native_or_stage":
+            key = (row["fixture"], row["state"], row.get("scope", "native_ccrba_all"))
+        elif benchmark_name == "benchmark_dtDynamicsStages" and row.get("_section") == "native_or_stage":
+            key = (row["fixture"], row["state"], row["stage"])
+        elif benchmark_name == "benchmark_dtDynamicsReferences" and row.get("_section") == "reference_timing":
+            key = (row["fixture"], row["state"], f'{row["engine"]}:{row["quantity_scope"]}')
+
+        summary = summaries.get(key)
+        if summary is None:
+            promoted.append(row)
+            continue
+
+        item = dict(row)
+        item["mean_us"] = summary["mean_us_median"]
+        item["median_us"] = summary["median_us_median"]
+        item["p99_us"] = summary["p99_us_median"]
+        item["_batch_aggregated"] = "true"
+        item["_batches"] = summary["batches"]
+        item["_median_us_min"] = summary["median_us_min"]
+        item["_median_us_max"] = summary["median_us_max"]
+        item["_p99_us_min"] = summary["p99_us_min"]
+        item["_p99_us_max"] = summary["p99_us_max"]
+        promoted.append(item)
+    return promoted
 
 
 def as_float(row, key):
@@ -573,9 +626,9 @@ def main():
 
     args.out.mkdir(parents=True, exist_ok=True)
 
-    native_rows = read_rows(args.native)
-    stage_rows = read_rows(args.stages)
-    reference_rows_all = read_rows(args.references)
+    native_rows = prefer_batch_summaries(read_rows(args.native), "benchmark_dtDynamics")
+    stage_rows = prefer_batch_summaries(read_rows(args.stages), "benchmark_dtDynamicsStages")
+    reference_rows_all = prefer_batch_summaries(read_rows(args.references), "benchmark_dtDynamicsReferences")
     reference_timing = [row for row in reference_rows_all if row["_section"] == "reference_timing"]
     reference_error = [row for row in reference_rows_all if row["_section"] == "reference_error"]
     resource_rows = [row for row in native_rows if row.get("_section") in {"dtdynmodel_resource", "dtdyndata_resource"}]
