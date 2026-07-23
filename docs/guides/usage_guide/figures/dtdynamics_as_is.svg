@@ -1,0 +1,144 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1120" viewBox="0 0 1800 1120" role="img" aria-labelledby="title desc">
+  <title id="title">As-Is dtDynamics Architecture</title>
+  <desc id="desc">Legacy dtDynamics architecture showing controller adapters, shadow model and data structures, custom dynamics kernels, mixed package boundaries, and scattered validation.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff7ed"/>
+      <stop offset="1" stop-color="#f8fafc"/>
+    </linearGradient>
+    <linearGradient id="headerGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#7f1d1d"/>
+      <stop offset="1" stop-color="#b45309"/>
+    </linearGradient>
+    <filter id="softShadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#7f1d1d" flood-opacity="0.12"/>
+    </filter>
+    <marker id="arrow" markerWidth="13" markerHeight="13" refX="11" refY="6.5" orient="auto" markerUnits="strokeWidth">
+      <path d="M1,1 L12,6.5 L1,12 Z" fill="#9f1239"/>
+    </marker>
+    <marker id="arrowMuted" markerWidth="13" markerHeight="13" refX="11" refY="6.5" orient="auto" markerUnits="strokeWidth">
+      <path d="M1,1 L12,6.5 L1,12 Z" fill="#64748b"/>
+    </marker>
+    <style>
+      .title { font-family: Arial, Helvetica, sans-serif; font-size: 52px; font-weight: 800; fill: #111827; letter-spacing: 0; }
+      .subtitle { font-family: Arial, Helvetica, sans-serif; font-size: 22px; fill: #475569; letter-spacing: 0; }
+      .stage-title { font-family: Arial, Helvetica, sans-serif; font-size: 24px; font-weight: 800; fill: #111827; letter-spacing: 0; }
+      .stage-body { font-family: Arial, Helvetica, sans-serif; font-size: 18px; fill: #334155; letter-spacing: 0; }
+      .small { font-family: Arial, Helvetica, sans-serif; font-size: 16px; fill: #64748b; letter-spacing: 0; }
+      .label { font-family: Arial, Helvetica, sans-serif; font-size: 16px; font-weight: 700; fill: #9f1239; letter-spacing: 0; }
+      .problem-title { font-family: Arial, Helvetica, sans-serif; font-size: 21px; font-weight: 800; fill: #7f1d1d; letter-spacing: 0; }
+      .problem-body { font-family: Arial, Helvetica, sans-serif; font-size: 17px; fill: #334155; letter-spacing: 0; }
+      .section-label { font-family: Arial, Helvetica, sans-serif; font-size: 18px; font-weight: 800; fill: #7f1d1d; letter-spacing: 0.04em; }
+      .chip { font-family: Arial, Helvetica, sans-serif; font-size: 15px; font-weight: 700; fill: #7f1d1d; letter-spacing: 0; }
+    </style>
+  </defs>
+
+  <rect width="1800" height="1120" fill="url(#bg)"/>
+  <rect x="0" y="0" width="1800" height="18" fill="url(#headerGrad)"/>
+
+  <text x="84" y="88" class="title">As-Is: legacy dtDynamics integration</text>
+  <text x="86" y="128" class="subtitle">Controller-facing data, custom dynamics kernels, simulator references, and package boundaries were tightly mixed.</text>
+
+  <text x="86" y="188" class="section-label">CONTROL LOOP DATA FLOW</text>
+
+  <g filter="url(#softShadow)">
+    <rect x="82" y="220" width="292" height="280" rx="12" fill="#ffffff" stroke="#fecaca" stroke-width="2"/>
+    <rect x="82" y="220" width="292" height="58" rx="12" fill="#fff1f2"/>
+    <text x="110" y="256" class="stage-title">LeoQuad / WBC</text>
+    <text x="110" y="314" class="stage-body">Controller owns tasks</text>
+    <text x="110" y="348" class="stage-body">and torque policy.</text>
+    <text x="110" y="398" class="stage-body">Dynamics ingredients</text>
+    <text x="110" y="432" class="stage-body">arrive through adapter</text>
+    <text x="110" y="466" class="stage-body">and copied structures.</text>
+
+    <rect x="416" y="220" width="292" height="280" rx="12" fill="#ffffff" stroke="#fed7aa" stroke-width="2"/>
+    <rect x="416" y="220" width="292" height="58" rx="12" fill="#ffedd5"/>
+    <text x="444" y="256" class="stage-title">Adapter layer</text>
+    <text x="444" y="314" class="stage-body">robotModel / robotData</text>
+    <text x="444" y="348" class="stage-body">shadow structures</text>
+    <text x="444" y="398" class="stage-body">name and id mapping</text>
+    <text x="444" y="432" class="stage-body">field-by-field copies</text>
+    <text x="444" y="466" class="stage-body">into control layout</text>
+
+    <rect x="750" y="220" width="292" height="280" rx="12" fill="#ffffff" stroke="#fecaca" stroke-width="2"/>
+    <rect x="750" y="220" width="292" height="58" rx="12" fill="#fee2e2"/>
+    <text x="778" y="256" class="stage-title">Legacy facade</text>
+    <text x="778" y="314" class="stage-body">RobotEngineBase</text>
+    <text x="778" y="348" class="stage-body">dtDynamics.h</text>
+    <text x="778" y="398" class="stage-body">public API mixes</text>
+    <text x="778" y="432" class="stage-body">engine, model, data,</text>
+    <text x="778" y="466" class="stage-body">and migration details</text>
+
+    <rect x="1084" y="220" width="292" height="280" rx="12" fill="#ffffff" stroke="#fde68a" stroke-width="2"/>
+    <rect x="1084" y="220" width="292" height="58" rx="12" fill="#fef3c7"/>
+    <text x="1112" y="256" class="stage-title">Custom kernels</text>
+    <text x="1112" y="314" class="stage-body">custom math helpers</text>
+    <text x="1112" y="348" class="stage-body">multiple coordinate</text>
+    <text x="1112" y="382" class="stage-body">types and conventions</text>
+    <text x="1112" y="432" class="stage-body">legacy CRBA / RNEA</text>
+    <text x="1112" y="466" class="stage-body">and centroidal paths</text>
+
+    <rect x="1418" y="220" width="292" height="280" rx="12" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+    <rect x="1418" y="220" width="292" height="58" rx="12" fill="#f1f5f9"/>
+    <text x="1446" y="256" class="stage-title">Mixed coupling</text>
+    <text x="1446" y="314" class="stage-body">MuJoCo-like code and</text>
+    <text x="1446" y="348" class="stage-body">old dtDynamics trials</text>
+    <text x="1446" y="398" class="stage-body">validation and</text>
+    <text x="1446" y="432" class="stage-body">benchmark logic live</text>
+    <text x="1446" y="466" class="stage-body">near production code</text>
+  </g>
+
+  <path d="M374 360 H408" stroke="#9f1239" stroke-width="5" fill="none" marker-end="url(#arrow)"/>
+  <text x="386" y="336" text-anchor="middle" class="label">copy</text>
+  <path d="M708 360 H742" stroke="#9f1239" stroke-width="5" fill="none" marker-end="url(#arrow)"/>
+  <text x="725" y="336" text-anchor="middle" class="label">remap</text>
+  <path d="M1042 360 H1076" stroke="#9f1239" stroke-width="5" fill="none" marker-end="url(#arrow)"/>
+  <text x="1059" y="336" text-anchor="middle" class="label">dispatch</text>
+  <path d="M1376 360 H1410" stroke="#64748b" stroke-width="5" fill="none" marker-end="url(#arrowMuted)"/>
+  <text x="1393" y="336" text-anchor="middle" class="small">reference</text>
+
+  <g>
+    <path d="M1510 518 C1510 600 894 600 894 518" stroke="#9f1239" stroke-width="3" stroke-dasharray="10 10" fill="none" marker-end="url(#arrow)"/>
+    <text x="1162" y="628" class="label">reference behavior feeds back into package internals</text>
+  </g>
+
+  <text x="86" y="642" class="section-label">WHY IT WAS REDESIGNED</text>
+
+  <g filter="url(#softShadow)">
+    <rect x="82" y="680" width="392" height="210" rx="12" fill="#ffffff" stroke="#fecaca" stroke-width="2"/>
+    <rect x="112" y="710" width="88" height="32" rx="16" fill="#fee2e2" stroke="#fecaca"/>
+    <text x="156" y="732" text-anchor="middle" class="chip">ID model</text>
+    <text x="112" y="778" class="problem-title">IDs diverged from MuJoCo</text>
+    <text x="112" y="820" class="problem-body">Unsigned identifiers made the</text>
+    <text x="112" y="850" class="problem-body">-1 sentinel impossible, so body,</text>
+    <text x="112" y="880" class="problem-body">joint, and parent records could drift.</text>
+
+    <rect x="510" y="680" width="392" height="210" rx="12" fill="#ffffff" stroke="#fed7aa" stroke-width="2"/>
+    <rect x="540" y="710" width="104" height="32" rx="16" fill="#ffedd5" stroke="#fed7aa"/>
+    <text x="592" y="732" text-anchor="middle" class="chip">runtime</text>
+    <text x="540" y="778" class="problem-title">Duplicate runtime state</text>
+    <text x="540" y="820" class="problem-body">Adapters copied model and data</text>
+    <text x="540" y="850" class="problem-body">fields, increasing stale-data risk</text>
+    <text x="540" y="880" class="problem-body">inside the control loop.</text>
+
+    <rect x="938" y="680" width="392" height="210" rx="12" fill="#ffffff" stroke="#fde68a" stroke-width="2"/>
+    <rect x="968" y="710" width="124" height="32" rx="16" fill="#fef3c7" stroke="#fde68a"/>
+    <text x="1030" y="732" text-anchor="middle" class="chip">boundary</text>
+    <text x="968" y="778" class="problem-title">Fragile package boundary</text>
+    <text x="968" y="820" class="problem-body">Production code could pull in</text>
+    <text x="968" y="850" class="problem-body">simulator or reference-engine</text>
+    <text x="968" y="880" class="problem-body">dependencies by accident.</text>
+
+    <rect x="1366" y="680" width="344" height="210" rx="12" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+    <rect x="1396" y="710" width="122" height="32" rx="16" fill="#f1f5f9" stroke="#cbd5e1"/>
+    <text x="1457" y="732" text-anchor="middle" class="chip">validation</text>
+    <text x="1396" y="778" class="problem-title">Validation was scattered</text>
+    <text x="1396" y="820" class="problem-body">Many useful quantities existed,</text>
+    <text x="1396" y="850" class="problem-body">but parity checks were not a</text>
+    <text x="1396" y="880" class="problem-body">clean external workflow.</text>
+  </g>
+
+  <rect x="82" y="948" width="1628" height="92" rx="12" fill="#fff7ed" stroke="#fed7aa" stroke-width="2"/>
+  <text x="116" y="986" class="problem-title">Redesign target</text>
+  <text x="116" y="1024" class="stage-body">Keep the useful physical quantities, but move to a standalone native package with MuJoCo-style model/data conventions, dtMath storage, direct controller access, and separate validation tools.</text>
+</svg>

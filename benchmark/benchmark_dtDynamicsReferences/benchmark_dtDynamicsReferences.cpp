@@ -1969,62 +1969,6 @@ void RunPinocchioBenchmarks(dtArray<ErrorRow> &errorRows,
                                                                   p99Us,
                                                                   allocationMax));
             }
-            constexpr const char *independentScope = "wbc_full_m_c_mdot_centroidal_com";
-            dtArray<double> independentMeanUs;
-            dtArray<double> independentMedianUs;
-            dtArray<double> independentP99Us;
-            independentMeanUs.resize(batchCount);
-            independentMedianUs.resize(batchCount);
-            independentP99Us.resize(batchCount);
-            unsigned long long independentAllocationMax = 0;
-            for (int batch = 0; batch < batchCount; ++batch)
-            {
-                const Result result = RunTimed("pinocchio_independent",
-                                               fixture.name,
-                                               state,
-                                               fixture.nativeNq,
-                                               fixture.nativeNv,
-                                               fixture.nativeNbody,
-                                               independentScope,
-                                               [&]()
-                                               {
-                                                   pinocchio::crba(fixture.model, scratch.data, scratch.q, pinocchio::Convention::WORLD);
-                                                   scratch.data.M.triangularView<Eigen::StrictlyLower>() =
-                                                       scratch.data.M.transpose().triangularView<Eigen::StrictlyLower>();
-                                                   pinocchio::computeGeneralizedGravity(fixture.model, scratch.data, scratch.q);
-                                                   pinocchio::nonLinearEffects(fixture.model, scratch.data, scratch.q, scratch.v);
-                                                   pinocchio::computeCoriolisMatrix(fixture.model, scratch.data, scratch.q, scratch.v);
-                                                   pinocchio::ccrba(fixture.model, scratch.data, scratch.q, scratch.v);
-                                                   pinocchio::computeCentroidalMapTimeVariation(fixture.model, scratch.data, scratch.q, scratch.v);
-                                                   pinocchio::computeCentroidalMomentumTimeVariation(fixture.model,
-                                                                                                     scratch.data,
-                                                                                                     scratch.q,
-                                                                                                     scratch.v,
-                                                                                                     scratch.zeroAcceleration);
-                                               });
-                independentMeanUs[batch] = result.meanUs;
-                independentMedianUs[batch] = result.medianUs;
-                independentP99Us[batch] = result.p99Us;
-                independentAllocationMax = std::max(independentAllocationMax, result.allocationMax);
-                if (batch == 0)
-                {
-                    PrintResult(result);
-                }
-            }
-            if (batchCount > 1)
-            {
-                batchSummaryRows.push_back(
-                    dt::Dynamics::benchmark::BuildBatchSummaryRow("benchmark_dtDynamicsReferences",
-                                                                  fixture.name,
-                                                                  state,
-                                                                  std::string("pinocchio_independent:") + independentScope,
-                                                                  batchCount,
-                                                                  independentMeanUs,
-                                                                  independentMedianUs,
-                                                                  independentP99Us,
-                                                                  independentAllocationMax));
-            }
-
             AppendPinocchioErrors(errorRows, fixture, state, scratch);
         }
     }

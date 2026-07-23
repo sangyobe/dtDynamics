@@ -12,6 +12,7 @@ except ModuleNotFoundError:  # Tables can still be generated on minimal validati
     plt = None
 
 
+
 def read_rows(path):
     rows = []
     section = None
@@ -138,6 +139,7 @@ def fixture_label(name):
         "multi_robot_fixed_base": "multi fixed",
         "multi_robot_floating_base": "multi floating",
         "quadruped_floating_base": "quadruped",
+        "leoquad_qd1": "LeoQuad QD1",
         "fixed_body_heavy": "fixed_body_heavy",
         "serial_chain_10": "chain-10",
         "serial_chain_30": "chain-30",
@@ -158,14 +160,14 @@ def native_ccrba_rows(rows):
 
 
 
-def display_engine_label(name):
+def display_engine_label(name, native_display_label="dtDynamics"):
     labels = {
-        "native": "dtDynamics",
-        "native_rnea_com_pos": "dtDynamics RNEA + CoM",
-        "native_ccrba_reduced": "dtDynamics reduced CCRBA",
-        "native_ccrba_all": "dtDynamics full CCRBA",
+        "native": native_display_label,
+        "native_rnea_com_pos": f"{native_display_label} RNEA + CoM",
+        "native_ccrba_reduced": f"{native_display_label} reduced CCRBA",
+        "native_ccrba_all": f"{native_display_label} full CCRBA",
         "pinocchio": "Pinocchio",
-        "pinocchio_independent": "Pinocchio independent",
+
         "mujoco": "MuJoCo",
     }
     return labels.get(name, name.replace("_", " "))
@@ -180,7 +182,7 @@ PART_A_COLORS = {
 }
 
 
-def save_runtime_by_fixture(native_rows, reference_rows, out_dir):
+def save_runtime_by_fixture(native_rows, reference_rows, out_dir, native_display_label="dtDynamics"):
     if plt is None:
         return
     native = {
@@ -218,7 +220,8 @@ def save_runtime_by_fixture(native_rows, reference_rows, out_dir):
             else:
                 values.append(references.get((engine, fixture), math.nan))
         offset = (engine_index - (len(engines) - 1) / 2.0) * width
-        ax.bar([pos + offset for pos in x], values, width=width, label=display_engine_label(engine), color=PART_A_COLORS[engine])
+        ax.bar([pos + offset for pos in x], values, width=width,
+               label=display_engine_label(engine, native_display_label), color=PART_A_COLORS[engine])
 
     ax.set_title("Part A Nominal Dynamics Runtime By Fixture")
     ax.set_ylabel("median runtime (us)")
@@ -230,7 +233,7 @@ def save_runtime_by_fixture(native_rows, reference_rows, out_dir):
     fig.savefig(out_dir / "runtime_by_fixture.png", dpi=180)
     plt.close(fig)
 
-def save_scaling_by_dof(native_rows, reference_rows, out_dir):
+def save_scaling_by_dof(native_rows, reference_rows, out_dir, native_display_label="dtDynamics"):
     if plt is None:
         return
     series = {
@@ -259,7 +262,7 @@ def save_scaling_by_dof(native_rows, reference_rows, out_dir):
         ax.plot([item[0] for item in values],
                 [item[1] for item in values],
                 marker="o",
-                label=display_engine_label(engine),
+                label=display_engine_label(engine, native_display_label),
                 color=PART_A_COLORS[engine])
 
     ax.set_title("Part A Runtime Scaling By Velocity Dimension")
@@ -330,10 +333,10 @@ def write_text(path, content):
     path.write_text(content)
 
 
-def save_runtime_same_scope_table(reference_rows, out_dir):
+def save_runtime_same_scope_table(reference_rows, out_dir, native_display_label="dtDynamics"):
     scope = "wbc_full_m_c_mdot_centroidal_com"
     fixtures = ["quadruped_floating_base", "multi_robot_floating_base", "single_manipulator_fixed_base"]
-    engines = ["native", "pinocchio", "pinocchio_independent", "mujoco"]
+    engines = ["native", "pinocchio", "mujoco"]
     rows = [row for row in reference_rows if row.get("_section") == "reference_timing"]
     lines = [
         r"\begin{tabular}{llrr}",
@@ -346,13 +349,14 @@ def save_runtime_same_scope_table(reference_rows, out_dir):
         for state in ["nominal", "nonzero_velocity"]:
             for engine in engines:
                 candidates = [row for row in rows if row.get("fixture") == fixture and row.get("state") == state and row.get("engine") == engine]
-                if engine in {"native", "pinocchio_independent"}:
+                if engine == "native":
                     candidates = [row for row in candidates if row.get("quantity_scope") == scope]
                 if not candidates:
                     continue
                 row = candidates[0]
                 lines.append(
-                    f"{latex_escape(fixture)}/{latex_escape(state)} & {latex_escape(display_engine_label(engine))} & "
+                    f"{latex_escape(fixture)}/{latex_escape(state)} & "
+                    f"{latex_escape(display_engine_label(engine, native_display_label))} & "
                     f"{as_float(row, 'median_us'):.3f} & {as_float(row, 'p99_us'):.3f} " + "\\\\")
                 any_row = True
     if not any_row:
@@ -397,12 +401,12 @@ def save_validation_summary_table(error_rows, out_dir):
     lines += [r"\bottomrule", r"\end{tabular}", ""]
     write_text(out_dir / "validation_summary.tex", "\n".join(lines))
 
-def save_latency_tail_table(reference_rows, stage_rows, out_dir):
+def save_latency_tail_table(reference_rows, stage_rows, out_dir, native_display_label="dtDynamics"):
     timing_rows = []
     for row in reference_rows:
         if row.get("_section") == "reference_timing" and row.get("fixture") == "quadruped_floating_base" and row.get("state") == "nonzero_velocity":
-            if row.get("engine") in {"native", "pinocchio_independent", "pinocchio", "mujoco"}:
-                timing_rows.append((display_engine_label(row.get("engine")), row))
+            if row.get("engine") in {"native", "pinocchio", "mujoco"}:
+                timing_rows.append((display_engine_label(row.get("engine"), native_display_label), row))
     for row in [item for item in stage_rows if item.get("_section") == "native_or_stage"]:
         if row.get("stage") == "leoquad_wbc_update" and row.get("state") == "nonzero_velocity":
             label = f"reduced WBC/{fixture_label(row.get('fixture', 'unknown'))}"
@@ -420,7 +424,7 @@ def save_latency_tail_table(reference_rows, stage_rows, out_dir):
     lines += [r"\bottomrule", r"\end{tabular}", ""]
     write_text(out_dir / "latency_tail_summary.tex", "\n".join(lines))
 
-def save_latency_cdf(reference_rows, stage_rows, out_dir):
+def save_latency_cdf(reference_rows, stage_rows, out_dir, native_display_label="dtDynamics"):
     if plt is None:
         return
     sample_rows = [row for row in reference_rows + stage_rows if row.get("_section") == "benchmark_sample"]
@@ -429,8 +433,10 @@ def save_latency_cdf(reference_rows, stage_rows, out_dir):
     if sample_rows:
         groups = {}
         for row in sample_rows:
-            label = row.get("engine_or_stage") or row.get("stage") or row.get("engine") or "unknown"
-            label = display_engine_label(label)
+            engine = row.get("engine_or_stage") or row.get("engine") or "unknown"
+            if engine not in {"native", "pinocchio", "mujoco"}:
+                continue
+            label = display_engine_label(engine, native_display_label)
             if row.get("fixture") != "quadruped_floating_base" or row.get("state") != "nonzero_velocity":
                 continue
             groups.setdefault(label, []).append(as_float(row, "runtime_us"))
@@ -442,8 +448,12 @@ def save_latency_cdf(reference_rows, stage_rows, out_dir):
             ax.plot(samples, y, label=label)
             plotted = True
     if not plotted:
-        summary = [row for row in reference_rows if row.get("_section") == "reference_timing" and row.get("fixture") == "quadruped_floating_base" and row.get("state") == "nonzero_velocity"]
-        labels = [display_engine_label(row.get("engine", "unknown")) for row in summary]
+        summary = [row for row in reference_rows
+                   if row.get("_section") == "reference_timing"
+                   and row.get("fixture") == "quadruped_floating_base"
+                   and row.get("state") == "nonzero_velocity"
+                   and row.get("engine") in {"native", "pinocchio", "mujoco"}]
+        labels = [display_engine_label(row.get("engine", "unknown"), native_display_label) for row in summary]
         med = [as_float(row, "median_us") for row in summary]
         p99 = [as_float(row, "p99_us") for row in summary]
         x = list(range(len(labels)))
@@ -464,7 +474,7 @@ def save_latency_cdf(reference_rows, stage_rows, out_dir):
 
 
 
-def save_sota_morphology_table(native_rows, reference_rows, out_dir):
+def save_sota_morphology_table(native_rows, reference_rows, out_dir, native_display_label="dtDynamics"):
     fixtures = [
         "single_manipulator_fixed_base",
         "dual_manipulator_fixed_base",
@@ -481,7 +491,7 @@ def save_sota_morphology_table(native_rows, reference_rows, out_dir):
     lines = [
         r"\begin{tabular}{lrrrr}",
         r"\toprule",
-        r"Fixture & $n_v$ & Proposed med. & Pin. med. & MuJoCo med. \\",
+        f"Fixture & $n_v$ & {latex_escape(native_display_label)} med. & Pin. med. & MuJoCo med. " + r"\\",
         r"\midrule",
     ]
     any_row = False
@@ -489,7 +499,7 @@ def save_sota_morphology_table(native_rows, reference_rows, out_dir):
         row = native.get(fixture)
         if row is None:
             continue
-        pin = ref.get(("pinocchio", fixture)) or ref.get(("pinocchio_independent", fixture))
+        pin = ref.get(("pinocchio", fixture))
         mj = ref.get(("mujoco", fixture))
         lines.append(
             f"{latex_escape(fixture_label(fixture))} & {row.get('nv', 'n/a')} & "
@@ -540,12 +550,12 @@ def save_sota_ablation_table(stage_rows, out_dir):
     write_text(out_dir / "sota_ablation_summary.tex", "\n".join(lines))
 
 
-def save_sota_tail_table(reference_rows, stage_rows, out_dir):
+def save_sota_tail_table(reference_rows, stage_rows, out_dir, native_display_label="dtDynamics"):
     rows = []
     for row in reference_rows:
         if row.get("_section") == "reference_timing" and row.get("fixture") in {"quadruped_floating_base", "multi_robot_floating_base"} and row.get("state") == "nonzero_velocity":
             if row.get("engine") in {"native", "pinocchio", "mujoco"}:
-                rows.append((row.get("fixture"), display_engine_label(row.get("engine")), row))
+                rows.append((row.get("fixture"), display_engine_label(row.get("engine"), native_display_label), row))
     for row in stage_rows:
         if row.get("_section") == "native_or_stage" and row.get("stage") == "leoquad_wbc_update" and row.get("state") == "nonzero_velocity":
             rows.append((row.get("fixture"), "reduced WBC", row))
@@ -587,17 +597,18 @@ def save_setup_resource_table(resource_rows, out_dir):
     write_text(out_dir / "setup_resource_summary.tex", "\n".join(lines))
 
 
-def save_tables(reference_timing, reference_error, stage_rows, tables_out, native_rows_for_tables, resource_rows):
+def save_tables(reference_timing, reference_error, stage_rows, tables_out,
+                native_rows_for_tables, resource_rows, native_display_label="dtDynamics"):
     tables_out.mkdir(parents=True, exist_ok=True)
     obsolete_resource_table = tables_out / "dtdyndata_resource_summary.tex"
     if obsolete_resource_table.exists():
         obsolete_resource_table.unlink()
-    save_runtime_same_scope_table(reference_timing, tables_out)
+    save_runtime_same_scope_table(reference_timing, tables_out, native_display_label)
     save_validation_summary_table(reference_error, tables_out)
-    save_latency_tail_table(reference_timing, stage_rows, tables_out)
-    save_sota_morphology_table(native_rows_for_tables, reference_timing, tables_out)
+    save_latency_tail_table(reference_timing, stage_rows, tables_out, native_display_label)
+    save_sota_morphology_table(native_rows_for_tables, reference_timing, tables_out, native_display_label)
     save_sota_ablation_table(stage_rows, tables_out)
-    save_sota_tail_table(reference_timing, stage_rows, tables_out)
+    save_sota_tail_table(reference_timing, stage_rows, tables_out, native_display_label)
     save_setup_resource_table(resource_rows, tables_out)
 
 
@@ -608,6 +619,7 @@ def main():
     parser.add_argument("--references", required=True, type=Path)
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--tables-out", type=Path)
+    parser.add_argument("--native-display-label", default="dtDynamics")
     args = parser.parse_args()
 
     args.out.mkdir(parents=True, exist_ok=True)
@@ -623,12 +635,13 @@ def main():
 
     if plt is None:
         print("warning: matplotlib is not installed; skipping figure generation and writing tables only if requested")
-    save_runtime_by_fixture(native_timing_rows, reference_timing, args.out)
-    save_scaling_by_dof(native_timing_rows, reference_timing, args.out)
+    save_runtime_by_fixture(native_timing_rows, reference_timing, args.out, args.native_display_label)
+    save_scaling_by_dof(native_timing_rows, reference_timing, args.out, args.native_display_label)
     save_stage_breakdown(stage_rows, args.out)
-    save_latency_cdf(reference_rows_all, stage_rows, args.out)
+    save_latency_cdf(reference_rows_all, stage_rows, args.out, args.native_display_label)
     if args.tables_out is not None:
-        save_tables(reference_timing, reference_error, stage_rows, args.tables_out, native_ccrba_timing_rows, resource_rows)
+        save_tables(reference_timing, reference_error, stage_rows, args.tables_out,
+                    native_ccrba_timing_rows, resource_rows, args.native_display_label)
 
 
 if __name__ == "__main__":
