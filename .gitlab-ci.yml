@@ -39,7 +39,7 @@ build-job:
     - cmake -S . -B build
         -DCMAKE_BUILD_TYPE=Release
         -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-        -DDTDYNAMICS_BUILD_TEST=OFF
+        -DDTDYNAMICS_BUILD_TEST=ON
         -DDTDYNAMICS_BUILD_BENCHMARK=OFF
     - cmake --build build -j"$(nproc)"
   artifacts:
