@@ -7,6 +7,10 @@
 #include "dtDynamics/dtDynSpec.h"
 #include "dtDynamics/dtDynUtils.h"
 
+#ifdef NDEBUG
+#error "test_dtDynTypes requires active assertions"
+#endif
+
 #include <cassert>
 #include <cmath>
 #include <stdexcept>
@@ -728,6 +732,7 @@ void TestForwardKinematicsAndPointJacobianForFixedChain()
     dt::Math::Vector3<dtDynReal> gravity;
     gravity.SetZero();
     ComputeDynamicsCCRBA(model, data, gravity, DTDYN_CCRBA_TERM_ALL);
+    ComputeSiteJacobians(model, data);
 
     assert(data.body_jacp.size() == static_cast<std::size_t>(model.nbody));
     assert(data.site_jacp.size() == static_cast<std::size_t>(model.nsite));
