@@ -302,7 +302,7 @@ Pinocchio scope: `crba`, generalized gravity, nonlinear effects, Coriolis matrix
 
 ![Quadruped nonzero-velocity latency summary](figures/latency_cdf.png)
 
-This figure summarizes the median and p99 latency of the reference benchmark's floating-base quadruped nonzero-velocity rows. It compares the dtDynamics reference call sequence with MuJoCo and the canonical Pinocchio path; it is not the three-native-scope Part A figure. The former `pinocchio_independent` row was removed because it repeated the same Pinocchio call sequence inline and therefore represented execution-order noise, not a distinct algorithm or output scope. Median bars show typical measured latency, while p99 bars expose the observed tail in the CPU-affined seven-batch evidence. Affinity prevents migration but does not lock CPU frequency or provide realtime scheduling.
+This figure summarizes the median and p99 latency of the reference benchmark's floating-base quadruped nonzero-velocity rows. It compares the dtDynamics reference call sequence with MuJoCo and the canonical Pinocchio path; it is not the three-native-scope Part A figure. Median bars show typical measured latency, while p99 bars expose the observed tail in the CPU-affined seven-batch evidence. Affinity prevents migration but does not lock CPU frequency or provide realtime scheduling.
 
 ## Reference Error Summary
 
