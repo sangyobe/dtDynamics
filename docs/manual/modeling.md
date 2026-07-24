@@ -1,5 +1,7 @@
 # Modeling and Data Lifecycle {#dtdynamics_modeling}
 
+Author: Joonhee Jo
+
 The central lifecycle is:
 
 @dotfile diagrams/model_layers.dot

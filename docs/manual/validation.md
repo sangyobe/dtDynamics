@@ -1,5 +1,7 @@
 # Validation {#dtdynamics_validation}
 
+Author: Joonhee Jo
+
 @dotfile diagrams/validation_refs.dot
 
 Validation is external to the production package boundary.

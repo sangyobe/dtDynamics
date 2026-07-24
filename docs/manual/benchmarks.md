@@ -1,5 +1,7 @@
 # Benchmarks and Resource Reports {#dtdynamics_benchmarks}
 
+Author: Joonhee Jo
+
 The benchmark suite reports both runtime and resource-consumption diagnostics.
 
 ## Main binaries

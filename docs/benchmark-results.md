@@ -1,5 +1,7 @@
 # dtDynamics Benchmark Results
 
+Author: Joonhee Jo
+
 Date: 2026-07-23
 
 Updated: 2026-07-23 for CPU-affined seven-batch timing, robust batch-summary reporting, refreshed validation figures, and the latest package and headless LeoQuad gates.

@@ -153,6 +153,7 @@ if(EXISTS "${PROJECT_SOURCE_DIR}/docs")
     install(DIRECTORY docs/
         DESTINATION ${CMAKE_INSTALL_DOCDIR}
         REGEX "/guides/README\\.md$" EXCLUDE
+        REGEX "/guides/themes(/|$)" EXCLUDE
         REGEX "/guides/(model_guide|usage_guide)/[^/]+\\.md$" EXCLUDE
     )
 endif()

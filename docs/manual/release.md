@@ -1,5 +1,7 @@
 # Release and Package Boundary Checks {#dtdynamics_release}
 
+Author: Joonhee Jo
+
 Before release or installation claims, run package validation from a clean temporary build root where possible.
 
 ```bash

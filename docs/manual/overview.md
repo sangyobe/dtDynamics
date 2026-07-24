@@ -1,5 +1,7 @@
 # Overview {#dtdynamics_overview}
 
+Author: Joonhee Jo
+
 dtDynamics is a standalone package for computing rigid-body dynamics ingredients used by realtime controllers and whole-body control (WBC) stacks. The package is designed around explicit model/data separation, predictable indexing, and documented compute paths that can run without measured C++ `operator new` allocation after the user has compiled a model, resized `dtDynData`, and pre-sized any caller-owned outputs.
 
 ## What the package is

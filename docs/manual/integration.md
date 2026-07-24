@@ -1,5 +1,7 @@
 # Controller Integration {#dtdynamics_integration}
 
+Author: Joonhee Jo
+
 A controller should treat dtDynamics as an ingredient engine.
 
 ## Recommended pattern

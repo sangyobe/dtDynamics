@@ -1,5 +1,7 @@
 # dtDynamics Manual
 
+Author: Joonhee Jo
+
 > Canonical generated manual: the maintained Doxygen/Graphviz manual source now lives under [`docs/manual/`](manual/index.md). Build it with:
 >
 > ```bash

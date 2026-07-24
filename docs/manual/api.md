@@ -1,5 +1,7 @@
 # API Map {#dtdynamics_api_map}
 
+Author: Joonhee Jo
+
 This page is a curated map to the generated C++ API pages.
 
 ## Model lifecycle

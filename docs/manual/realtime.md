@@ -1,5 +1,7 @@
 # Realtime Resource Model {#dtdynamics_realtime}
 
+Author: Joonhee Jo
+
 @dotfile diagrams/realtime_loop.dot
 
 Realtime users should separate setup-time allocation from control-loop computation.

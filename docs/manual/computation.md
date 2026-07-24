@@ -1,5 +1,7 @@
 # Computation Pipeline {#dtdynamics_computation}
 
+Author: Joonhee Jo
+
 @dotfile diagrams/compute_pipeline.dot
 
 ## State staging

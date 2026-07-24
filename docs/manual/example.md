@@ -1,5 +1,7 @@
 # Minimal End-to-End Usage Example {#dtdynamics_example}
 
+Author: Joonhee Jo
+
 This page shows the smallest complete dtDynamics flow: build an editable tree model, compile it, preallocate runtime data, stage state, compute dynamics ingredients, and ask for one task Jacobian. The example is intentionally a dynamics-ingredient example, not a simulator or controller.
 
 ## Example program

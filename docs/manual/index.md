@@ -1,5 +1,7 @@
 # dtDynamics Manual {#mainpage}
 
+Author: Joonhee Jo
+
 This manual is the source for the generated dtDynamics documentation. It is written as a conceptual manual first and an API index second: users should understand the model/data lifecycle, coordinate conventions, realtime allocation rules, and validation scope before calling the API.
 
 ## Build the manual
