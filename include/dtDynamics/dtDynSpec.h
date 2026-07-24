@@ -135,10 +135,18 @@ public:
     void Clear();
     /*! \brief Encode the supported tree-model subset as MJCF-like XML using radians. */
     std::string EncodeXml() const;
+    /*! \brief Encode and save the supported tree-model subset to an XML file.
+        \param path Destination XML file path.
+        \throws std::runtime_error if the file cannot be opened or written. */
+    void SaveXmlFile(const std::string &path) const;
     /*! \brief Decode a supported MJCF-like XML string into an editable specification.
         \throws std::runtime_error for malformed tags/comments, unsupported angle units,
                 closed-chain/equality/tendon elements, or actuators referencing unknown joints. */
     static dtDynSpec DecodeXml(const std::string &xml);
+    /*! \brief Load and decode a supported MJCF-like XML file into an editable specification.
+        \param path XML file path.
+        \throws std::runtime_error if the file cannot be opened/read or its XML cannot be decoded. */
+    static dtDynSpec LoadXmlFile(const std::string &path);
 
     /*! \brief Return immutable body storage. */
     const dtArray<dtDynBodySpec> &Bodies() const;

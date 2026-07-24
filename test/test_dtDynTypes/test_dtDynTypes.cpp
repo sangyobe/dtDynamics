@@ -12,7 +12,11 @@
 #endif
 
 #include <cassert>
+#include <chrono>
 #include <cmath>
+#include <filesystem>
+#include <fstream>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 
@@ -20,6 +24,14 @@ using namespace dt::Dynamics;
 
 namespace
 {
+
+std::filesystem::path UniqueTempPath(const std::string &stem)
+{
+    static unsigned long long sequence = 0;
+    const auto ticks = std::chrono::steady_clock::now().time_since_epoch().count();
+    return std::filesystem::temp_directory_path() /
+           (stem + "_" + std::to_string(ticks) + "_" + std::to_string(sequence++));
+}
 
 void TestJointSizes()
 {
@@ -114,6 +126,141 @@ void TestSpecXmlDecodeEncodeRoundTrip()
     assert(reparsed.Joints()[0].name == "hinge_z");
     assert(reparsed.Sites()[0].name == "tool");
     assert(reparsed.Actuators()[0].name == "hinge_motor");
+}
+
+void TestSpecXmlLoadsFromFile()
+{
+    const std::string xml =
+        "<mujoco><worldbody><body name=\"loaded_base\">"
+        "<joint name=\"loaded_joint\" type=\"hinge\"/>"
+        "</body></worldbody></mujoco>";
+    const std::filesystem::path path = UniqueTempPath("dtdynamics_test_load_spec.xml");
+    {
+        std::ofstream output(path, std::ios::binary);
+        assert(output);
+        output << xml;
+        assert(output.good());
+    }
+
+    const dtDynSpec spec = dtDynSpec::LoadXmlFile(path.string());
+    assert(spec.Bodies().size() == 2);
+    assert(spec.Bodies()[1].name == "loaded_base");
+    assert(spec.Joints().size() == 1);
+    assert(spec.Joints()[0].name == "loaded_joint");
+
+    std::filesystem::remove(path);
+}
+
+void TestSpecXmlLoadReportsMissingFile()
+{
+    const std::filesystem::path path = UniqueTempPath("dtdynamics_missing_spec.xml");
+
+    bool rejected = false;
+    try
+    {
+        (void)dtDynSpec::LoadXmlFile(path.string());
+    }
+    catch (const std::runtime_error &error)
+    {
+        const std::string message = error.what();
+        rejected = message.find("failed to open XML file") != std::string::npos &&
+                   message.find(path.string()) != std::string::npos;
+    }
+    assert(rejected);
+}
+
+void TestSpecXmlLoadReportsMalformedFilePath()
+{
+    const std::filesystem::path path = UniqueTempPath("dtdynamics_malformed_spec.xml");
+    {
+        std::ofstream output(path, std::ios::binary);
+        assert(output);
+        output << "<mujoco><worldbody";
+        assert(output.good());
+    }
+
+    bool rejected = false;
+    try
+    {
+        (void)dtDynSpec::LoadXmlFile(path.string());
+    }
+    catch (const std::runtime_error &error)
+    {
+        const std::string message = error.what();
+        rejected = message.find("failed to decode XML file") != std::string::npos &&
+                   message.find(path.string()) != std::string::npos &&
+                   message.find("malformed XML tag") != std::string::npos;
+    }
+    std::filesystem::remove(path);
+    assert(rejected);
+}
+
+void TestSpecXmlLoadRejectsDirectoryPath()
+{
+    const std::filesystem::path path = UniqueTempPath("dtdynamics_xml_directory");
+    assert(std::filesystem::create_directory(path));
+
+    bool rejected = false;
+    try
+    {
+        (void)dtDynSpec::LoadXmlFile(path.string());
+    }
+    catch (const std::runtime_error &error)
+    {
+        const std::string message = error.what();
+        const bool ioFailure = message.find("failed to open XML file") != std::string::npos ||
+                               message.find("failed to read XML file") != std::string::npos;
+        rejected = ioFailure && message.find(path.string()) != std::string::npos;
+    }
+    assert(std::filesystem::remove(path));
+    assert(rejected);
+}
+
+void TestSpecXmlSavesToFile()
+{
+    const dtDynSpec spec = dtDynSpec::DecodeXml(
+        "<mujoco><worldbody><body name=\"saved_base\">"
+        "<joint name=\"saved_joint\" type=\"hinge\"/>"
+        "</body></worldbody></mujoco>");
+    const std::filesystem::path path = UniqueTempPath("dtdynamics_test_save_spec.xml");
+
+    spec.SaveXmlFile(path.string());
+
+    std::ifstream input(path, std::ios::binary);
+    assert(input);
+    std::ostringstream stream;
+    stream << input.rdbuf();
+    assert(!stream.fail());
+    assert(stream.str() == spec.EncodeXml());
+
+    const dtDynSpec loaded = dtDynSpec::LoadXmlFile(path.string());
+    assert(loaded.Bodies().size() == spec.Bodies().size());
+    assert(loaded.Joints().size() == spec.Joints().size());
+    assert(loaded.Bodies()[1].name == "saved_base");
+    assert(loaded.Joints()[0].name == "saved_joint");
+
+    std::filesystem::remove(path);
+}
+
+void TestSpecXmlSaveReportsOpenFailure()
+{
+    dtDynSpec spec;
+    const std::filesystem::path parent = UniqueTempPath("dtdynamics_missing_output_directory");
+    const std::filesystem::path path = parent / "saved_spec.xml";
+    assert(!std::filesystem::exists(parent));
+
+    bool rejected = false;
+    try
+    {
+        spec.SaveXmlFile(path.string());
+    }
+    catch (const std::runtime_error &error)
+    {
+        const std::string message = error.what();
+        rejected = message.find("failed to open XML file for writing") != std::string::npos &&
+                   message.find(path.string()) != std::string::npos;
+    }
+    assert(rejected);
 }
 
 void TestSpecXmlDecodesFreeJointAndFixedBody()
@@ -1533,6 +1680,12 @@ int main()
     TestDtArrayDirectHeader();
     TestSpecWorldAndFixedBody();
     TestSpecXmlDecodeEncodeRoundTrip();
+    TestSpecXmlLoadsFromFile();
+    TestSpecXmlLoadReportsMissingFile();
+    TestSpecXmlLoadReportsMalformedFilePath();
+    TestSpecXmlLoadRejectsDirectoryPath();
+    TestSpecXmlSavesToFile();
+    TestSpecXmlSaveReportsOpenFailure();
     TestSpecXmlDecodesFreeJointAndFixedBody();
     TestSpecXmlSkipsCommentsAndInfersRangeLimits();
     TestSpecXmlRejectsEqualityUntilConstraintLayerExists();

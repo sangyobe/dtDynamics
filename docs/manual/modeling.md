@@ -10,6 +10,17 @@ The central lifecycle is:
 
 `dtDynSpec` stores the user's intended tree model before compilation. It is the right layer for adding bodies, joints, sites, inertial data, and supported XML-subset metadata. It is not the realtime layer.
 
+## XML text and file I/O
+
+Use `dtDynSpec::DecodeXml(xml)` when XML is already in memory. For filesystem workflows, let the package own the text I/O:
+
+```cpp
+const dtDynSpec spec = dtDynSpec::LoadXmlFile("model/robot.xml");
+spec.SaveXmlFile("model/robot-native.xml");
+```
+
+`LoadXmlFile` reports open/read failures and wraps decode errors with the source path. `SaveXmlFile` writes the exact `EncodeXml()` bytes and reports open/write failures with the destination path. It does not create missing parent directories. Both operations belong to offline model construction, not the realtime loop.
+
 ## dtDynModel: compiled structure
 
 `dtDynModel` is produced by compiling a spec. It fixes body IDs, joint IDs, `qpos` addresses, `qvel` addresses, site IDs, root metadata, and dimensions such as `nq`, `nv`, `nbody`, `nsite`, and `nroot`.

@@ -13,11 +13,9 @@
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
-#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <new>
-#include <sstream>
 #include <stdexcept>
 #include <string>
 
@@ -162,19 +160,6 @@ constexpr dtDynCcrbaTermFlags kLeoQuadWbcCcrbaTermFlags =
     DTDYN_CCRBA_TERM_COM_POS |
     DTDYN_CCRBA_TERM_CMAMAT |
     DTDYN_CCRBA_TERM_CENT_MOM;
-
-std::string ReadTextFile(const std::string &path)
-{
-    std::ifstream input(path);
-    if (!input)
-    {
-        throw std::runtime_error("benchmark_dtDynamicsStages: failed to open XML fixture: " + path);
-    }
-
-    std::ostringstream stream;
-    stream << input.rdbuf();
-    return stream.str();
-}
 
 bool EnvEnabled(const char *name)
 {
@@ -581,7 +566,7 @@ dtArray<Scenario> MakeScenarios()
     {
         const char *externalXmlName = std::getenv("DTDYNAMICS_BENCHMARK_XML_NAME");
         addFixture((externalXmlName != nullptr && externalXmlName[0] != '\0') ? externalXmlName : "external_xml",
-                   dtDynSpec::DecodeXml(ReadTextFile(externalXmlPath)));
+                   dtDynSpec::LoadXmlFile(externalXmlPath));
     }
     else if (onlyExternalFixture)
     {

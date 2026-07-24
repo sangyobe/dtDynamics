@@ -10,6 +10,7 @@
 #include "dtDynamics/dtDynSpec.h"
 
 #include <cctype>
+#include <fstream>
 #include <iomanip>
 #include <sstream>
 #include <stdexcept>
@@ -405,6 +406,23 @@ std::string dtDynSpec::EncodeXml() const
     return out.str();
 }
 
+void dtDynSpec::SaveXmlFile(const std::string &path) const
+{
+    const std::string xml = EncodeXml();
+    std::ofstream output(path, std::ios::binary | std::ios::trunc);
+    if (!output)
+    {
+        throw std::runtime_error("dtDynSpec::SaveXmlFile: failed to open XML file for writing: " + path);
+    }
+
+    output.write(xml.data(), static_cast<std::streamsize>(xml.size()));
+    output.close();
+    if (!output)
+    {
+        throw std::runtime_error("dtDynSpec::SaveXmlFile: failed to write XML file: " + path);
+    }
+}
+
 dtDynSpec dtDynSpec::DecodeXml(const std::string &xml)
 {
     if (xml.find("<equality") != std::string::npos || xml.find("<tendon") != std::string::npos)
@@ -616,6 +634,51 @@ dtDynSpec dtDynSpec::DecodeXml(const std::string &xml)
     }
 
     return spec;
+}
+
+dtDynSpec dtDynSpec::LoadXmlFile(const std::string &path)
+{
+    std::ifstream input(path, std::ios::binary);
+    if (!input)
+    {
+        throw std::runtime_error("dtDynSpec::LoadXmlFile: failed to open XML file: " + path);
+    }
+
+    std::string xml;
+    char buffer[4096];
+    while (true)
+    {
+        input.read(buffer, static_cast<std::streamsize>(sizeof(buffer)));
+        const std::streamsize count = input.gcount();
+        if (count > 0)
+        {
+            xml.append(buffer, static_cast<std::size_t>(count));
+        }
+        if (input.eof())
+        {
+            break;
+        }
+        if (input.fail())
+        {
+            throw std::runtime_error("dtDynSpec::LoadXmlFile: failed to read XML file: " + path);
+        }
+    }
+
+    input.clear();
+    input.close();
+    if (input.fail())
+    {
+        throw std::runtime_error("dtDynSpec::LoadXmlFile: failed to close XML file after reading: " + path);
+    }
+    try
+    {
+        return DecodeXml(xml);
+    }
+    catch (const std::runtime_error &error)
+    {
+        throw std::runtime_error("dtDynSpec::LoadXmlFile: failed to decode XML file '" +
+                                 path + "': " + error.what());
+    }
 }
 
 const dtArray<dtDynBodySpec> &dtDynSpec::Bodies() const

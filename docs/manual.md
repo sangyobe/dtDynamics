@@ -353,7 +353,14 @@ Use Release builds for benchmark reporting. With single-config Unix Makefiles, a
 
 ## XML And Native Spec Examples
 
-The XML reader accepts a small MJCF-like subset. The root tag remains `<mujoco>` for file compatibility, but this is syntax only; it does not link the MuJoCo library.
+The XML reader accepts a small MJCF-like subset. The root tag remains `<mujoco>` for file compatibility, but this is syntax only; it does not link the MuJoCo library. Use `dtDynSpec::DecodeXml(xml)` for XML already in memory, or use the package-owned path APIs:
+
+```cpp
+const dtDynSpec spec = dtDynSpec::LoadXmlFile("model/robot.xml");
+spec.SaveXmlFile("model/robot-native.xml");
+```
+
+`SaveXmlFile` writes the exact `EncodeXml()` bytes and does not create missing parent directories.
 
 Minimal fixed-base arm:
 
