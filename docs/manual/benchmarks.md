@@ -61,13 +61,13 @@ Human-facing benchmark tables may omit allocation columns when all rows in the d
 
 ```bash
 cd /path/to/dtDynamics
-cmake --preset native-validation
-cmake --build --preset native-validation -- -j2
+cmake --preset validation
+cmake --build --preset validation -- -j2
 export DTDYNAMICS_BENCHMARK_CPU=0
 export DTDYNAMICS_BENCHMARK_BATCHES=7
-taskset -c "$DTDYNAMICS_BENCHMARK_CPU" build/native-validation/bin/benchmark_dtDynamics > /tmp/native.csv
-taskset -c "$DTDYNAMICS_BENCHMARK_CPU" build/native-validation/bin/benchmark_dtDynamicsStages > /tmp/stages.csv
-taskset -c "$DTDYNAMICS_BENCHMARK_CPU" build/native-validation/bin/benchmark_dtDynamicsReferences > /tmp/references.csv
+taskset -c "$DTDYNAMICS_BENCHMARK_CPU" build/validation/bin/benchmark_dtDynamics > /tmp/native.csv
+taskset -c "$DTDYNAMICS_BENCHMARK_CPU" build/validation/bin/benchmark_dtDynamicsStages > /tmp/stages.csv
+taskset -c "$DTDYNAMICS_BENCHMARK_CPU" build/validation/bin/benchmark_dtDynamicsReferences > /tmp/references.csv
 ```
 
 Then generate tables/figures from those fresh CSVs:
@@ -121,7 +121,23 @@ Pin a project-approved image or runner toolchain before enabling either job. Val
 
 @ref md_docs_benchmark_results contains the longer benchmark report and generated figures. The current manual keeps only a compact evidence snapshot so the API contract is not tied to stale performance numbers.
 
-In the current CPU-affined seven-batch canonical real-XML scope, reduced-CCRBA central medians were `5.162 us`, `5.255 us`, and `6.917 us` for nominal, asymmetric, and nonzero-velocity states. Reduced CCRBA plus indexed Jacobians reported `7.501 us`, `7.630 us`, and `9.213 us`. Each batch contains 200 measured iterations. The separately recorded installed-package headless profile remains useful end-to-end evidence, but it is not mixed into the fresh dynamics-scope table.
+The current canonical evidence is a Release build pinned to CPU 0 with seven batches. Each batch uses 20 warmup iterations and 200 measured iterations. Human-facing values are the medians of the seven batch-level mean, median, and p99 summaries; they are not pooled-sample percentiles.
+
+### Native floating-base quadruped snapshot
+
+The compact Part A snapshot below reproduces the detailed report's floating-base quadruped rows. Each cell is `median / p99` in microseconds.
+
+| State | RNEA + CoM | Reduced CCRBA | Full CCRBA | MuJoCo | Pinocchio |
+|---|---:|---:|---:|---:|---:|
+| nominal | 4.499 / 4.680 | 4.102 / 4.302 | 5.116 / 7.552 | 5.023 / 5.253 | 11.784 / 13.663 |
+| asymmetric | 4.596 / 6.409 | 4.159 / 4.327 | 5.161 / 5.359 | 5.003 / 5.715 | 13.363 / 15.723 |
+| nonzero_velocity | 4.711 / 4.967 | 5.464 / 5.658 | 6.466 / 6.861 | 5.610 / 5.792 | 12.104 / 14.378 |
+
+For the same quadruped fixture, the setup-only resource row reported compile median / p99 of `5.263 / 11.240 us`, data-resize median / p99 of `4.249 / 4.983 us`, and 31 counted C++ allocation calls per fresh resize iteration. Setup remains outside the realtime timing loop. The measured native dynamics and stage compute rows reported zero counted C++ `operator new` allocations; this does not cover direct malloc-family paths.
+
+### LeoQuad real-XML snapshot
+
+In the current CPU-affined seven-batch canonical real-XML scope, reduced-CCRBA central medians were `5.162 us`, `5.255 us`, and `6.917 us` for nominal, asymmetric, and nonzero-velocity states. Reduced CCRBA plus indexed Jacobians reported `7.501 us`, `7.630 us`, and `9.213 us`. The separately recorded installed-package headless profile remains useful end-to-end evidence, but it is not mixed into the fresh dynamics-scope table.
 
 These values are evidence snapshots, not release-wide guarantees. They depend on compiler flags, CPU scheduling, model XML, selected CCRBA term mask, indexed body/site task set, CPU affinity, frequency policy, and realtime priority. For new comparisons, regenerate CSVs and tables from the benchmark binaries instead of mixing historic and current rows.
 
