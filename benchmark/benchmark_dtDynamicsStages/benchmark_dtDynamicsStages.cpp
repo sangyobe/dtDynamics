@@ -151,6 +151,7 @@ struct Result
     int iterations = 0;
     double meanUs = 0.0;
     double medianUs = 0.0;
+    double p95Us = 0.0;
     double p99Us = 0.0;
     double allocationMean = 0.0;
     unsigned long long allocationMax = 0;
@@ -1205,6 +1206,9 @@ Result RunStage(const Scenario &scenario, const Stage &stage, const int warmup, 
     result.iterations = iterations;
     result.meanUs = sum / static_cast<double>(samples.size());
     result.medianUs = samples[samples.size() / 2];
+    const std::size_t p95Index = std::min(samples.size() - 1,
+                                          static_cast<std::size_t>(0.95 * static_cast<double>(samples.size() - 1)));
+    result.p95Us = samples[p95Index];
     const std::size_t p99Index = std::min(samples.size() - 1,
                                           static_cast<std::size_t>(0.99 * static_cast<double>(samples.size() - 1)));
     result.p99Us = samples[p99Index];
@@ -1225,6 +1229,7 @@ void PrintResult(const Result &result)
               << result.iterations << ','
               << result.meanUs << ','
               << result.medianUs << ','
+              << result.p95Us << ','
               << result.p99Us << ','
               << result.allocationMean << ','
               << result.allocationMax << '\n';
@@ -1242,7 +1247,7 @@ int main()
     const dtArray<Stage> stages = MakeStages();
     dtArray<std::string> batchSummaryRows;
 
-    std::cout << "fixture,state,stage,nq,nv,nbody,nsite,iterations,mean_us,median_us,p99_us,"
+    std::cout << "fixture,state,stage,nq,nv,nbody,nsite,iterations,mean_us,median_us,p95_us,p99_us,"
                  "allocation_mean,allocation_max\n";
     if (dt::Dynamics::benchmark::BenchmarkEmitSamples())
     {
@@ -1256,9 +1261,11 @@ int main()
         {
             dtArray<double> meanUs;
             dtArray<double> medianUs;
+            dtArray<double> p95Us;
             dtArray<double> p99Us;
             meanUs.resize(batchCount);
             medianUs.resize(batchCount);
+            p95Us.resize(batchCount);
             p99Us.resize(batchCount);
             unsigned long long allocationMax = 0;
 
@@ -1267,6 +1274,7 @@ int main()
                 const Result result = RunStage(scenario, stage, warmup, iterations);
                 meanUs[batch] = result.meanUs;
                 medianUs[batch] = result.medianUs;
+                p95Us[batch] = result.p95Us;
                 p99Us[batch] = result.p99Us;
                 allocationMax = std::max(allocationMax, result.allocationMax);
                 if (batch == 0)
@@ -1284,6 +1292,7 @@ int main()
                                                                                          batchCount,
                                                                                          meanUs,
                                                                                          medianUs,
+                                                                                         p95Us,
                                                                                          p99Us,
                                                                                          allocationMax));
             }

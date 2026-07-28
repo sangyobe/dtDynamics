@@ -1,69 +1,62 @@
-# Realtime Resource Model {#dtdynamics_realtime}
+# Realtime resource model {#dtdynamics_realtime}
 
 Author: Joonhee Jo
 
 @dotfile diagrams/realtime_loop.dot
 
-Realtime users should separate setup-time allocation from control-loop computation.
+Realtime integration은 setup allocation과 control-loop compute를 분리한다.
 
 ## Setup phase
 
-Perform these outside hard realtime:
+loop 밖에서 수행한다.
 
-1. Build or load `dtDynSpec`.
-2. Compile `dtDynModel`.
-3. Construct `dtDynData`.
-4. Call `dtDynData::Resize(model)`.
-5. Cache body/site IDs needed by the controller.
+1. `LoadXmlFile()`/`DecodeXml()` 또는 programmatic API로 `dtDynSpec` 생성
+2. `ValidateSpec()`/`CompileSpecChecked()` 실행
+3. `dtDynData::Resize(model)` 실행
+4. body/joint/site/actuator ID와 state address cache
+5. caller-owned Jacobian/output matrix pre-size
+6. controller/estimator convention에 따른 explicit state initialization
 
-The benchmark emits a `dtDynData_resource` CSV section that measures `dtDynData` construction plus `Resize(model)` by fixture. This is the resource cost for preparing runtime storage, not the per-tick compute cost.
+name lookup과 `IsCompatible()`는 setup/debug gate다. `IsCompatible()`은 dimension-only이므로 model identity gate로 사용하지 않는다.
+
+benchmark의 `dtDynData_resource` row는 fresh construction + `Resize(model)` 비용을 측정한다. 이 setup 비용은 per-tick compute와 합산하지 않는다.
 
 ## Realtime phase
 
-Inside the loop:
+1. estimator state를 기존 `qpos`/`qvel` storage에 기록한다.
+2. 필요한 최소 `ComputeDynamicsRNEA()` 또는 reduced-mask `ComputeDynamicsCCRBA()`를 호출한다.
+3. active task에 필요한 Jacobian만 계산한다.
+4. 결과를 controller task structure에 전달한다.
 
-1. Write state into preallocated `dtDynData` vectors.
-2. Call the minimal dynamics path (`ComputeDynamicsRNEA` or `ComputeDynamicsCCRBA` with a reduced term mask).
-3. Compute only the body/site/point Jacobians required by the current controller.
-4. Copy or reference outputs into the controller's task structures.
+XML I/O, validation, compile, resize, name lookup, model hot-swap을 loop에 넣지 않는다.
 
-The benchmark CSV compute rows report `allocation_mean`, `allocation_max`, `allocation_bytes_mean`, and `allocation_bytes_max` from the executable's C++ `operator new` / `operator new[]` counter. Human-facing tables may omit these columns when all displayed compute rows are zero. For the documented benchmark paths the CSV counters should remain zero after `dtDynData::Resize(model)` and after any caller-owned destination matrices have already been sized. This is not a universal allocation guarantee for arbitrary API usage, unsized output matrices, debug logging, name lookup, dtMath malloc-family allocation paths, or operating-system/runtime behavior.
+## Allocation evidence
 
-## Resource contract by phase
+raw benchmark compute row는 executable의 C++ `operator new`/`operator new[]` counter로 다음을 기록한다.
 
-The intended resource split can be summarized as:
+- `allocation_mean`, `allocation_max`
+- `allocation_bytes_mean`, `allocation_bytes_max`
 
-| Phase | Typical calls | Heap allocation policy |
+preallocated `dtDynData`와 pre-sized caller output을 사용한 문서화된 compute scope에서 target은
+
+\f[
+\mathrm{alloc}_{count}^{tick}=0, \qquad
+\mathrm{alloc}_{bytes}^{tick}=0.
+\f]
+
+이 값은 arbitrary API에 대한 universal guarantee가 아니다. dtMath container가 사용하는 `malloc`/`calloc`/`realloc`, external library, allocator 내부 동작, OS/runtime, logging, one-time initialization은 별도 profiler와 deployment test가 필요하다.
+
+| Phase | 예 | C++ heap policy |
 |---|---|---|
-| setup | `CompileSpec`, `dtDynData::Resize`, name lookup | allowed |
-| loop | `ComputeDynamics*`, `Compute*Jacobian*` | should remain zero under the benchmark C++ allocation counter after preallocation |
+| setup | `ValidateSpec`, `CompileSpecChecked`, `Resize`, lookup | 허용 |
+| loop | preallocated `ComputeDynamics*`, selected Jacobian | 계측 scope에서 0을 목표 |
 
-A deployment can use stricter local policy, but the package documentation separates these phases so benchmark rows are interpreted correctly. `dtDynData_resource` rows are not regressions merely because they allocate; they describe setup cost. Compute rows with nonzero per-iteration allocation are the rows that need realtime investigation.
+## 여러 evaluation instance
 
-## Multi-instance controllers
+immutable `dtDynModel`은 공유할 수 있다. mutable `dtDynData`는 estimator copy, MPC rollout, controller thread마다 별도로 둔다. 동시에 같은 data를 쓰지 않는다.
 
-Use one `dtDynData` per concurrently evaluated state. Examples include an estimator copy, an MPC rollout copy, or two controller threads evaluating the same immutable `dtDynModel`. Sharing a `dtDynModel` is appropriate; sharing a mutable `dtDynData` across simultaneous computations is not.
+robot description이 바뀌면 setup으로 돌아가 checked compile, resize, ID/address rebuild를 마친 뒤 realtime을 재개한다. package-level neutral/default initializer는 NO-GO다.
 
-If the active robot description changes, re-enter setup: compile the new model, resize data, rebuild cached ID/address maps, and only then resume hard realtime computation.
+## Timing 해석
 
-## Interpreting allocation metrics
-
-The benchmark-counter target for a preallocated compute path is
-
-\f[
-\mathrm{alloc}_{\mathrm{count}}^{\mathrm{tick}} = 0, \qquad
-\mathrm{alloc}_{\mathrm{bytes}}^{\mathrm{tick}} = 0.
-\f]
-
-Setup-time resize cost is allowed outside the hard-RT loop and is reported separately. Let \f$t_i^{\mathrm{resize}}\f$ be the measured time for `dtDynData data; data.Resize(model);`. The reported resize summary uses
-
-\f[
-T_{\mathrm{resize}} = \mathrm{median}_{i=1}^{N} t_i^{\mathrm{resize}}.
-\f]
-
-Allocation count and bytes are gathered by overriding C++ allocation operators inside benchmark executables. They are diagnostic numbers, not a complete OS memory-profiler replacement: dtMath dynamic containers may allocate through `malloc`/`calloc`/`realloc`, external libraries may bypass C++ `operator new`, allocator-internal behavior is not attributed, and one-time runtime initialization outside the measured scope requires separate heap/profiler checks. They answer two RT questions:
-
-- Does the control-path computation allocate through C++ `operator new` after preallocation?
-- How much setup-time allocation does `dtDynData::Resize(model)` report through the same C++ allocation counter for this fixture size?
-
-Use timing and allocation metrics together. A path with zero per-tick allocation can still be too slow; a setup path with allocation is acceptable if it is never called in the hard realtime loop.
+median/p95/p99는 통계적 observation이다. CPU affinity를 고정해도 governor, scheduler, thermal state가 남는다. current evidence는 hard-realtime priority, deadline proof, frequency lock을 포함하지 않는다. setup `Resize` timing과 independently measured stage median은 additive decomposition이 아니다.

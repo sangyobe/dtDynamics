@@ -9,7 +9,7 @@ cmake_minimum_required(VERSION 3.16)
 project(
     dtDynamics
     LANGUAGES CXX
-    VERSION 0.1.0
+    VERSION 0.1.1
     DESCRIPTION "Standalone dynamics ingredient package for control and WBC"
 )
 set(PROJECT_NAMESPACE ${PROJECT_NAME})
@@ -79,6 +79,7 @@ endif()
 set(DTDYNAMICS_SRC
     src/dtDynTypes.cpp
     src/dtDynSpec.cpp
+    src/dtDynValidation.cpp
     src/dtDynModel.cpp
     src/dtDynData.cpp
     src/dtDynCompile.cpp

@@ -4,6 +4,8 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${repo_root}"
 
+python3 tools/validate_documentation_content.py
+
 if ! command -v doxygen >/dev/null 2>&1; then
     echo "doxygen is required to build the dtDynamics manual." >&2
     exit 2

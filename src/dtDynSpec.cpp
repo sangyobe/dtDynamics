@@ -3,25 +3,89 @@
  \brief     Editable native dtDynamics model specification definitions.
  \author    Joonhee Jo, joonhee.jo@hyundai.com
  \date      2026. 07. 16
- \version   0.1.0
+ \version   0.1.1
  \copyright RoboticsLab ART All rights reserved.
 */
 
 #include "dtDynamics/dtDynSpec.h"
 
+#include "dtDynamics/dtDynValidation.h"
+
 #include <cctype>
+#include <cmath>
 #include <fstream>
 #include <iomanip>
 #include <sstream>
 #include <stdexcept>
 #include <unordered_map>
+#include <unordered_set>
+#include <utility>
 
 namespace dt::Dynamics
 {
 namespace
 {
 
-using AttributeMap = std::unordered_map<std::string, std::string>;
+template <typename Item>
+dtDynIndex FindNamedObject(const dtArray<Item> &items, const std::string &name)
+{
+    for (dtDynIndex index = 0; index < static_cast<dtDynIndex>(items.size()); ++index)
+    {
+        if (items[static_cast<std::size_t>(index)].name == name)
+        {
+            return index;
+        }
+    }
+    return DTDYN_INVALID_INDEX;
+}
+
+std::string FormatXmlErrorMessage(const std::string &sourcePath,
+                                  const std::size_t offset,
+                                  const std::string &message)
+{
+    const std::string source = sourcePath.empty() ? "dtDynSpec::DecodeXml" :
+                                                   "dtDynSpec::LoadXmlFile '" + sourcePath + "'";
+    return source + " at offset " + std::to_string(offset) + ": " + message;
+}
+
+} // namespace
+
+dtDynXmlError::dtDynXmlError(const dtDynXmlErrorCode code,
+                             std::string sourcePath,
+                             const std::size_t offset,
+                             const std::string &message)
+    : std::runtime_error(FormatXmlErrorMessage(sourcePath, offset, message)),
+      m_code(code),
+      m_sourcePath(std::move(sourcePath)),
+      m_offset(offset)
+{
+}
+
+dtDynXmlErrorCode dtDynXmlError::Code() const noexcept
+{
+    return m_code;
+}
+
+const std::string &dtDynXmlError::SourcePath() const noexcept
+{
+    return m_sourcePath;
+}
+
+std::size_t dtDynXmlError::Offset() const noexcept
+{
+    return m_offset;
+}
+
+namespace
+{
+
+struct AttributeValue
+{
+    std::string text;
+    std::size_t offset = 0;
+};
+
+using AttributeMap = std::unordered_map<std::string, AttributeValue>;
 
 static constexpr dtDynReal kPi = static_cast<dtDynReal>(3.141592653589793238462643383279502884);
 static constexpr dtDynReal kDegreeToRadian = kPi / static_cast<dtDynReal>(180.0);
@@ -52,7 +116,148 @@ std::string TagName(const std::string &tag)
     return tag.substr(0, pos);
 }
 
-AttributeMap ParseAttributes(const std::string &tag)
+struct ElementFrame
+{
+    std::string name;
+    std::size_t offset = 0;
+};
+
+bool IsSupportedElement(const std::string &name)
+{
+    return name == "mujoco" || name == "compiler" || name == "option" ||
+           name == "worldbody" || name == "body" || name == "inertial" ||
+           name == "joint" || name == "freejoint" || name == "site" ||
+           name == "actuator" || name == "motor";
+}
+
+bool IsValidTagName(const std::string &name)
+{
+    if (name.empty() ||
+        !(std::isalpha(static_cast<unsigned char>(name[0])) || name[0] == '_'))
+    {
+        return false;
+    }
+    for (const char character : name)
+    {
+        if (!(std::isalnum(static_cast<unsigned char>(character)) || character == '_' ||
+              character == '-' || character == ':' || character == '.'))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+std::size_t FindFirstNonWhitespace(const std::string &xml,
+                                   const std::size_t begin,
+                                   const std::size_t end)
+{
+    for (std::size_t offset = begin; offset < end; ++offset)
+    {
+        if (!std::isspace(static_cast<unsigned char>(xml[offset])))
+        {
+            return offset;
+        }
+    }
+    return std::string::npos;
+}
+
+std::size_t FindTagEnd(const std::string &xml,
+                       const std::size_t begin,
+                       const std::string &sourcePath)
+{
+    char quote = '\0';
+    for (std::size_t offset = begin + 1; offset < xml.size(); ++offset)
+    {
+        const char character = xml[offset];
+        if (quote != '\0')
+        {
+            if (character == quote)
+            {
+                quote = '\0';
+            }
+            continue;
+        }
+        if (character == '"' || character == '\'')
+        {
+            quote = character;
+        }
+        else if (character == '>')
+        {
+            return offset;
+        }
+    }
+    throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath, begin,
+                        "unterminated XML tag");
+}
+
+bool HasSupportedElementParent(const std::string &name, const std::string &parent)
+{
+    if (name == "compiler" || name == "option" || name == "worldbody" ||
+        name == "actuator")
+    {
+        return parent == "mujoco";
+    }
+    if (name == "body")
+    {
+        return parent == "worldbody" || parent == "body";
+    }
+    if (name == "inertial" || name == "joint" || name == "freejoint" || name == "site")
+    {
+        return parent == "body";
+    }
+    if (name == "motor")
+    {
+        return parent == "actuator";
+    }
+    return true;
+}
+
+dtDynXmlErrorCode XmlCodeFromValidation(const dtDynValidationCode code)
+{
+    if (code == dtDynValidationCode::NonFiniteValue)
+    {
+        return dtDynXmlErrorCode::NonFiniteValue;
+    }
+    if (code == dtDynValidationCode::DuplicateName)
+    {
+        return dtDynXmlErrorCode::DuplicateName;
+    }
+    if (code == dtDynValidationCode::UnsupportedJoint)
+    {
+        return dtDynXmlErrorCode::UnsupportedElement;
+    }
+    return dtDynXmlErrorCode::InvalidReference;
+}
+
+std::size_t ValidationOrigin(const dtDynValidationError &error,
+                             const dtArray<std::size_t> &bodyOrigins,
+                             const dtArray<std::size_t> &jointOrigins,
+                             const dtArray<std::size_t> &siteOrigins,
+                             const dtArray<std::size_t> &actuatorOrigins)
+{
+    const dtArray<std::size_t> *origins = &bodyOrigins;
+    if (error.object == dtDynObjectType::Joint)
+    {
+        origins = &jointOrigins;
+    }
+    else if (error.object == dtDynObjectType::Site)
+    {
+        origins = &siteOrigins;
+    }
+    else if (error.object == dtDynObjectType::Actuator)
+    {
+        origins = &actuatorOrigins;
+    }
+    if (error.index >= 0 && static_cast<std::size_t>(error.index) < origins->size())
+    {
+        return (*origins)[static_cast<std::size_t>(error.index)];
+    }
+    return 0;
+}
+
+AttributeMap ParseAttributes(const std::string &tag, const std::size_t tagOffset,
+                             const std::string &sourcePath)
 {
     AttributeMap attrs;
     std::size_t pos = TagName(tag).size();
@@ -62,9 +267,15 @@ AttributeMap ParseAttributes(const std::string &tag)
         {
             ++pos;
         }
-        if (pos >= tag.size() || tag[pos] == '/')
+        if (pos >= tag.size())
         {
             break;
+        }
+        if (tag[pos] == '/')
+        {
+            throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath,
+                                tagOffset + pos,
+                                "self-closing marker must be the final non-whitespace token");
         }
 
         const std::size_t keyStart = pos;
@@ -73,14 +284,21 @@ AttributeMap ParseAttributes(const std::string &tag)
             ++pos;
         }
         const std::string key = tag.substr(keyStart, pos - keyStart);
+        if (!IsValidTagName(key))
+        {
+            throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath,
+                                tagOffset + keyStart,
+                                "invalid XML attribute name");
+        }
 
         while (pos < tag.size() && std::isspace(static_cast<unsigned char>(tag[pos])))
         {
             ++pos;
         }
-        if (pos >= tag.size() || tag[pos] != '=')
+        if (key.empty() || pos >= tag.size() || tag[pos] != '=')
         {
-            break;
+            throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath,
+                                tagOffset + keyStart, "malformed XML attribute");
         }
         ++pos;
         while (pos < tag.size() && std::isspace(static_cast<unsigned char>(tag[pos])))
@@ -89,20 +307,37 @@ AttributeMap ParseAttributes(const std::string &tag)
         }
         if (pos >= tag.size() || (tag[pos] != '"' && tag[pos] != '\''))
         {
-            break;
+            throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath,
+                                tagOffset + keyStart,
+                                "XML attribute value must be quoted");
         }
 
         const char quote = tag[pos++];
         const std::size_t valueStart = pos;
         while (pos < tag.size() && tag[pos] != quote)
         {
+            if (tag[pos] == '<')
+            {
+                throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath,
+                                    tagOffset + pos,
+                                    "raw '<' is not allowed in an XML attribute value");
+            }
             ++pos;
         }
-        attrs[key] = tag.substr(valueStart, pos - valueStart);
-        if (pos < tag.size())
+        if (pos == tag.size())
         {
-            ++pos;
+            throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath,
+                                tagOffset + keyStart,
+                                "unterminated XML attribute value");
         }
+        if (attrs.find(key) != attrs.end())
+        {
+            throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath,
+                                tagOffset + keyStart,
+                                "duplicate XML attribute '" + key + "'");
+        }
+        attrs[key] = {tag.substr(valueStart, pos - valueStart), tagOffset + valueStart};
+        ++pos;
     }
     return attrs;
 }
@@ -115,41 +350,148 @@ bool HasAttribute(const AttributeMap &attrs, const std::string &key)
 std::string AttributeOr(const AttributeMap &attrs, const std::string &key, const std::string &fallback)
 {
     const auto it = attrs.find(key);
-    return it == attrs.end() ? fallback : it->second;
+    return it == attrs.end() ? fallback : it->second.text;
 }
 
-dtDynReal RealAttributeOr(const AttributeMap &attrs, const std::string &key, const dtDynReal fallback)
+dtDynReal ParseReal(const AttributeValue &attribute, const std::string &sourcePath)
+{
+    std::size_t first = 0;
+    while (first < attribute.text.size() &&
+           std::isspace(static_cast<unsigned char>(attribute.text[first])))
+    {
+        ++first;
+    }
+    std::size_t last = attribute.text.size();
+    while (last > first &&
+           std::isspace(static_cast<unsigned char>(attribute.text[last - 1])))
+    {
+        --last;
+    }
+    const std::size_t tokenOffset = first == attribute.text.size() ?
+                                        attribute.offset :
+                                        attribute.offset + first;
+    const AttributeValue token = {attribute.text.substr(first, last - first), tokenOffset};
+    std::size_t consumed = 0;
+    try
+    {
+        const dtDynReal value = static_cast<dtDynReal>(std::stod(token.text, &consumed));
+        if (consumed != token.text.size())
+        {
+            throw dtDynXmlError(dtDynXmlErrorCode::InvalidNumber, sourcePath,
+                                token.offset + consumed,
+                                "invalid numeric value '" + token.text + "'");
+        }
+        if (!std::isfinite(value))
+        {
+            throw dtDynXmlError(dtDynXmlErrorCode::NonFiniteValue, sourcePath, token.offset,
+                                "numeric value must be finite: '" + token.text + "'");
+        }
+        return value;
+    }
+    catch (const dtDynXmlError &)
+    {
+        throw;
+    }
+    catch (const std::invalid_argument &)
+    {
+        throw dtDynXmlError(dtDynXmlErrorCode::InvalidNumber, sourcePath, token.offset,
+                            "invalid numeric value '" + token.text + "'");
+    }
+    catch (const std::out_of_range &)
+    {
+        throw dtDynXmlError(dtDynXmlErrorCode::InvalidNumber, sourcePath, token.offset,
+                            "numeric value is out of range: '" + token.text + "'");
+    }
+}
+
+dtDynReal RealAttributeOr(const AttributeMap &attrs, const std::string &key,
+                             const dtDynReal fallback, const std::string &sourcePath)
 {
     const auto it = attrs.find(key);
-    if (it == attrs.end())
-    {
-        return fallback;
-    }
-    return static_cast<dtDynReal>(std::stod(it->second));
+    return it == attrs.end() ? fallback : ParseReal(it->second, sourcePath);
 }
 
-dt::Math::Vector3<dtDynReal> ParseVector3(const std::string &text)
+void RequireUniqueName(const std::string &name,
+                       const AttributeMap &attrs,
+                       std::unordered_set<std::string> &names,
+                       const std::size_t tagOffset,
+                       const std::string &objectType,
+                       const std::string &sourcePath)
 {
-    dt::Math::Vector3<dtDynReal> value;
-    value(0) = 0.0;
-    value(1) = 0.0;
-    value(2) = 0.0;
+    if (!names.insert(name).second)
+    {
+        const auto attribute = attrs.find("name");
+        const std::size_t offset = attribute == attrs.end() ? tagOffset :
+                                                             attribute->second.offset;
+        throw dtDynXmlError(dtDynXmlErrorCode::DuplicateName, sourcePath, offset,
+                            "duplicate " + objectType + " name '" + name + "'");
+    }
+}
 
-    std::istringstream stream(text);
-    stream >> value(0) >> value(1) >> value(2);
+dtArray<dtDynReal> ParseVectorValues(const AttributeValue &attribute, const std::size_t expectedCount,
+                                        const std::string &sourcePath)
+{
+    dtArray<AttributeValue> tokens;
+    std::size_t pos = 0;
+    while (pos < attribute.text.size())
+    {
+        while (pos < attribute.text.size() &&
+               std::isspace(static_cast<unsigned char>(attribute.text[pos])))
+        {
+            ++pos;
+        }
+        if (pos == attribute.text.size())
+        {
+            break;
+        }
+        const std::size_t tokenStart = pos;
+        while (pos < attribute.text.size() &&
+               !std::isspace(static_cast<unsigned char>(attribute.text[pos])))
+        {
+            ++pos;
+        }
+        tokens.push_back({attribute.text.substr(tokenStart, pos - tokenStart),
+                          attribute.offset + tokenStart});
+    }
+
+    if (tokens.size() != expectedCount)
+    {
+        const std::size_t offset = tokens.size() > expectedCount ?
+                                       tokens[expectedCount].offset :
+                                       attribute.offset;
+        throw dtDynXmlError(dtDynXmlErrorCode::InvalidVectorArity, sourcePath, offset,
+                            "expected " + std::to_string(expectedCount) +
+                                " vector values but found " + std::to_string(tokens.size()));
+    }
+
+    dtArray<dtDynReal> values;
+    for (const AttributeValue &token : tokens)
+    {
+        values.push_back(ParseReal(token, sourcePath));
+    }
+    return values;
+}
+
+dt::Math::Vector3<dtDynReal> ParseVector3(const AttributeValue &attribute,
+                                              const std::string &sourcePath)
+{
+    const dtArray<dtDynReal> values = ParseVectorValues(attribute, 3, sourcePath);
+    dt::Math::Vector3<dtDynReal> value;
+    value(0) = values[0];
+    value(1) = values[1];
+    value(2) = values[2];
     return value;
 }
 
-dt::Math::Vector4<dtDynReal> ParseVector4(const std::string &text)
+dt::Math::Vector4<dtDynReal> ParseVector4(const AttributeValue &attribute,
+                                              const std::string &sourcePath)
 {
+    const dtArray<dtDynReal> values = ParseVectorValues(attribute, 4, sourcePath);
     dt::Math::Vector4<dtDynReal> value;
-    value(0) = 0.0;
-    value(1) = 0.0;
-    value(2) = 0.0;
-    value(3) = 0.0;
-
-    std::istringstream stream(text);
-    stream >> value(0) >> value(1) >> value(2) >> value(3);
+    value(0) = values[0];
+    value(1) = values[1];
+    value(2) = values[2];
+    value(3) = values[3];
     return value;
 }
 
@@ -179,21 +521,27 @@ void SetIdentityQuat(dt::Math::Vector4<dtDynReal> &quat)
     quat(3) = 0.0;
 }
 
-dtDynJointType JointTypeFromXml(const std::string &type)
+dtDynJointType JointTypeFromXml(const AttributeValue &attribute,
+                                   const std::string &sourcePath)
 {
-    if (type == "free")
+    if (attribute.text == "free")
     {
         return dtDynJointType::Free;
     }
-    if (type == "ball")
+    if (attribute.text == "ball")
     {
         return dtDynJointType::Ball;
     }
-    if (type == "slide")
+    if (attribute.text == "slide")
     {
         return dtDynJointType::Slide;
     }
-    return dtDynJointType::Hinge;
+    if (attribute.text == "hinge")
+    {
+        return dtDynJointType::Hinge;
+    }
+    throw dtDynXmlError(dtDynXmlErrorCode::UnsupportedElement, sourcePath, attribute.offset,
+                        "unsupported joint type '" + attribute.text + "'");
 }
 
 std::string JointTypeToXml(const dtDynJointType type)
@@ -213,7 +561,8 @@ std::string JointTypeToXml(const dtDynJointType type)
     return "hinge";
 }
 
-dtDynReal AngleScaleFromCompilerAttribute(const AttributeMap &attrs)
+dtDynReal AngleScaleFromCompilerAttribute(const AttributeMap &attrs,
+                                              const std::string &sourcePath)
 {
     const std::string angle = AttributeOr(attrs, "angle", "degree");
     if (angle == "radian")
@@ -225,7 +574,10 @@ dtDynReal AngleScaleFromCompilerAttribute(const AttributeMap &attrs)
         return kDegreeToRadian;
     }
 
-    throw std::runtime_error("dtDynSpec: unsupported compiler angle unit");
+    const auto attribute = attrs.find("angle");
+    const std::size_t offset = attribute == attrs.end() ? 0 : attribute->second.offset;
+    throw dtDynXmlError(dtDynXmlErrorCode::UnsupportedElement, sourcePath, offset,
+                        "unsupported compiler angle unit '" + angle + "'");
 }
 
 void EncodeBody(const dtDynSpec &spec,
@@ -423,25 +775,40 @@ void dtDynSpec::SaveXmlFile(const std::string &path) const
     }
 }
 
-dtDynSpec dtDynSpec::DecodeXml(const std::string &xml)
+dtDynSpec DecodeXmlImpl(const std::string &xml, const std::string &sourcePath)
 {
-    if (xml.find("<equality") != std::string::npos || xml.find("<tendon") != std::string::npos)
-    {
-        throw std::runtime_error("dtDynSpec: equality constraints are not supported in the tree-only dynamics phase");
-    }
-
     dtDynSpec spec;
-    bool inWorldbody = false;
-    bool inActuator = false;
     dtDynReal angleScale = kDegreeToRadian;
     dtArray<dtDynIndex> bodyStack;
     bodyStack.push_back(0);
+    dtArray<ElementFrame> elementStack;
+    dtArray<std::size_t> bodyOrigins;
+    bodyOrigins.push_back(0);
+    dtArray<std::size_t> jointOrigins;
+    dtArray<std::size_t> siteOrigins;
+    dtArray<std::size_t> actuatorOrigins;
     std::unordered_map<std::string, dtDynIndex> jointNameToId;
+    std::unordered_set<std::string> bodyNames = {"world"};
+    std::unordered_set<std::string> jointNames;
+    std::unordered_set<std::string> siteNames;
+    std::unordered_set<std::string> actuatorNames;
+    bool sawMujocoRoot = false;
+    bool sawMarkup = false;
+    bool sawCompiler = false;
+    bool sawWorldbody = false;
+    bool sawActuator = false;
 
     std::size_t cursor = 0;
     while (true)
     {
         const std::size_t begin = xml.find('<', cursor);
+        const std::size_t textEnd = begin == std::string::npos ? xml.size() : begin;
+        const std::size_t unexpectedText = FindFirstNonWhitespace(xml, cursor, textEnd);
+        if (unexpectedText != std::string::npos)
+        {
+            throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath, unexpectedText,
+                                "unexpected text outside an XML element");
+        }
         if (begin == std::string::npos)
         {
             break;
@@ -451,29 +818,92 @@ dtDynSpec dtDynSpec::DecodeXml(const std::string &xml)
             const std::size_t commentEnd = xml.find("-->", begin + 4);
             if (commentEnd == std::string::npos)
             {
-                throw std::runtime_error("dtDynSpec: malformed XML comment");
+                throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath, begin,
+                                    "malformed XML comment");
             }
+            sawMarkup = true;
             cursor = commentEnd + 3;
             continue;
         }
-        const std::size_t end = xml.find('>', begin + 1);
-        if (end == std::string::npos)
-        {
-            throw std::runtime_error("dtDynSpec: malformed XML tag");
-        }
+        const std::size_t end = FindTagEnd(xml, begin, sourcePath);
 
-        std::string tag = Trim(xml.substr(begin + 1, end - begin - 1));
-        cursor = end + 1;
-        if (tag.empty() || tag[0] == '?' || tag[0] == '!')
+        const std::string rawTag = xml.substr(begin + 1, end - begin - 1);
+        std::size_t leadingWhitespace = 0;
+        while (leadingWhitespace < rawTag.size() &&
+               std::isspace(static_cast<unsigned char>(rawTag[leadingWhitespace])))
         {
+            ++leadingWhitespace;
+        }
+        std::size_t tagOffset = begin + 1 + leadingWhitespace;
+        std::string tag = Trim(rawTag);
+        cursor = end + 1;
+        if (tag.empty())
+        {
+            throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath, begin,
+                                "empty XML tag");
+        }
+        if (tag[0] == '?')
+        {
+            if (tag.back() != '?' || begin != 0 || sawMarkup || sawMujocoRoot)
+            {
+                throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath, begin,
+                                    "malformed or misplaced XML declaration");
+            }
+            const std::string declaration = Trim(tag.substr(1, tag.size() - 2));
+            if (TagName(declaration) != "xml")
+            {
+                throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath, begin,
+                                    "unsupported XML processing instruction");
+            }
+            const AttributeMap declarationAttrs =
+                ParseAttributes(declaration, tagOffset + 1, sourcePath);
+            const auto version = declarationAttrs.find("version");
+            if (version == declarationAttrs.end() ||
+                (version->second.text != "1.0" && version->second.text != "1.1"))
+            {
+                throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath, begin,
+                                    "XML declaration requires version 1.0 or 1.1");
+            }
+            for (const auto &entry : declarationAttrs)
+            {
+                if (entry.first != "version" && entry.first != "encoding" &&
+                    entry.first != "standalone")
+                {
+                    throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath,
+                                        entry.second.offset,
+                                        "unsupported XML declaration attribute");
+                }
+                if (entry.first == "standalone" && entry.second.text != "yes" &&
+                    entry.second.text != "no")
+                {
+                    throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath,
+                                        entry.second.offset,
+                                        "invalid XML standalone declaration value");
+                }
+            }
+            sawMarkup = true;
             continue;
+        }
+        sawMarkup = true;
+        if (tag[0] == '!')
+        {
+            throw dtDynXmlError(dtDynXmlErrorCode::UnsupportedElement, sourcePath, begin,
+                                "unsupported XML declaration");
         }
 
         bool closing = false;
         if (tag[0] == '/')
         {
             closing = true;
-            tag = Trim(tag.substr(1));
+            const std::string closingTag = tag.substr(1);
+            std::size_t closingWhitespace = 0;
+            while (closingWhitespace < closingTag.size() &&
+                   std::isspace(static_cast<unsigned char>(closingTag[closingWhitespace])))
+            {
+                ++closingWhitespace;
+            }
+            tagOffset += 1 + closingWhitespace;
+            tag = Trim(closingTag);
         }
 
         bool selfClosing = false;
@@ -484,52 +914,139 @@ dtDynSpec dtDynSpec::DecodeXml(const std::string &xml)
         }
 
         const std::string name = TagName(tag);
-        const AttributeMap attrs = ParseAttributes(tag);
-
+        if (!IsValidTagName(name))
+        {
+            throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath, tagOffset,
+                                "invalid XML element name");
+        }
+        if (!IsSupportedElement(name))
+        {
+            throw dtDynXmlError(dtDynXmlErrorCode::UnsupportedElement, sourcePath, begin,
+                                "unsupported XML element <" + name + ">");
+        }
+        AttributeMap attrs;
         if (closing)
         {
-            if (name == "worldbody")
+            std::size_t suffix = name.size();
+            while (suffix < tag.size() &&
+                   std::isspace(static_cast<unsigned char>(tag[suffix])))
             {
-                inWorldbody = false;
+                ++suffix;
+            }
+            if (suffix != tag.size())
+            {
+                throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath,
+                                    tagOffset + suffix,
+                                    "closing XML tags cannot contain attributes or suffix text");
+            }
+        }
+        else
+        {
+            attrs = ParseAttributes(tag, tagOffset, sourcePath);
+        }
+
+        if (!closing)
+        {
+            if (name == "mujoco")
+            {
+                if (sawMujocoRoot || !elementStack.empty())
+                {
+                    throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath, begin,
+                                        "XML must contain exactly one mujoco root element");
+                }
+                sawMujocoRoot = true;
+                bodyOrigins[0] = begin;
+            }
+            else if (!sawMujocoRoot || elementStack.empty())
+            {
+                throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath, begin,
+                                    "XML element lies outside the mujoco root");
+            }
+            else if (!HasSupportedElementParent(name, elementStack[elementStack.size() - 1].name))
+            {
+                throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath, begin,
+                                    "supported element <" + name + "> is not valid inside <" +
+                                        elementStack[elementStack.size() - 1].name + ">");
+            }
+
+            bool *sectionSeen = nullptr;
+            if (name == "compiler")
+            {
+                sectionSeen = &sawCompiler;
+            }
+            else if (name == "worldbody")
+            {
+                sectionSeen = &sawWorldbody;
             }
             else if (name == "actuator")
             {
-                inActuator = false;
+                sectionSeen = &sawActuator;
             }
-            else if (name == "body" && inWorldbody && bodyStack.size() > 1)
+            if (sectionSeen != nullptr)
             {
+                if (*sectionSeen)
+                {
+                    throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath, begin,
+                                        "duplicate <" + name + "> section");
+                }
+                *sectionSeen = true;
+            }
+        }
+
+        if (closing)
+        {
+            if (selfClosing || elementStack.empty() ||
+                elementStack[elementStack.size() - 1].name != name)
+            {
+                throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath, begin,
+                                    "misnested closing element </" + name + ">");
+            }
+            elementStack.resize(elementStack.size() - 1);
+            if (name == "body")
+            {
+                if (bodyStack.size() <= 1)
+                {
+                    throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath, begin,
+                                        "closing body has no matching body frame");
+                }
                 bodyStack.resize(bodyStack.size() - 1);
             }
             continue;
         }
 
+        if (!selfClosing)
+        {
+            elementStack.push_back({name, begin});
+        }
+
         if (name == "worldbody")
         {
-            inWorldbody = true;
             continue;
         }
         if (name == "compiler")
         {
-            angleScale = AngleScaleFromCompilerAttribute(attrs);
+            angleScale = AngleScaleFromCompilerAttribute(attrs, sourcePath);
             continue;
         }
         if (name == "actuator")
         {
-            inActuator = true;
             continue;
         }
 
-        if (inWorldbody && name == "body")
+        if (name == "body")
         {
             const dtDynIndex parent = bodyStack[bodyStack.size() - 1];
-            const dtDynIndex bodyId = spec.AddBody(AttributeOr(attrs, "name", "body"), parent);
+            const std::string bodyName = AttributeOr(attrs, "name", "body");
+            RequireUniqueName(bodyName, attrs, bodyNames, begin, "body", sourcePath);
+            const dtDynIndex bodyId = spec.AddBody(bodyName, parent);
+            bodyOrigins.push_back(begin);
             if (HasAttribute(attrs, "pos"))
             {
-                spec.Bodies()[bodyId].pos = ParseVector3(attrs.at("pos"));
+                spec.Bodies()[bodyId].pos = ParseVector3(attrs.at("pos"), sourcePath);
             }
             if (HasAttribute(attrs, "quat"))
             {
-                spec.Bodies()[bodyId].quat = ParseVector4(attrs.at("quat"));
+                spec.Bodies()[bodyId].quat = ParseVector4(attrs.at("quat"), sourcePath);
             }
             if (!selfClosing)
             {
@@ -538,53 +1055,70 @@ dtDynSpec dtDynSpec::DecodeXml(const std::string &xml)
             continue;
         }
 
-        if (inWorldbody && name == "inertial" && bodyStack.size() > 1)
+        if (name == "inertial" && bodyStack.size() > 1)
         {
             dtDynInertialSpec &inertial = spec.Bodies()[bodyStack[bodyStack.size() - 1]].inertial;
-            inertial.mass = RealAttributeOr(attrs, "mass", inertial.mass);
+            inertial.mass = RealAttributeOr(attrs, "mass", inertial.mass, sourcePath);
             if (HasAttribute(attrs, "pos"))
             {
-                inertial.pos = ParseVector3(attrs.at("pos"));
+                inertial.pos = ParseVector3(attrs.at("pos"), sourcePath);
             }
             if (HasAttribute(attrs, "quat"))
             {
-                inertial.quat = ParseVector4(attrs.at("quat"));
+                inertial.quat = ParseVector4(attrs.at("quat"), sourcePath);
             }
             if (HasAttribute(attrs, "diaginertia"))
             {
-                inertial.inertia = ParseVector3(attrs.at("diaginertia"));
+                inertial.inertia = ParseVector3(attrs.at("diaginertia"), sourcePath);
             }
             continue;
         }
 
-        if (inWorldbody && name == "joint" && bodyStack.size() > 1)
+        if (name == "joint" && bodyStack.size() > 1)
         {
             const dtDynIndex bodyId = bodyStack[bodyStack.size() - 1];
             const std::string jointName = AttributeOr(attrs, "name", "joint");
-            const dtDynIndex jointId =
-                spec.AddJoint(bodyId, jointName, JointTypeFromXml(AttributeOr(attrs, "type", "hinge")));
+            RequireUniqueName(jointName, attrs, jointNames, begin, "joint", sourcePath);
+            const auto typeAttribute = attrs.find("type");
+            const dtDynJointType jointType = typeAttribute == attrs.end() ?
+                                                 dtDynJointType::Hinge :
+                                                 JointTypeFromXml(typeAttribute->second, sourcePath);
+            const dtDynIndex jointId = spec.AddJoint(bodyId, jointName, jointType);
+            jointOrigins.push_back(begin);
             dtDynJointSpec &joint = spec.Joints()[jointId];
             if (HasAttribute(attrs, "pos"))
             {
-                joint.pos = ParseVector3(attrs.at("pos"));
+                joint.pos = ParseVector3(attrs.at("pos"), sourcePath);
             }
             if (HasAttribute(attrs, "axis"))
             {
-                joint.axis = ParseVector3(attrs.at("axis"));
+                joint.axis = ParseVector3(attrs.at("axis"), sourcePath);
             }
-            joint.armature = RealAttributeOr(attrs, "armature", joint.armature);
+            joint.armature = RealAttributeOr(attrs, "armature", joint.armature, sourcePath);
             const bool hasLimitedAttribute = HasAttribute(attrs, "limited");
             if (hasLimitedAttribute)
             {
-                const std::string limited = attrs.at("limited");
-                joint.limited = limited == "true" || limited == "1";
+                const AttributeValue &limited = attrs.at("limited");
+                if (limited.text == "true" || limited.text == "1")
+                {
+                    joint.limited = true;
+                }
+                else if (limited.text == "false" || limited.text == "0")
+                {
+                    joint.limited = false;
+                }
+                else
+                {
+                    throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath,
+                                        limited.offset,
+                                        "limited must be true, false, 1, or 0");
+                }
             }
             if (HasAttribute(attrs, "range"))
             {
-                std::istringstream stream(attrs.at("range"));
-                stream >> joint.rangeMin >> joint.rangeMax;
-                joint.rangeMin *= angleScale;
-                joint.rangeMax *= angleScale;
+                const dtArray<dtDynReal> range = ParseVectorValues(attrs.at("range"), 2, sourcePath);
+                joint.rangeMin = range[0] * angleScale;
+                joint.rangeMax = range[1] * angleScale;
                 if (!hasLimitedAttribute)
                 {
                     joint.limited = true;
@@ -594,46 +1128,83 @@ dtDynSpec dtDynSpec::DecodeXml(const std::string &xml)
             continue;
         }
 
-        if (inWorldbody && name == "freejoint" && bodyStack.size() > 1)
+        if (name == "freejoint" && bodyStack.size() > 1)
         {
             const dtDynIndex bodyId = bodyStack[bodyStack.size() - 1];
             const std::string jointName = AttributeOr(attrs, "name", "freejoint");
+            RequireUniqueName(jointName, attrs, jointNames, begin, "joint", sourcePath);
             const dtDynIndex jointId = spec.AddJoint(bodyId, jointName, dtDynJointType::Free);
+            jointOrigins.push_back(begin);
             jointNameToId[jointName] = jointId;
             continue;
         }
 
-        if (inWorldbody && name == "site" && bodyStack.size() > 1)
+        if (name == "site" && bodyStack.size() > 1)
         {
             const dtDynIndex bodyId = bodyStack[bodyStack.size() - 1];
-            const dtDynIndex siteId = spec.AddSite(bodyId, AttributeOr(attrs, "name", "site"));
+            const std::string siteName = AttributeOr(attrs, "name", "site");
+            RequireUniqueName(siteName, attrs, siteNames, begin, "site", sourcePath);
+            const dtDynIndex siteId = spec.AddSite(bodyId, siteName);
+            siteOrigins.push_back(begin);
             if (HasAttribute(attrs, "pos"))
             {
-                spec.Sites()[siteId].pos = ParseVector3(attrs.at("pos"));
+                spec.Sites()[siteId].pos = ParseVector3(attrs.at("pos"), sourcePath);
             }
             if (HasAttribute(attrs, "quat"))
             {
-                spec.Sites()[siteId].quat = ParseVector4(attrs.at("quat"));
+                spec.Sites()[siteId].quat = ParseVector4(attrs.at("quat"), sourcePath);
             }
             continue;
         }
 
-        if (inActuator && name == "motor")
+        if (name == "motor")
         {
             const std::string jointName = AttributeOr(attrs, "joint", "");
             const auto jointIt = jointNameToId.find(jointName);
             if (jointIt == jointNameToId.end())
             {
-                throw std::runtime_error("dtDynSpec: actuator references unknown joint");
+                const auto jointAttribute = attrs.find("joint");
+                const std::size_t offset = jointAttribute == attrs.end() ? begin :
+                                                                          jointAttribute->second.offset;
+                throw dtDynXmlError(dtDynXmlErrorCode::InvalidReference, sourcePath, offset,
+                                    "actuator references unknown joint '" + jointName + "'");
             }
+            const std::string actuatorName = AttributeOr(attrs, "name", "motor");
+            RequireUniqueName(actuatorName, attrs, actuatorNames, begin, "actuator", sourcePath);
             const dtDynIndex actuatorId =
-                spec.AddActuator(jointIt->second, AttributeOr(attrs, "name", "motor"));
-            spec.Actuators()[actuatorId].gear = RealAttributeOr(attrs, "gear", spec.Actuators()[actuatorId].gear);
+                spec.AddActuator(jointIt->second, actuatorName);
+            actuatorOrigins.push_back(begin);
+            spec.Actuators()[actuatorId].gear = RealAttributeOr(attrs, "gear", spec.Actuators()[actuatorId].gear, sourcePath);
             continue;
         }
     }
 
+    if (!elementStack.empty())
+    {
+        const ElementFrame &unclosed = elementStack[elementStack.size() - 1];
+        throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath, unclosed.offset,
+                            "unclosed XML element <" + unclosed.name + ">");
+    }
+    if (!sawMujocoRoot)
+    {
+        throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath, 0,
+                            "missing mujoco root element");
+    }
+
+    dtDynValidationError validationError;
+    if (!ValidateSpec(spec, &validationError))
+    {
+        const std::size_t offset = ValidationOrigin(validationError, bodyOrigins, jointOrigins,
+                                                    siteOrigins, actuatorOrigins);
+        throw dtDynXmlError(XmlCodeFromValidation(validationError.code), sourcePath, offset,
+                            validationError.message);
+    }
     return spec;
+}
+
+dtDynSpec dtDynSpec::DecodeXml(const std::string &xml)
+{
+    return DecodeXmlImpl(xml, "");
 }
 
 dtDynSpec dtDynSpec::LoadXmlFile(const std::string &path)
@@ -670,15 +1241,27 @@ dtDynSpec dtDynSpec::LoadXmlFile(const std::string &path)
     {
         throw std::runtime_error("dtDynSpec::LoadXmlFile: failed to close XML file after reading: " + path);
     }
-    try
-    {
-        return DecodeXml(xml);
-    }
-    catch (const std::runtime_error &error)
-    {
-        throw std::runtime_error("dtDynSpec::LoadXmlFile: failed to decode XML file '" +
-                                 path + "': " + error.what());
-    }
+    return DecodeXmlImpl(xml, path);
+}
+
+dtDynIndex dtDynSpec::BodyId(const std::string &name) const
+{
+    return FindNamedObject(m_bodies, name);
+}
+
+dtDynIndex dtDynSpec::JointId(const std::string &name) const
+{
+    return FindNamedObject(m_joints, name);
+}
+
+dtDynIndex dtDynSpec::SiteId(const std::string &name) const
+{
+    return FindNamedObject(m_sites, name);
+}
+
+dtDynIndex dtDynSpec::ActuatorId(const std::string &name) const
+{
+    return FindNamedObject(m_actuators, name);
 }
 
 const dtArray<dtDynBodySpec> &dtDynSpec::Bodies() const

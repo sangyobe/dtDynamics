@@ -1,147 +1,107 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1120" viewBox="0 0 1800 1120" role="img" aria-labelledby="title desc">
-  <title id="title">To-Be dtDynamics Architecture</title>
-  <desc id="desc">Standalone dt::Dynamics package architecture showing dtDynSpec, dtDynModel, dtDynData, dtMath-only production dependency, direct WBC access, and separate MuJoCo and Pinocchio validation tools.</desc>
+<title id="title">To-Be: standalone dt::Dynamics package</title>
+<desc id="desc">Updated To-Be: standalone dt::Dynamics package diagram with smaller arrows and clearer package/data-flow structure.</desc>
+
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#ecfeff"/>
-      <stop offset="1" stop-color="#f8fafc"/>
-    </linearGradient>
-    <linearGradient id="headerGrad" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#0f766e"/>
-      <stop offset="1" stop-color="#2563eb"/>
-    </linearGradient>
-    <filter id="softShadow" x="-10%" y="-10%" width="120%" height="130%">
-      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#0f766e" flood-opacity="0.11"/>
+    <filter id="shadow" x="-8%" y="-8%" width="116%" height="122%">
+      <feDropShadow dx="0" dy="7" stdDeviation="8" flood-color="#0f172a" flood-opacity="0.10"/>
     </filter>
-    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse">
-      <path d="M1,1 L9,5 L1,9 Z" fill="#0f766e"/>
+    <marker id="arrow-red" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="strokeWidth">
+      <path d="M1,1 L7,4 L1,7 Z" fill="#b91c1c"/>
     </marker>
-    <marker id="arrowBlue" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse">
-      <path d="M1,1 L9,5 L1,9 Z" fill="#2563eb"/>
+    <marker id="arrow-teal" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="strokeWidth">
+      <path d="M1,1 L7,4 L1,7 Z" fill="#0f766e"/>
     </marker>
     <style>
-      .title { font-family: Arial, Helvetica, sans-serif; font-size: 52px; font-weight: 800; fill: #111827; letter-spacing: 0; }
+      .title { font-family: Arial, Helvetica, sans-serif; font-size: 48px; font-weight: 800; fill: #0f172a; letter-spacing: 0; }
       .subtitle { font-family: Arial, Helvetica, sans-serif; font-size: 22px; fill: #475569; letter-spacing: 0; }
-      .stage-title { font-family: Arial, Helvetica, sans-serif; font-size: 24px; font-weight: 800; fill: #111827; letter-spacing: 0; }
-      .stage-body { font-family: Arial, Helvetica, sans-serif; font-size: 18px; fill: #334155; letter-spacing: 0; }
-      .small { font-family: Arial, Helvetica, sans-serif; font-size: 16px; fill: #64748b; letter-spacing: 0; }
-      .label { font-family: Arial, Helvetica, sans-serif; font-size: 16px; font-weight: 700; fill: #0f766e; letter-spacing: 0; }
-      .blue-label { font-family: Arial, Helvetica, sans-serif; font-size: 16px; font-weight: 700; fill: #2563eb; letter-spacing: 0; }
-      .section-label { font-family: Arial, Helvetica, sans-serif; font-size: 18px; font-weight: 800; fill: #0f766e; letter-spacing: 0.04em; }
-      .boundary-title { font-family: Arial, Helvetica, sans-serif; font-size: 21px; font-weight: 800; fill: #0f172a; letter-spacing: 0; }
-      .boundary-body { font-family: Arial, Helvetica, sans-serif; font-size: 17px; fill: #334155; letter-spacing: 0; }
-      .chip { font-family: Arial, Helvetica, sans-serif; font-size: 15px; font-weight: 700; fill: #0f766e; letter-spacing: 0; }
-      .chip-blue { font-family: Arial, Helvetica, sans-serif; font-size: 15px; font-weight: 700; fill: #1d4ed8; letter-spacing: 0; }
+      .section { font-family: Arial, Helvetica, sans-serif; font-size: 17px; font-weight: 800; letter-spacing: 0.06em; }
+      .box-title { font-family: Arial, Helvetica, sans-serif; font-size: 23px; font-weight: 800; fill: #0f172a; letter-spacing: 0; }
+      .box-body { font-family: Arial, Helvetica, sans-serif; font-size: 17px; fill: #334155; letter-spacing: 0; }
+      .note-title { font-family: Arial, Helvetica, sans-serif; font-size: 20px; font-weight: 800; fill: #0f172a; letter-spacing: 0; }
+      .note-body { font-family: Arial, Helvetica, sans-serif; font-size: 16px; fill: #334155; letter-spacing: 0; }
+      .chip { font-family: Arial, Helvetica, sans-serif; font-size: 15px; font-weight: 800; letter-spacing: 0; }
     </style>
   </defs>
 
-  <rect width="1800" height="1120" fill="url(#bg)"/>
-  <rect x="0" y="0" width="1800" height="18" fill="url(#headerGrad)"/>
-
-  <text x="84" y="88" class="title">To-Be: standalone dt::Dynamics package</text>
-  <text x="86" y="128" class="subtitle">Native dtDyn* API, dtMath-first storage, MuJoCo-style model conventions, direct WBC access, and external validation sandboxes.</text>
-
-  <text x="86" y="188" class="section-label">PRODUCTION PACKAGE DATA FLOW</text>
-
-  <g filter="url(#softShadow)">
-    <rect x="82" y="220" width="292" height="272" rx="12" fill="#ffffff" stroke="#99f6e4" stroke-width="2"/>
-    <rect x="82" y="220" width="292" height="58" rx="12" fill="#ccfbf1"/>
-    <text x="110" y="256" class="stage-title">dtDynSpec</text>
-    <text x="110" y="314" class="stage-body">MJCF-like XML syntax</text>
-    <text x="110" y="348" class="stage-body">dynamic editing path</text>
-    <text x="110" y="398" class="stage-body">global body and fixed</text>
-    <text x="110" y="432" class="stage-body">body representation</text>
-    <text x="110" y="466" class="stage-body">before compilation</text>
-
-    <rect x="416" y="220" width="292" height="272" rx="12" fill="#ffffff" stroke="#bfdbfe" stroke-width="2"/>
-    <rect x="416" y="220" width="292" height="58" rx="12" fill="#dbeafe"/>
-    <text x="444" y="256" class="stage-title">dtDynCompile</text>
-    <text x="444" y="314" class="stage-body">builds deterministic</text>
-    <text x="444" y="348" class="stage-body">model arrays</text>
-    <text x="444" y="398" class="stage-body">resolves names, ids,</text>
-    <text x="444" y="432" class="stage-body">parent links, inertias,</text>
-    <text x="444" y="466" class="stage-body">and dof addresses</text>
-
-    <rect x="750" y="220" width="292" height="272" rx="12" fill="#ffffff" stroke="#99f6e4" stroke-width="2"/>
-    <rect x="750" y="220" width="292" height="58" rx="12" fill="#ccfbf1"/>
-    <text x="778" y="256" class="stage-title">dtDynModel</text>
-    <text x="778" y="314" class="stage-body">MuJoCo-style indices</text>
-    <text x="778" y="348" class="stage-body">and signed id fields</text>
-    <text x="778" y="398" class="stage-body">qpos / qvel layout</text>
-    <text x="778" y="432" class="stage-body">fixed and floating</text>
-    <text x="778" y="466" class="stage-body">roots supported</text>
-
-    <rect x="1084" y="220" width="292" height="272" rx="12" fill="#ffffff" stroke="#bfdbfe" stroke-width="2"/>
-    <rect x="1084" y="220" width="292" height="58" rx="12" fill="#dbeafe"/>
-    <text x="1112" y="256" class="stage-title">dtDynData</text>
-    <text x="1112" y="314" class="stage-body">single runtime output</text>
-    <text x="1112" y="348" class="stage-body">store for WBC terms</text>
-    <text x="1112" y="398" class="stage-body">M, C, g, bias,</text>
-    <text x="1112" y="432" class="stage-body">Jacobians, CoM,</text>
-    <text x="1112" y="466" class="stage-body">centroidal quantities</text>
-
-    <rect x="1418" y="220" width="292" height="272" rx="12" fill="#ffffff" stroke="#99f6e4" stroke-width="2"/>
-    <rect x="1418" y="220" width="292" height="58" rx="12" fill="#ccfbf1"/>
-    <text x="1446" y="256" class="stage-title">Robot controller</text>
-    <text x="1446" y="314" class="stage-body">LeoQuad and other</text>
-    <text x="1446" y="348" class="stage-body">WBC users read</text>
-    <text x="1446" y="398" class="stage-body">dtDynData directly</text>
-    <text x="1446" y="432" class="stage-body">with cached model ids</text>
-    <text x="1446" y="466" class="stage-body">and no adapter copy</text>
-  </g>
-
-  <path d="M374 356 H408" stroke="#0f766e" stroke-width="5" fill="none" marker-end="url(#arrow)"/>
-  <text x="391" y="332" text-anchor="middle" class="label">compile</text>
-  <path d="M708 356 H742" stroke="#0f766e" stroke-width="5" fill="none" marker-end="url(#arrow)"/>
-  <text x="725" y="332" text-anchor="middle" class="label">freeze layout</text>
-  <path d="M1042 356 H1076" stroke="#0f766e" stroke-width="5" fill="none" marker-end="url(#arrow)"/>
-  <text x="1059" y="332" text-anchor="middle" class="label">allocate once</text>
-  <path d="M1376 356 H1410" stroke="#0f766e" stroke-width="5" fill="none" marker-end="url(#arrow)"/>
-  <text x="1393" y="332" text-anchor="middle" class="label">direct read</text>
-
-  <text x="86" y="560" class="section-label">COMPUTATION PIPELINE</text>
-
-  <g filter="url(#softShadow)">
-    <rect x="166" y="594" width="420" height="188" rx="12" fill="#ffffff" stroke="#99f6e4" stroke-width="2"/>
-    <rect x="196" y="624" width="86" height="32" rx="16" fill="#ccfbf1" stroke="#99f6e4"/>
-    <text x="239" y="646" text-anchor="middle" class="chip">RNEA</text>
-    <text x="196" y="692" class="boundary-title">ComputeDynamicsRNEA</text>
-    <text x="196" y="734" class="boundary-body">Mmat, gravityTorq, nonlinTorq,</text>
-    <text x="196" y="764" class="boundary-body">and coriolisTorq for bias-force use.</text>
-
-    <rect x="690" y="594" width="420" height="188" rx="12" fill="#ffffff" stroke="#bfdbfe" stroke-width="2"/>
-    <rect x="720" y="624" width="92" height="32" rx="16" fill="#dbeafe" stroke="#bfdbfe"/>
-    <text x="766" y="646" text-anchor="middle" class="chip-blue">CCRBA</text>
-    <text x="720" y="692" class="boundary-title">ComputeDynamicsCCRBA</text>
-    <text x="720" y="734" class="boundary-body">Mmat, Cmat, gravityTorq, nonlinTorq,</text>
-    <text x="720" y="764" class="boundary-body">plus requested centroidal derivatives.</text>
-
-    <rect x="1214" y="594" width="420" height="188" rx="12" fill="#ffffff" stroke="#99f6e4" stroke-width="2"/>
-    <rect x="1244" y="624" width="126" height="32" rx="16" fill="#ccfbf1" stroke="#99f6e4"/>
-    <text x="1307" y="646" text-anchor="middle" class="chip">Jacobians</text>
-    <text x="1244" y="692" class="boundary-title">ComputeJacobians</text>
-    <text x="1244" y="734" class="boundary-body">Body, site, and point Jacobians,</text>
-    <text x="1244" y="764" class="boundary-body">Jdot, and Jdot times qvel queries.</text>
-  </g>
-
-  <path d="M376 594 C376 546 1228 546 1228 500" stroke="#2563eb" stroke-width="4" stroke-dasharray="9 9" fill="none" marker-end="url(#arrowBlue)"/>
-  <path d="M900 594 C900 552 1234 552 1234 500" stroke="#2563eb" stroke-width="4" stroke-dasharray="9 9" fill="none" marker-end="url(#arrowBlue)"/>
-  <path d="M1424 594 C1424 552 1250 552 1250 500" stroke="#2563eb" stroke-width="4" stroke-dasharray="9 9" fill="none" marker-end="url(#arrowBlue)"/>
-  <text x="1010" y="532" class="blue-label">all kernels update preallocated dtDynData fields</text>
-
-  <text x="86" y="848" class="section-label">BOUNDARIES AND VALIDATION</text>
-
-  <g filter="url(#softShadow)">
-    <rect x="82" y="884" width="760" height="160" rx="12" fill="#ffffff" stroke="#99f6e4" stroke-width="2"/>
-    <rect x="112" y="914" width="180" height="32" rx="16" fill="#ccfbf1" stroke="#99f6e4"/>
-    <text x="202" y="936" text-anchor="middle" class="chip">production target</text>
-    <text x="112" y="982" class="boundary-title">Native package links dtMath only</text>
-    <text x="112" y="1020" class="boundary-body">The dt::Dynamics production target owns dtDyn*, dtDynMath, dtDynUtils, and dtArray storage.</text>
-
-    <rect x="958" y="884" width="752" height="160" rx="12" fill="#ffffff" stroke="#bfdbfe" stroke-width="2" stroke-dasharray="12 8"/>
-    <rect x="988" y="914" width="192" height="32" rx="16" fill="#dbeafe" stroke="#bfdbfe"/>
-    <text x="1084" y="936" text-anchor="middle" class="chip-blue">test and benchmark</text>
-    <text x="988" y="982" class="boundary-title">External references stay outside production</text>
-    <text x="988" y="1020" class="boundary-body">MuJoCo 3.8.0 and Pinocchio 3.9.0 validate fixtures, indexing, transforms, dynamics, and plots.</text>
-  </g>
+<rect width="1800" height="1120" fill="#ecfeff"/>
+<rect x="0" y="0" width="1800" height="16" fill="#0f766e"/>
+<text x="76" y="88" class="title">To-Be: standalone dt::Dynamics package</text>
+<text x="78" y="128" class="subtitle">Native dtDyn* API, dtMath-first storage, MuJoCo-style indexing, direct WBC data access, and isolated reference validation.</text>
+<text x="78" y="186" class="section" fill="#0f766e">MAIN DATA FLOW</text>
+<g filter="url(#shadow)">
+<rect x="72" y="220" width="300" height="290" rx="8" fill="#fff" stroke="#99f6e4" stroke-width="2"/>
+<rect x="72" y="220" width="300" height="54" rx="8" fill="#ccfbf1"/>
+<text x="96" y="255" class="box-title">dtDynSpec</text>
+<text x="96" y="311" class="box-body">MJCF-like XML syntax</text>
+<text x="96" y="346" class="box-body">global body and fixed</text>
+<text x="96" y="375" class="box-body">bodies before compile</text>
+</g>
+<path d="M379,365 C405,365 373,365 399,365" fill="none" stroke="#0f766e" stroke-width="2.4" stroke-linecap="round" marker-end="url(#arrow-teal)"/>
+<g filter="url(#shadow)">
+<rect x="406" y="220" width="300" height="290" rx="8" fill="#fff" stroke="#bfdbfe" stroke-width="2"/>
+<rect x="406" y="220" width="300" height="54" rx="8" fill="#dbeafe"/>
+<text x="430" y="255" class="box-title">dtDynCompile</text>
+<text x="430" y="311" class="box-body">builds deterministic</text>
+<text x="430" y="340" class="box-body">arrays</text>
+<text x="430" y="375" class="box-body">resolves names, parents,</text>
+<text x="430" y="404" class="box-body">inertias, and dof</text>
+<text x="430" y="433" class="box-body">addresses</text>
+</g>
+<path d="M713,365 C739,365 707,365 733,365" fill="none" stroke="#0f766e" stroke-width="2.4" stroke-linecap="round" marker-end="url(#arrow-teal)"/>
+<g filter="url(#shadow)">
+<rect x="740" y="220" width="300" height="290" rx="8" fill="#fff" stroke="#99f6e4" stroke-width="2"/>
+<rect x="740" y="220" width="300" height="54" rx="8" fill="#ccfbf1"/>
+<text x="764" y="255" class="box-title">dtDynModel</text>
+<text x="764" y="311" class="box-body">MuJoCo-style signed ids</text>
+<text x="764" y="346" class="box-body">qpos/qvel/body/site</text>
+<text x="764" y="375" class="box-body">layouts match native</text>
+<text x="764" y="404" class="box-body">conventions</text>
+</g>
+<path d="M1047,365 C1073,365 1041,365 1067,365" fill="none" stroke="#0f766e" stroke-width="2.4" stroke-linecap="round" marker-end="url(#arrow-teal)"/>
+<g filter="url(#shadow)">
+<rect x="1074" y="220" width="300" height="290" rx="8" fill="#fff" stroke="#bfdbfe" stroke-width="2"/>
+<rect x="1074" y="220" width="300" height="54" rx="8" fill="#dbeafe"/>
+<text x="1098" y="255" class="box-title">dtDynData</text>
+<text x="1098" y="311" class="box-body">single runtime output</text>
+<text x="1098" y="340" class="box-body">store</text>
+<text x="1098" y="375" class="box-body">M, C, g, bias, Jacobians,</text>
+<text x="1098" y="404" class="box-body">CoM, centroidal terms</text>
+</g>
+<path d="M1381,365 C1407,365 1375,365 1401,365" fill="none" stroke="#0f766e" stroke-width="2.4" stroke-linecap="round" marker-end="url(#arrow-teal)"/>
+<g filter="url(#shadow)">
+<rect x="1408" y="220" width="300" height="290" rx="8" fill="#fff" stroke="#bbf7d0" stroke-width="2"/>
+<rect x="1408" y="220" width="300" height="54" rx="8" fill="#dcfce7"/>
+<text x="1432" y="255" class="box-title">LeoQuad / WBC</text>
+<text x="1432" y="311" class="box-body">consumes dtDynData</text>
+<text x="1432" y="340" class="box-body">directly</text>
+<text x="1432" y="375" class="box-body">controller computes tau</text>
+<text x="1432" y="404" class="box-body">from selected ingredients</text>
+</g>
+<text x="78" y="590" class="section" fill="#0f766e">KEY INTERPRETATION</text>
+<rect x="72" y="622" width="394" height="226" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+<text x="94" y="656" class="note-title">Production boundary</text>
+<text x="94" y="689" class="note-body">dtDynamics links as dt::Dynamics</text>
+<text x="94" y="714" class="note-body">and depends on dtMath only. No</text>
+<text x="94" y="739" class="note-body">MuJoCo or Pinocchio in production.</text>
+<rect x="504" y="622" width="394" height="226" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+<text x="526" y="656" class="note-title">Dynamics pipeline</text>
+<text x="526" y="689" class="note-body">ForwardKinematics,</text>
+<text x="526" y="714" class="note-body">ComputeDynamicsCCRBA/RNEA,</text>
+<text x="526" y="739" class="note-body">ComputeJacobians, and term helpers</text>
+<text x="526" y="764" class="note-body">are explicit.</text>
+<rect x="936" y="622" width="394" height="226" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+<text x="958" y="656" class="note-title">Validation sandbox</text>
+<text x="958" y="689" class="note-body">MuJoCo 3.8.0 and Pinocchio 3.9.0</text>
+<text x="958" y="714" class="note-body">stay under package validation</text>
+<text x="958" y="739" class="note-body">paths and benchmarks.</text>
+<rect x="1368" y="622" width="394" height="226" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+<text x="1390" y="656" class="note-title">Install layout</text>
+<text x="1390" y="689" class="note-body">Installed directly to ARTF:</text>
+<text x="1390" y="714" class="note-body">include/dtDynamics,</text>
+<text x="1390" y="739" class="note-body">lib/libdtDynamics.a,</text>
+<text x="1390" y="764" class="note-body">lib/cmake/dtDynamics.</text>
+<rect x="72" y="902" width="1656" height="96" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+<text x="104" y="942" class="note-title">Release target</text>
+<text x="104" y="975" class="note-body">Release candidate: package version 0.1.1.</text>
 </svg>

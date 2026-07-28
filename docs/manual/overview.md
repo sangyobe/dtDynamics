@@ -1,24 +1,26 @@
-# Overview {#dtdynamics_overview}
+# 개요 {#dtdynamics_overview}
 
 Author: Joonhee Jo
 
-dtDynamics is a standalone package for computing rigid-body dynamics ingredients used by realtime controllers and whole-body control (WBC) stacks. The package is designed around explicit model/data separation, predictable indexing, and documented compute paths that can run without measured C++ `operator new` allocation after the user has compiled a model, resized `dtDynData`, and pre-sized any caller-owned outputs.
+`dtDynamics`는 realtime controller와 whole-body control(WBC)이 소비하는 강체 동역학 **재료**를 계산하는 standalone package다. model/data 분리, 명시적 indexing, setup validation, 필요한 항만 선택하는 compute path를 중심으로 설계했다.
 
-## What the package is
+## 제공하는 것
 
-The package provides:
+- `dtDynSpec`: XML subset 또는 programmatic API로 만드는 mutable specification
+- `ValidateSpec`, `CompileSpecChecked`: 외부/editable setup input의 fail-closed boundary
+- `dtDynModel`: body/joint/site/actuator ID와 coordinate address를 고정한 compiled topology
+- `dtDynData`: state, kinematics, dynamics, Jacobian, scratch를 위한 preallocated storage
+- RNEA/CCRBA와 body/site/point Jacobian family
+- CoM, centroidal momentum, 선택적 derivative term
 
-- `dtDynSpec`: a mutable model specification, typically loaded from a supported XML subset or built programmatically.
-- `dtDynModel`: a compiled, immutable model with body, joint, coordinate, and site addresses.
-- `dtDynData`: mutable runtime storage for state, kinematics, dynamics, Jacobians, and scratch arrays.
-- Kinematics calls for body/site transforms and velocity-dependent quantities.
-- RNEA and CCRBA dynamics calls for controller-facing terms.
-- Body/site/point Jacobian utilities and derivative products.
+## 제공하지 않는 것
 
-## What the package is not
+contact solver, actuator model, simulator stepping, torque controller, estimator mapping, closed-chain constraint solver는 제공하지 않는다. MuJoCo와 Pinocchio는 validation/benchmark reference일 뿐 production dependency가 아니다.
 
-The package does not provide a contact solver, actuator model, simulator integration loop, robot controller, public MuJoCo dependency, or closed-chain solver. MuJoCo and Pinocchio are validation and benchmark references only.
+## 읽는 순서
 
-## Manual philosophy
+처음 사용하는 경우 @ref dtdynamics_modeling 에서 XML → checked compile → resize 경계를 확인한 뒤 @ref dtdynamics_example 을 실행한다. 그 다음 @ref dtdynamics_computation 의 prerequisite/frame convention과 @ref dtdynamics_realtime 의 resource scope를 읽는다. generated signature만 보고 호출하면 coordinate order, lifetime, prerequisite를 놓치기 쉽다.
 
-Like the MuJoCo manual, this documentation explains concepts before individual functions. For each major API, read the corresponding convention section first: most bugs in dynamics integration come from coordinate order, frame convention, lifetime/ownership, or assuming that a quantity exists before its prerequisite computation.
+## Resource claim의 범위
+
+문서의 zero-allocation 표현은 model compilation, `dtDynData::Resize()`, caller-owned output sizing이 끝난 뒤 benchmark가 측정한 C++ `operator new` 경로를 뜻한다. arbitrary API, logger, `malloc` family, OS/runtime까지 포함하는 보편적 hard-realtime 보장이 아니다.

@@ -56,10 +56,15 @@ def read_rows(path):
                     continue
                 resource_header = [
                     "record_type", "fixture", "nq", "nv", "nbody", "iterations",
-                    "mean_us", "median_us", "p99_us", "allocation_mean", "allocation_max",
+                    "mean_us", "median_us", "p95_us", "p99_us", "allocation_mean", "allocation_max",
                     "allocation_bytes_mean", "allocation_bytes_max",
                 ]
-                item = dict(zip(resource_header, raw))
+                if len(raw) == len(resource_header) - 1:
+                    legacy_header = [name for name in resource_header if name != "p95_us"]
+                    item = dict(zip(legacy_header, raw))
+                    item["p95_us"] = ""
+                else:
+                    item = dict(zip(resource_header, raw))
                 item["_section"] = "dtdynmodel_resource" if raw[0] in {"dtDynModel_resource", "dtDynModel_compile"} else "dtdyndata_resource"
                 rows.append(item)
                 section = None
@@ -107,11 +112,14 @@ def prefer_batch_summaries(rows, benchmark_name):
         item = dict(row)
         item["mean_us"] = summary["mean_us_median"]
         item["median_us"] = summary["median_us_median"]
+        item["p95_us"] = summary.get("p95_us_median", item.get("p95_us", ""))
         item["p99_us"] = summary["p99_us_median"]
         item["_batch_aggregated"] = "true"
         item["_batches"] = summary["batches"]
         item["_median_us_min"] = summary["median_us_min"]
         item["_median_us_max"] = summary["median_us_max"]
+        item["_p95_us_min"] = summary.get("p95_us_min", "")
+        item["_p95_us_max"] = summary.get("p95_us_max", "")
         item["_p99_us_min"] = summary["p99_us_min"]
         item["_p99_us_max"] = summary["p99_us_max"]
         promoted.append(item)
@@ -180,6 +188,49 @@ PART_A_COLORS = {
     "mujoco": "#2ca02c",
     "pinocchio": "#d62728",
 }
+
+
+def write_result_csv(path, fieldnames, rows):
+    with open(path, "w", newline="") as stream:
+        writer = csv.DictWriter(stream, fieldnames=fieldnames, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def save_result_csvs(native_rows, reference_rows, stage_rows, out_dir):
+    runtime_fields = [
+        "engine", "fixture", "state", "scope", "nq", "nv", "nbody",
+        "mean_us", "median_us", "p95_us", "p99_us",
+    ]
+    runtime_rows = []
+    for row in native_rows:
+        if row.get("_section") != "native_or_stage":
+            continue
+        item = dict(row)
+        item["engine"] = "dtDynamics"
+        runtime_rows.append(item)
+    for row in reference_rows:
+        if row.get("_section") != "reference_timing":
+            continue
+        item = dict(row)
+        item["scope"] = item.get("quantity_scope", "")
+        runtime_rows.append(item)
+    write_result_csv(out_dir / "runtime_by_fixture.csv", runtime_fields, runtime_rows)
+    write_result_csv(
+        out_dir / "scaling_by_dof.csv",
+        runtime_fields,
+        [row for row in runtime_rows if row.get("state") == "nominal"],
+    )
+
+    stage_fields = [
+        "fixture", "state", "stage", "nq", "nv", "nbody", "nsite",
+        "mean_us", "median_us", "p95_us", "p99_us",
+    ]
+    write_result_csv(
+        out_dir / "stage_breakdown.csv",
+        stage_fields,
+        [row for row in stage_rows if row.get("_section") == "native_or_stage"],
+    )
 
 
 def save_runtime_by_fixture(native_rows, reference_rows, out_dir, native_display_label="dtDynamics"):
@@ -333,7 +384,7 @@ def write_text(path, content):
     path.write_text(content)
 
 
-def save_runtime_same_scope_table(reference_rows, out_dir, native_display_label="dtDynamics"):
+def save_reference_context_table(reference_rows, out_dir, native_display_label="dtDynamics"):
     scope = "wbc_full_m_c_mdot_centroidal_com"
     fixtures = ["quadruped_floating_base", "multi_robot_floating_base", "single_manipulator_fixed_base"]
     engines = ["native", "pinocchio", "mujoco"]
@@ -341,7 +392,7 @@ def save_runtime_same_scope_table(reference_rows, out_dir, native_display_label=
     lines = [
         r"\begin{tabular}{llrr}",
         r"\toprule",
-        r"Fixture/state & Engine & Median us & p99 us \\",
+        r"Fixture/state & Engine & Median us & p95 us \\",
         r"\midrule",
     ]
     any_row = False
@@ -357,12 +408,12 @@ def save_runtime_same_scope_table(reference_rows, out_dir, native_display_label=
                 lines.append(
                     f"{latex_escape(fixture)}/{latex_escape(state)} & "
                     f"{latex_escape(display_engine_label(engine, native_display_label))} & "
-                    f"{as_float(row, 'median_us'):.3f} & {as_float(row, 'p99_us'):.3f} " + "\\\\")
+                    f"{as_float(row, 'median_us'):.3f} & {as_float(row, 'p95_us'):.3f} " + "\\\\")
                 any_row = True
     if not any_row:
-        lines.append(r"\multicolumn{4}{c}{Same-output benchmark rows not generated yet.} \\")
+        lines.append(r"\multicolumn{4}{c}{Reference-context benchmark rows not generated yet.} \\")
     lines += [r"\bottomrule", r"\end{tabular}", ""]
-    write_text(out_dir / "runtime_same_scope.tex", "\n".join(lines))
+    write_text(out_dir / "reference_context_runtime.tex", "\n".join(lines))
 
 
 def save_validation_summary_table(error_rows, out_dir):
@@ -414,13 +465,13 @@ def save_latency_tail_table(reference_rows, stage_rows, out_dir, native_display_
     lines = [
         r"\begin{tabular}{lrr}",
         r"\toprule",
-        r"Path & Median us & p99 us \\",
+        r"Path & Median us & p95 us \\",
         r"\midrule",
     ]
     if not timing_rows:
         lines.append(r"\multicolumn{3}{c}{Latency rows not generated yet.} \\")
     for label, row in timing_rows:
-        lines.append(f"{latex_escape(label)} & {as_float(row, 'median_us'):.3f} & {as_float(row, 'p99_us'):.3f} " + r"\\")
+        lines.append(f"{latex_escape(label)} & {as_float(row, 'median_us'):.3f} & {as_float(row, 'p95_us'):.3f} " + r"\\")
     lines += [r"\bottomrule", r"\end{tabular}", ""]
     write_text(out_dir / "latency_tail_summary.tex", "\n".join(lines))
 
@@ -455,10 +506,10 @@ def save_latency_cdf(reference_rows, stage_rows, out_dir, native_display_label="
                    and row.get("engine") in {"native", "pinocchio", "mujoco"}]
         labels = [display_engine_label(row.get("engine", "unknown"), native_display_label) for row in summary]
         med = [as_float(row, "median_us") for row in summary]
-        p99 = [as_float(row, "p99_us") for row in summary]
+        p95 = [as_float(row, "p95_us") for row in summary]
         x = list(range(len(labels)))
         ax.bar([i - 0.18 for i in x], med, width=0.36, label="median")
-        ax.bar([i + 0.18 for i in x], p99, width=0.36, label="p99")
+        ax.bar([i + 0.18 for i in x], p95, width=0.36, label="p95")
         ax.set_xticks(x)
         ax.set_xticklabels(labels, rotation=25, ha="right")
         ax.set_ylabel("runtime (us)")
@@ -603,7 +654,10 @@ def save_tables(reference_timing, reference_error, stage_rows, tables_out,
     obsolete_resource_table = tables_out / "dtdyndata_resource_summary.tex"
     if obsolete_resource_table.exists():
         obsolete_resource_table.unlink()
-    save_runtime_same_scope_table(reference_timing, tables_out, native_display_label)
+    obsolete_same_scope_table = tables_out / "runtime_same_scope.tex"
+    if obsolete_same_scope_table.exists():
+        obsolete_same_scope_table.unlink()
+    save_reference_context_table(reference_timing, tables_out, native_display_label)
     save_validation_summary_table(reference_error, tables_out)
     save_latency_tail_table(reference_timing, stage_rows, tables_out, native_display_label)
     save_sota_morphology_table(native_rows_for_tables, reference_timing, tables_out, native_display_label)
@@ -635,6 +689,7 @@ def main():
 
     if plt is None:
         print("warning: matplotlib is not installed; skipping figure generation and writing tables only if requested")
+    save_result_csvs(native_timing_rows, reference_timing, stage_rows, args.out)
     save_runtime_by_fixture(native_timing_rows, reference_timing, args.out, args.native_display_label)
     save_scaling_by_dof(native_timing_rows, reference_timing, args.out, args.native_display_label)
     save_stage_breakdown(stage_rows, args.out)

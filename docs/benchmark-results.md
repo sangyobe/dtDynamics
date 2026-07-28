@@ -4,7 +4,7 @@ Author: Joonhee Jo
 
 Date: 2026-07-23
 
-Updated: 2026-07-23 for CPU-affined seven-batch timing, robust batch-summary reporting, refreshed validation figures, and the latest package and headless LeoQuad gates.
+Updated: 2026-07-27 for expanded topology/scaling fixtures, p95 reporting, machine-readable figure CSVs, and refreshed CPU-affined native/stage evidence.
 
 This note records the current native `dtDynamics` benchmark baseline and the reference-path timing pass. The reference benchmarks use the private validation cache in the standalone package checkout:
 
@@ -35,6 +35,9 @@ python3 tools/plot_benchmark_results.py \
   --stages /tmp/stages.csv \
   --references /tmp/references.csv \
   --out docs/figures
+python3 tools/validate_reference_benchmark.py \
+  --references /tmp/references.csv \
+  --runtime-csv docs/figures/runtime_by_fixture.csv
 
 DTDYNAMICS_BENCHMARK_ONLY_EXTERNAL=1 \
 DTDYNAMICS_BENCHMARK_XML=/path/to/LeoQuad_QD1.xml \
@@ -51,13 +54,36 @@ The Pinocchio/Boost CMake warnings observed during validation configure are not 
 
 All benchmark executables append a final `benchmark_metadata,key,value` CSV section. It records the executable name, build type, compiler, C++ standard, platform, CPU model, hardware concurrency, clock source, clock steadiness, warmup iterations, measured iterations, batch count, and `NDEBUG` status. This metadata is appended after timing/error rows so existing timing parsers can continue to consume the primary CSV sections by header.
 
-Set `DTDYNAMICS_BENCHMARK_BATCHES=N` for repeated-run aggregation. When `N > 1`, the benchmarks append `benchmark_batch_summary` rows containing min/median/max of per-batch mean, median, and p99 runtime plus the maximum allocation count across batches. The plotting/report tool promotes the median of the batch means, medians, and p99 values into human tables and figures; the raw first-batch timing rows and batch min/max spread remain in the CSV. Historical or default single-batch CSVs remain unchanged.
+Set `DTDYNAMICS_BENCHMARK_BATCHES=N` for repeated-run aggregation. When `N > 1`, the benchmarks append `benchmark_batch_summary` rows containing min/median/max of per-batch mean, median, p95, and p99 runtime plus the maximum allocation count across batches. The plotting/report tool promotes the median of those batch summaries into human tables, figures, and normalized CSVs; the raw first-batch timing rows and batch min/max spread remain in the source CSV. Historical or default single-batch CSVs remain supported.
 
 The current timing evidence used `DTDYNAMICS_BENCHMARK_BATCHES=7` and `taskset -c 0` on an Intel Xeon w7-3545. CPU 0 affinity prevents process migration, but the host remained under the `intel_pstate` `powersave` governor without frequency locking or realtime priority. Each batch independently performs the documented warmup and measured iterations. The seven-batch central values therefore reduce one-off scheduler/DVFS distortion without claiming hard-realtime isolation.
 
 Each batch uses 20 warmup iterations and 200 measured iterations. Allocation counts are measured by intercepting global C++ `operator new` / `operator new[]` while the measured call is active; they do not intercept dtMath or library allocations that route directly through `malloc`/`calloc`/`realloc`.
 
 The raw benchmark CSVs retain allocation counters for regression checking. Human-readable timing tables omit allocation columns when every displayed row in that scope is zero; zero allocation is stated once in prose instead of repeated in every row.
+
+## Expanded fixture and artifact pass (2026-07-27)
+
+The refreshed native/stage pass used a Release build produced by GCC 11.4.0 on Linux 6.8.0, pinned to CPU 0 of an Intel Xeon w7-3545. It used seven independent batches, each with 20 warmup and 200 measured iterations. The CPU governor remained `powersave`; frequency was not locked and realtime scheduling was not requested. Values below are medians of the seven per-batch median and p95 summaries, not pooled-sample percentiles.
+
+The morphology identities are deliberately distinct:
+
+- `multi_robot_fixed_base`: two independent world-fixed roots, articulated branches, a nested fixed sensor frame, multiple sites, armatures, and actuators. It is the branching/multi-root fixed-base fixture.
+- `multi_robot_floating_base`: two independent free-joint roots with separate articulated branches and a nested fixed sensor frame. It exercises multiple floating trees in one model.
+- `fixed_body_heavy`: one world-fixed base, eight nested fixed mounts, and one terminal hinge. Its 11 bodies but one velocity coordinate isolate mixed welded/jointed topology.
+- `serial_chain_10` and `serial_chain_30`: matched fixed-base serial chains used as explicit 10- and 30-DOF scaling points.
+
+Each scope/stage batch compiles its fixture, constructs and resizes a fresh `dtDynData`, restores the deterministic state, and prepares the row's prerequisites before warmup and measurement. Stage rows are independent diagnostics and are not additive.
+
+| Fixture | nv | bodies | RNEA + CoM median / p95 us | Reduced CCRBA median / p95 us | Full CCRBA median / p95 us |
+|---|---:|---:|---:|---:|---:|
+| multi_robot_fixed_base | 4 | 8 | 2.275 / 2.351 | 1.548 / 1.590 | 1.740 / 1.777 |
+| multi_robot_floating_base | 16 | 8 | 3.095 / 3.181 | 2.892 / 2.984 | 3.813 / 3.937 |
+| fixed_body_heavy | 1 | 11 | 2.809 / 2.882 | 1.560 / 1.594 | 1.616 / 1.648 |
+| serial_chain_10 | 10 | 12 | 4.357 / 4.492 | 3.412 / 3.515 | 4.105 / 4.204 |
+| serial_chain_30 | 30 | 32 | 13.811 / 14.032 | 14.196 / 14.418 | 17.970 / 18.254 |
+
+The generated evidence families are included in the candidate under `docs/figures` as `runtime_by_fixture.{csv,png}`, `scaling_by_dof.{csv,png}`, and `stage_breakdown.{csv,png}`. Narrow `.gitignore` exceptions make the three CSVs deliverable while other generated CSVs remain ignored. CSV rows retain mean, median, p95, and p99 values. Figures visualize medians only; use the CSVs for tail analysis. `tools/validate_benchmark_results.py` fails closed when required fixture/state/scope/stage combinations, percentile columns, CSVs, or figures are absent.
 
 ## Part A — Native dynamics and reference scope
 
@@ -75,16 +101,16 @@ The native CSV `scope` column prevents the three package-native calls from being
 
 ### Nominal Part A timing
 
-| Fixture | RNEA + CoM median / p99 us | Reduced CCRBA median / p99 us | Full CCRBA median / p99 us | MuJoCo median / p99 us | Pinocchio median / p99 us |
+| Fixture | RNEA + CoM median / p95 us | Reduced CCRBA median / p95 us | Full CCRBA median / p95 us | MuJoCo median / p95 us | Pinocchio median / p95 us |
 |---|---:|---:|---:|---:|---:|
-| single_manipulator_fixed_base | 1.196 / 1.247 | 0.849 / 0.923 | 0.964 / 1.506 | 1.165 / 1.215 | 2.793 / 2.868 |
-| dual_manipulator_fixed_base | 1.501 / 1.570 | 1.046 / 1.112 | 1.187 / 1.259 | 1.368 / 1.420 | 3.575 / 3.945 |
-| multi_robot_fixed_base | 1.786 / 1.856 | 1.227 / 1.286 | 1.401 / 1.450 | 1.562 / 1.619 | 3.570 / 3.671 |
-| multi_robot_floating_base | 2.430 / 2.562 | 2.301 / 2.451 | 3.042 / 3.183 | 2.745 / 2.820 | 6.102 / 6.894 |
-| quadruped_floating_base | 4.499 / 4.680 | 4.102 / 4.302 | 5.116 / 7.552 | 5.023 / 5.253 | 11.784 / 13.663 |
-| fixed_body_heavy | 2.271 / 2.346 | 1.227 / 1.275 | 1.270 / 1.330 | 1.756 / 1.800 | 0.797 / 0.840 |
-| serial_chain_10 | 3.501 / 3.719 | 2.730 / 2.853 | 3.279 / 3.425 | 3.251 / 3.344 | 9.502 / 9.684 |
-| serial_chain_30 | 10.999 / 13.963 | 11.388 / 14.573 | 14.417 / 19.076 | 13.887 / 16.153 | 29.965 / 32.565 |
+| single_manipulator_fixed_base | 1.521 / 1.581 | 1.070 / 1.113 | 1.229 / 1.271 | 1.592 / 1.634 | 3.806 / 3.883 |
+| dual_manipulator_fixed_base | 1.896 / 1.953 | 1.324 / 1.368 | 1.501 / 1.552 | 1.884 / 1.948 | 4.853 / 4.938 |
+| multi_robot_fixed_base | 2.275 / 2.351 | 1.548 / 1.590 | 1.740 / 1.777 | 2.470 / 2.534 | 4.876 / 4.973 |
+| multi_robot_floating_base | 3.095 / 3.181 | 2.892 / 2.984 | 3.813 / 3.937 | 4.242 / 4.315 | 9.218 / 9.374 |
+| quadruped_floating_base | 5.751 / 5.881 | 5.073 / 5.213 | 6.398 / 6.560 | 6.320 / 6.384 | 17.962 / 18.090 |
+| fixed_body_heavy | 2.809 / 2.882 | 1.560 / 1.594 | 1.616 / 1.648 | 2.335 / 2.376 | 1.260 / 1.305 |
+| serial_chain_10 | 4.357 / 4.492 | 3.412 / 3.515 | 4.105 / 4.204 | 4.352 / 4.426 | 13.010 / 13.145 |
+| serial_chain_30 | 13.811 / 14.032 | 14.196 / 14.418 | 17.970 / 18.254 | 16.404 / 16.515 | 41.040 / 41.334 |
 
 ### Why `fixed_body_heavy` differs
 
@@ -102,11 +128,11 @@ The three states are deterministic coverage conditions rather than named control
 
 Each engine adapter applies these semantics through its coordinate mapping; the contextual timing rows should not be read as one shared raw `qpos` memory layout.
 
-| State | RNEA + CoM median / p99 us | Reduced CCRBA median / p99 us | Full CCRBA median / p99 us | MuJoCo median / p99 us | Pinocchio median / p99 us |
+| State | RNEA + CoM median / p95 us | Reduced CCRBA median / p95 us | Full CCRBA median / p95 us | MuJoCo median / p95 us | Pinocchio median / p95 us |
 |---|---:|---:|---:|---:|---:|
-| nominal | 4.499 / 4.680 | 4.102 / 4.302 | 5.116 / 7.552 | 5.023 / 5.253 | 11.784 / 13.663 |
-| asymmetric | 4.596 / 6.409 | 4.159 / 4.327 | 5.161 / 5.359 | 5.003 / 5.715 | 13.363 / 15.723 |
-| nonzero_velocity | 4.711 / 4.967 | 5.464 / 5.658 | 6.466 / 6.861 | 5.610 / 5.792 | 12.104 / 14.378 |
+| nominal | 5.751 / 5.881 | 5.073 / 5.213 | 6.398 / 6.560 | 6.320 / 6.384 | 17.962 / 18.090 |
+| asymmetric | 5.877 / 6.032 | 5.182 / 5.310 | 6.518 / 6.685 | 7.000 / 7.072 | 18.367 / 18.511 |
+| nonzero_velocity | 6.049 / 6.187 | 6.907 / 7.045 | 8.166 / 8.293 | 7.039 / 7.119 | 18.364 / 18.507 |
 
 For all three native scopes, mass-matrix symmetry and `nonlinTorq = coriolisTorq + gravityTorq` consistency errors were zero at benchmark output precision. Reduced/full CCRBA additionally reported zero centroidal-momentum consistency error; full CCRBA also reported zero CoM-velocity consistency error. MuJoCo and Pinocchio timings remain contextual rather than same-output speed ratios because their call sequences do not compute every native CCRBA output in the same form; their primary role is numerical validation over the documented overlap set.
 
@@ -114,7 +140,7 @@ For all three native scopes, mass-matrix symmetry and `nonlinTorq = coriolisTorq
 
 ![Nominal runtime by fixture](figures/runtime_by_fixture.png)
 
-`runtime_by_fixture.png` is a grouped-bar view of the nominal median rows in the Part A table. Each fixture group contains the three dtDynamics calls plus MuJoCo and Pinocchio. Lower bars mean less elapsed time for that specific measured call sequence on this host. The gaps among RNEA, reduced CCRBA, and full CCRBA show the cost of requesting progressively different native outputs; the MuJoCo and Pinocchio bars remain contextual because their output contracts are not identical. Tail behavior is intentionally left in the table's p99 columns rather than encoded in this median-only figure.
+`runtime_by_fixture.png` is a grouped-bar view of the nominal median rows in the Part A table. Each fixture group contains the three dtDynamics calls plus MuJoCo and Pinocchio. Lower bars mean less elapsed time for that specific measured call sequence on this host. The gaps among RNEA, reduced CCRBA, and full CCRBA show the cost of requesting progressively different native outputs; the MuJoCo and Pinocchio bars remain contextual because their output contracts are not identical. Tail behavior is intentionally left in the table's p95 columns rather than encoded in this median-only figure.
 
 #### Runtime scaling by velocity dimension
 
@@ -245,72 +271,76 @@ This explains most of the remaining native-vs-MuJoCo timing difference. `DTDYN_C
 
 ## Reference and validation scope
 
-MuJoCo scope: `mj_forward`, `mj_subtreeVel`, `mj_fullM`, site Jacobians, site `Jdot`, subtree CoM Jacobian, and angular momentum matrix.
+MuJoCo 3.8.0 timing scope is exactly `mj_forward`, `mj_subtreeVel`, `mj_fullM`, one `mj_jacSite` plus `mj_jacDot` per site, and one `mj_jacSubtreeCom` plus `mj_angmomMat` per world-root subtree. Its timing lambda owns only `mjModel`, `mjData`, and MuJoCo scratch buffers.
 
-Pinocchio scope: `crba`, generalized gravity, nonlinear effects, Coriolis matrix, `ccrba`, centroidal map time variation, and centroidal momentum time variation.
+Pinocchio 3.9.0 timing scope is exactly `crba`, lower-triangle mass-matrix completion, `computeGeneralizedGravity`, `nonLinearEffects`, `computeCoriolisMatrix`, `ccrba`, `computeCentroidalMapTimeVariation`, and `computeCentroidalMomentumTimeVariation`. Its timing lambda owns only the hand-built Pinocchio model/data and coordinate-adapter scratch.
 
-| Engine | Fixture | State | nq | nv | bodies | mean us | median us | p99 us |
+The native context row is timed independently with `ComputeDynamicsCCRBA(..., DTDYN_CCRBA_TERM_ALL)`. It is not called by either external timing lambda and does not have an output contract identical to either external sequence. The benchmark records Release-active independence oracles in metadata: `mujoco_native_validation_runs_during_timing=0` and `pinocchio_native_validation_runs_during_timing=0`. Native runs used for numerical comparison execute only after the corresponding external timing section. Consequently these values are library-overhead context, not same-output speed ratios.
+
+`tools/validate_reference_benchmark.py` checks the Release/seven-batch timing policy, all 72 timing keys and exact quantity scopes, all 72 seven-batch summary keys, finite ordered min/median/max fields, promoted median/p95/p99 ordering, exact agreement and unique full engine × fixture × state coverage for the 48 external promoted rows in `runtime_by_fixture.csv`, both zero-valued independence oracles, the Release-active non-finite-policy self-test, all 528 comparison rows, finite error/tolerance fields, the exact `465 ok / 63 skipped / 0 fail` status split, positive sample counts for every passing row, and nonempty diagnostics plus zero compared samples for every skipped row.
+
+| Engine | Fixture | State | nq | nv | bodies | mean us | median us | p95 us |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| mujoco | single_manipulator_fixed_base | nominal | 3 | 3 | 5 | 1.180160 | 1.165000 | 1.215000 |
-| mujoco | single_manipulator_fixed_base | asymmetric | 3 | 3 | 5 | 1.294070 | 1.290000 | 1.350000 |
-| mujoco | single_manipulator_fixed_base | nonzero_velocity | 3 | 3 | 5 | 1.293440 | 1.288000 | 1.342000 |
-| mujoco | dual_manipulator_fixed_base | nominal | 4 | 4 | 6 | 1.371030 | 1.368000 | 1.420000 |
-| mujoco | dual_manipulator_fixed_base | asymmetric | 4 | 4 | 6 | 1.462350 | 1.476000 | 1.528000 |
-| mujoco | dual_manipulator_fixed_base | nonzero_velocity | 4 | 4 | 6 | 1.340780 | 1.339000 | 1.390000 |
-| mujoco | multi_robot_fixed_base | nominal | 4 | 4 | 8 | 1.566050 | 1.562000 | 1.619000 |
-| mujoco | multi_robot_fixed_base | asymmetric | 4 | 4 | 8 | 1.649270 | 1.632000 | 1.714000 |
-| mujoco | multi_robot_fixed_base | nonzero_velocity | 4 | 4 | 8 | 1.918390 | 1.905000 | 1.973000 |
-| mujoco | multi_robot_floating_base | nominal | 18 | 16 | 8 | 2.765770 | 2.745000 | 2.820000 |
-| mujoco | multi_robot_floating_base | asymmetric | 18 | 16 | 8 | 3.018490 | 3.018000 | 3.108000 |
-| mujoco | multi_robot_floating_base | nonzero_velocity | 18 | 16 | 8 | 3.062650 | 3.068000 | 3.209000 |
-| mujoco | quadruped_floating_base | nominal | 19 | 18 | 14 | 5.107480 | 5.023000 | 5.253000 |
-| mujoco | quadruped_floating_base | asymmetric | 19 | 18 | 14 | 5.143070 | 5.003000 | 5.715000 |
-| mujoco | quadruped_floating_base | nonzero_velocity | 19 | 18 | 14 | 5.633740 | 5.610000 | 5.792000 |
-| mujoco | fixed_body_heavy | nominal | 1 | 1 | 11 | 1.758640 | 1.756000 | 1.800000 |
-| mujoco | fixed_body_heavy | asymmetric | 1 | 1 | 11 | 1.786010 | 1.784000 | 1.841000 |
-| mujoco | fixed_body_heavy | nonzero_velocity | 1 | 1 | 11 | 1.826920 | 1.795000 | 1.974000 |
-| mujoco | serial_chain_10 | nominal | 10 | 10 | 12 | 3.261730 | 3.251000 | 3.344000 |
-| mujoco | serial_chain_10 | asymmetric | 10 | 10 | 12 | 3.620200 | 3.610000 | 3.697000 |
-| mujoco | serial_chain_10 | nonzero_velocity | 10 | 10 | 12 | 3.269420 | 3.256000 | 3.393000 |
-| mujoco | serial_chain_30 | nominal | 30 | 30 | 32 | 13.842700 | 13.887000 | 16.153000 |
-| mujoco | serial_chain_30 | asymmetric | 30 | 30 | 32 | 15.605700 | 15.720000 | 17.560000 |
-| mujoco | serial_chain_30 | nonzero_velocity | 30 | 30 | 32 | 14.523400 | 14.126000 | 16.730000 |
-| pinocchio | single_manipulator_fixed_base | nominal | 3 | 3 | 5 | 2.801020 | 2.793000 | 2.868000 |
-| pinocchio | single_manipulator_fixed_base | asymmetric | 3 | 3 | 5 | 2.892370 | 2.876000 | 2.960000 |
-| pinocchio | single_manipulator_fixed_base | nonzero_velocity | 3 | 3 | 5 | 2.600310 | 2.597000 | 2.664000 |
-| pinocchio | dual_manipulator_fixed_base | nominal | 4 | 4 | 6 | 3.591920 | 3.575000 | 3.945000 |
-| pinocchio | dual_manipulator_fixed_base | asymmetric | 4 | 4 | 6 | 3.282790 | 3.295000 | 3.372000 |
-| pinocchio | dual_manipulator_fixed_base | nonzero_velocity | 4 | 4 | 6 | 3.317710 | 3.309000 | 3.379000 |
-| pinocchio | multi_robot_fixed_base | nominal | 4 | 4 | 8 | 3.575070 | 3.570000 | 3.671000 |
-| pinocchio | multi_robot_fixed_base | asymmetric | 4 | 4 | 8 | 3.324430 | 3.315000 | 3.391000 |
-| pinocchio | multi_robot_fixed_base | nonzero_velocity | 4 | 4 | 8 | 3.683860 | 3.674000 | 3.752000 |
-| pinocchio | multi_robot_floating_base | nominal | 18 | 16 | 8 | 6.154000 | 6.102000 | 6.894000 |
-| pinocchio | multi_robot_floating_base | asymmetric | 18 | 16 | 8 | 6.488600 | 6.359000 | 7.086000 |
-| pinocchio | multi_robot_floating_base | nonzero_velocity | 18 | 16 | 8 | 6.224210 | 6.204000 | 6.307000 |
-| pinocchio | quadruped_floating_base | nominal | 19 | 18 | 14 | 11.867400 | 11.784000 | 13.663000 |
-| pinocchio | quadruped_floating_base | asymmetric | 19 | 18 | 14 | 13.285500 | 13.363000 | 15.723000 |
-| pinocchio | quadruped_floating_base | nonzero_velocity | 19 | 18 | 14 | 12.139600 | 12.104000 | 14.378000 |
-| pinocchio | fixed_body_heavy | nominal | 1 | 1 | 11 | 0.800115 | 0.797000 | 0.840000 |
-| pinocchio | fixed_body_heavy | asymmetric | 1 | 1 | 11 | 0.819715 | 0.816000 | 0.865000 |
-| pinocchio | fixed_body_heavy | nonzero_velocity | 1 | 1 | 11 | 0.856995 | 0.853000 | 0.911000 |
-| pinocchio | serial_chain_10 | nominal | 10 | 10 | 12 | 9.168200 | 9.502000 | 9.684000 |
-| pinocchio | serial_chain_10 | asymmetric | 10 | 10 | 12 | 10.660900 | 10.638000 | 11.607000 |
-| pinocchio | serial_chain_10 | nonzero_velocity | 10 | 10 | 12 | 9.354540 | 9.080000 | 10.792000 |
-| pinocchio | serial_chain_30 | nominal | 30 | 30 | 32 | 28.559300 | 29.965000 | 32.565000 |
-| pinocchio | serial_chain_30 | asymmetric | 30 | 30 | 32 | 29.859000 | 30.710000 | 33.612000 |
-| pinocchio | serial_chain_30 | nonzero_velocity | 30 | 30 | 32 | 27.799500 | 27.728000 | 30.306000 |
+| mujoco | single_manipulator_fixed_base | nominal | 3 | 3 | 5 | 1.597670 | 1.592000 | 1.634000 |
+| mujoco | single_manipulator_fixed_base | asymmetric | 3 | 3 | 5 | 1.728520 | 1.723000 | 1.774000 |
+| mujoco | single_manipulator_fixed_base | nonzero_velocity | 3 | 3 | 5 | 1.726240 | 1.722000 | 1.773000 |
+| mujoco | dual_manipulator_fixed_base | nominal | 4 | 4 | 6 | 1.891750 | 1.884000 | 1.948000 |
+| mujoco | dual_manipulator_fixed_base | asymmetric | 4 | 4 | 6 | 2.056880 | 2.053000 | 2.117000 |
+| mujoco | dual_manipulator_fixed_base | nonzero_velocity | 4 | 4 | 6 | 2.060970 | 2.061000 | 2.131000 |
+| mujoco | multi_robot_fixed_base | nominal | 4 | 4 | 8 | 2.481840 | 2.470000 | 2.534000 |
+| mujoco | multi_robot_fixed_base | asymmetric | 4 | 4 | 8 | 2.614520 | 2.602000 | 2.665000 |
+| mujoco | multi_robot_fixed_base | nonzero_velocity | 4 | 4 | 8 | 2.620250 | 2.603000 | 2.664000 |
+| mujoco | multi_robot_floating_base | nominal | 18 | 16 | 8 | 4.253380 | 4.242000 | 4.315000 |
+| mujoco | multi_robot_floating_base | asymmetric | 18 | 16 | 8 | 4.365160 | 4.347000 | 4.429000 |
+| mujoco | multi_robot_floating_base | nonzero_velocity | 18 | 16 | 8 | 4.567630 | 4.556000 | 4.632000 |
+| mujoco | quadruped_floating_base | nominal | 19 | 18 | 14 | 6.340220 | 6.320000 | 6.384000 |
+| mujoco | quadruped_floating_base | asymmetric | 19 | 18 | 14 | 7.021800 | 7.000000 | 7.072000 |
+| mujoco | quadruped_floating_base | nonzero_velocity | 19 | 18 | 14 | 7.054600 | 7.039000 | 7.119000 |
+| mujoco | fixed_body_heavy | nominal | 1 | 1 | 11 | 2.340090 | 2.335000 | 2.376000 |
+| mujoco | fixed_body_heavy | asymmetric | 1 | 1 | 11 | 2.380520 | 2.378000 | 2.428000 |
+| mujoco | fixed_body_heavy | nonzero_velocity | 1 | 1 | 11 | 2.379740 | 2.364000 | 2.419000 |
+| mujoco | serial_chain_10 | nominal | 10 | 10 | 12 | 4.359390 | 4.352000 | 4.426000 |
+| mujoco | serial_chain_10 | asymmetric | 10 | 10 | 12 | 4.868060 | 4.857000 | 4.922000 |
+| mujoco | serial_chain_10 | nonzero_velocity | 10 | 10 | 12 | 4.863120 | 4.851000 | 4.925000 |
+| mujoco | serial_chain_30 | nominal | 30 | 30 | 32 | 16.451600 | 16.404000 | 16.515000 |
+| mujoco | serial_chain_30 | asymmetric | 30 | 30 | 32 | 18.344700 | 18.276000 | 18.419000 |
+| mujoco | serial_chain_30 | nonzero_velocity | 30 | 30 | 32 | 18.376200 | 18.276000 | 18.456000 |
+| pinocchio | single_manipulator_fixed_base | nominal | 3 | 3 | 5 | 3.823410 | 3.806000 | 3.883000 |
+| pinocchio | single_manipulator_fixed_base | asymmetric | 3 | 3 | 5 | 3.951150 | 3.932000 | 4.004000 |
+| pinocchio | single_manipulator_fixed_base | nonzero_velocity | 3 | 3 | 5 | 3.953860 | 3.930000 | 4.019000 |
+| pinocchio | dual_manipulator_fixed_base | nominal | 4 | 4 | 6 | 4.876290 | 4.853000 | 4.938000 |
+| pinocchio | dual_manipulator_fixed_base | asymmetric | 4 | 4 | 6 | 5.005310 | 4.983000 | 5.061000 |
+| pinocchio | dual_manipulator_fixed_base | nonzero_velocity | 4 | 4 | 6 | 4.999700 | 4.986000 | 5.054000 |
+| pinocchio | multi_robot_fixed_base | nominal | 4 | 4 | 8 | 4.891490 | 4.876000 | 4.973000 |
+| pinocchio | multi_robot_fixed_base | asymmetric | 4 | 4 | 8 | 5.048880 | 5.027000 | 5.100000 |
+| pinocchio | multi_robot_fixed_base | nonzero_velocity | 4 | 4 | 8 | 5.046500 | 5.028000 | 5.098000 |
+| pinocchio | multi_robot_floating_base | nominal | 18 | 16 | 8 | 9.256910 | 9.218000 | 9.374000 |
+| pinocchio | multi_robot_floating_base | asymmetric | 18 | 16 | 8 | 9.417450 | 9.388000 | 9.516000 |
+| pinocchio | multi_robot_floating_base | nonzero_velocity | 18 | 16 | 8 | 9.429050 | 9.406000 | 9.531000 |
+| pinocchio | quadruped_floating_base | nominal | 19 | 18 | 14 | 17.993400 | 17.962000 | 18.090000 |
+| pinocchio | quadruped_floating_base | asymmetric | 19 | 18 | 14 | 18.434000 | 18.367000 | 18.511000 |
+| pinocchio | quadruped_floating_base | nonzero_velocity | 19 | 18 | 14 | 18.435200 | 18.364000 | 18.507000 |
+| pinocchio | fixed_body_heavy | nominal | 1 | 1 | 11 | 1.265070 | 1.260000 | 1.305000 |
+| pinocchio | fixed_body_heavy | asymmetric | 1 | 1 | 11 | 1.295650 | 1.288000 | 1.340000 |
+| pinocchio | fixed_body_heavy | nonzero_velocity | 1 | 1 | 11 | 1.297440 | 1.288000 | 1.343000 |
+| pinocchio | serial_chain_10 | nominal | 10 | 10 | 12 | 13.070600 | 13.010000 | 13.145000 |
+| pinocchio | serial_chain_10 | asymmetric | 10 | 10 | 12 | 13.444600 | 13.386000 | 13.517000 |
+| pinocchio | serial_chain_10 | nonzero_velocity | 10 | 10 | 12 | 13.436400 | 13.381000 | 13.527000 |
+| pinocchio | serial_chain_30 | nominal | 30 | 30 | 32 | 41.178000 | 41.040000 | 41.334000 |
+| pinocchio | serial_chain_30 | asymmetric | 30 | 30 | 32 | 42.369900 | 42.224000 | 42.477000 |
+| pinocchio | serial_chain_30 | nonzero_velocity | 30 | 30 | 32 | 42.331400 | 42.203000 | 42.469000 |
 
 ### Quadruped nonzero-velocity latency summary
 
 ![Quadruped nonzero-velocity latency summary](figures/latency_cdf.png)
 
-This figure summarizes the median and p99 latency of the reference benchmark's floating-base quadruped nonzero-velocity rows. It compares the dtDynamics reference call sequence with MuJoCo and the canonical Pinocchio path; it is not the three-native-scope Part A figure. Median bars show typical measured latency, while p99 bars expose the observed tail in the CPU-affined seven-batch evidence. Affinity prevents migration but does not lock CPU frequency or provide realtime scheduling.
+This figure summarizes the median and p95 latency of the reference benchmark's floating-base quadruped nonzero-velocity rows. It places the dtDynamics full-output context call beside the MuJoCo and canonical Pinocchio call sequences; it is not a same-output comparison or the three-native-scope Part A figure. Median bars show typical measured latency, while p95 bars expose the observed tail in the CPU-affined seven-batch evidence. Affinity prevents migration but does not lock CPU frequency or provide realtime scheduling.
 
 ## Reference Error Summary
 
 `benchmark_dtDynamicsReferences` now emits numerical error rows after the timing table. Rows with `status=ok` are numerical comparisons. Rows with `status=skipped` are explicit diagnostics for intentionally non-comparable quantities.
 
-No reference-error figure is generated because every `status=ok` max/RMS error in this run is `0.000000` at CSV output precision. The status-bearing CSV rows and the coverage/skip explanations below carry more information than an all-zero chart.
+No reference-error figure is generated because the residuals are at floating-point roundoff scale. The fresh CSV writes error and tolerance fields in 17-digit scientific notation rather than rounding them to six decimal places. Across `status=ok` rows, the maximum absolute error was `5.684341886080802e-14` for MuJoCo and `2.8421709430404007e-13` for Pinocchio. Earlier `0.000000` display values meant “below six-decimal output resolution,” not mathematical identity. Status is computed from the unrounded residuals against the per-reference absolute/relative tolerance policy before serialization. Non-finite actual, expected, residual, accumulated-square, RMS, or tolerance values fail closed; a startup self-test probes `NaN` and infinity in every Release benchmark run.
 
 MuJoCo comparisons cover:
 
@@ -320,7 +350,7 @@ MuJoCo comparisons cover:
 - site `jacp`, `jacr`, `jacp_dot`, `jacr_dot`
 - `subtree_com`, `comJmat`, `cmAmat`, `centMom`
 
-All MuJoCo max/RMS errors were `0.000000` at benchmark output precision for every fixture/state in this run. The `multi_robot_fixed_base` fixture adds two independent world-root bodies, a fixed sensor frame, multiple sites, limited joints, armatures, and actuators. The `multi_robot_floating_base` fixture adds two independent free-joint roots with separate articulated branches. The MuJoCo model-parity test also checks `nroot`, `root_bodyid`, `root_mass`, and per-body `body_rootidx` for these multi-root cases.
+All 360 MuJoCo comparison rows were within policy for every fixture/state in this run. The `multi_robot_fixed_base` fixture adds two independent world-root bodies, a fixed sensor frame, multiple sites, limited joints, armatures, and actuators. The `multi_robot_floating_base` fixture adds two independent free-joint roots with separate articulated branches. The MuJoCo model-parity test also checks `nroot`, `root_bodyid`, `root_mass`, and per-body `body_rootidx` for these multi-root cases.
 
 Pinocchio comparisons cover:
 
@@ -329,4 +359,4 @@ Pinocchio comparisons cover:
 - floating-base quadruped `cmAmat`, `centMom`, and `cmAmatDot*qvel`
 - floating-base multi-robot `Mmat`, `gravityTorq`, `coriolisTorq`, and `nonlinTorq`
 
-All Pinocchio max/RMS errors were `0.000000` at benchmark output precision for `status=ok` rows. The fixed-base multi-robot Pinocchio reference includes matching armature values so its mass matrix is comparable to the MuJoCo/native fixture. The multi-floating Pinocchio reference now uses explicit free-joint qpos/qvel maps for both independent roots. Its whole-system mass, gravity, nonlinear, and Coriolis terms are comparable to native `dtDynamics`; multi-root centroidal rows are emitted as `status=skipped` because native `dtDynamics` stores those outputs per-root stacked, while Pinocchio exposes whole-system centroidal quantities for the hand-built reference model. Pinocchio centroidal rows for fixed-base benchmark fixtures are also emitted as `status=skipped` because the benchmark XML includes world-fixed inertial bodies; those bodies affect native/MuJoCo whole-subtree centroidal references but are not represented in the current hand-built fixed-base Pinocchio models.
+All 105 Pinocchio `status=ok` rows were within policy. The fixed-base multi-robot Pinocchio reference includes matching armature values so its mass matrix is comparable to the MuJoCo/native fixture. The multi-floating Pinocchio reference uses explicit free-joint qpos/qvel maps for both independent roots. Its whole-system mass, gravity, nonlinear, and Coriolis terms are comparable to native `dtDynamics`. The 63 centroidal rows without equivalent contracts are `status=skipped`, have `count=0`, and retain a diagnostic rather than being counted as passing: multi-root native centroidal outputs are per-root stacked while Pinocchio exposes whole-system values; fixed-base XML fixtures include world-fixed inertial bodies omitted from the hand-built Pinocchio models.

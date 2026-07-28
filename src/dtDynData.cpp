@@ -3,7 +3,7 @@
  \brief     Mutable native dtDynamics runtime data definitions.
  \author    Joonhee Jo, joonhee.jo@hyundai.com
  \date      2026. 07. 16
- \version   0.1.0
+ \version   0.1.1
  \copyright RoboticsLab ART All rights reserved.
 */
 
@@ -26,6 +26,14 @@ bool DenseMatrixHasSize(const dtDynDenseMatrix &matrix,
 {
     return matrix.GetRowSize() == ToDtMathDim(rows) &&
            matrix.GetColSize() == ToDtMathDim(cols);
+}
+
+void SetDenseMatrixZeroIfAllocated(dtDynDenseMatrix &matrix)
+{
+    if (matrix.GetRowSize() > 0 && matrix.GetColSize() > 0)
+    {
+        matrix.SetZero();
+    }
 }
 
 template <typename T>
@@ -88,10 +96,10 @@ void dtDynData::Resize(const dtDynModel &model)
         ResizeDenseMatrix(body_jacr[bodyId], 3, model.nv);
         ResizeDenseMatrix(body_jacp_dot[bodyId], 3, model.nv);
         ResizeDenseMatrix(body_jacr_dot[bodyId], 3, model.nv);
-        body_jacp[bodyId].SetZero();
-        body_jacr[bodyId].SetZero();
-        body_jacp_dot[bodyId].SetZero();
-        body_jacr_dot[bodyId].SetZero();
+        SetDenseMatrixZeroIfAllocated(body_jacp[bodyId]);
+        SetDenseMatrixZeroIfAllocated(body_jacr[bodyId]);
+        SetDenseMatrixZeroIfAllocated(body_jacp_dot[bodyId]);
+        SetDenseMatrixZeroIfAllocated(body_jacr_dot[bodyId]);
     }
 
     for (dtDynIndex siteId = 0; siteId < model.nsite; ++siteId)
@@ -100,10 +108,10 @@ void dtDynData::Resize(const dtDynModel &model)
         ResizeDenseMatrix(site_jacr[siteId], 3, model.nv);
         ResizeDenseMatrix(site_jacp_dot[siteId], 3, model.nv);
         ResizeDenseMatrix(site_jacr_dot[siteId], 3, model.nv);
-        site_jacp[siteId].SetZero();
-        site_jacr[siteId].SetZero();
-        site_jacp_dot[siteId].SetZero();
-        site_jacr_dot[siteId].SetZero();
+        SetDenseMatrixZeroIfAllocated(site_jacp[siteId]);
+        SetDenseMatrixZeroIfAllocated(site_jacr[siteId]);
+        SetDenseMatrixZeroIfAllocated(site_jacp_dot[siteId]);
+        SetDenseMatrixZeroIfAllocated(site_jacr_dot[siteId]);
     }
 
     cdof.resize(model.nv);

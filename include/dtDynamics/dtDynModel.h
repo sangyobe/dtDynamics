@@ -3,7 +3,7 @@
  \brief     Compiled native dtDynamics model.
  \author    Joonhee Jo, joonhee.jo@hyundai.com
  \date      2026. 07. 16
- \version   0.1.0
+ \version   0.1.1
  \copyright RoboticsLab ART All rights reserved.
 */
 
@@ -109,6 +109,8 @@ public:
     dtDynIndex JointId(const std::string &name) const;
     /*! \brief Return named site id, or DTDYN_INVALID_INDEX when the name is absent. */
     dtDynIndex SiteId(const std::string &name) const;
+    /*! \brief Return named actuator id, or DTDYN_INVALID_INDEX when the name is absent. */
+    dtDynIndex ActuatorId(const std::string &name) const;
 
     /*! \brief True when \p body is the global world body id. */
     bool IsWorldBody(dtDynIndex body) const;
@@ -116,8 +118,8 @@ public:
     bool IsFixedBody(dtDynIndex body) const;
 
     /*!
-     \brief Rebuild body, joint, and site name-to-id maps after direct array edits.
-     \details This is setup-time work; no actuator-name lookup API is exposed.
+     \brief Rebuild all named-object id maps after direct array edits.
+     \details This is setup-time work covering bodies, joints, sites, and actuators.
     */
     void RebuildNameMaps();
 
@@ -125,6 +127,7 @@ private:
     std::unordered_map<std::string, dtDynIndex> m_bodyNameToId;
     std::unordered_map<std::string, dtDynIndex> m_jointNameToId;
     std::unordered_map<std::string, dtDynIndex> m_siteNameToId;
+    std::unordered_map<std::string, dtDynIndex> m_actuatorNameToId;
 };
 
 } // namespace dt::Dynamics

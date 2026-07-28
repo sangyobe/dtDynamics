@@ -176,6 +176,7 @@ inline void PrintBatchSummaryHeader(std::ostream &out)
     out << "benchmark_batch_summary,benchmark,fixture,state,stage,batches,"
            "mean_us_min,mean_us_median,mean_us_max,"
            "median_us_min,median_us_median,median_us_max,"
+           "p95_us_min,p95_us_median,p95_us_max,"
            "p99_us_min,p99_us_median,p99_us_max,allocation_max_max\n";
 }
 
@@ -186,11 +187,13 @@ inline std::string BuildBatchSummaryRow(const char *benchmarkName,
                                         const int batchCount,
                                         const dtArray<double> &meanUs,
                                         const dtArray<double> &medianUs,
+                                        const dtArray<double> &p95Us,
                                         const dtArray<double> &p99Us,
                                         const unsigned long long allocationMax)
 {
     const ScalarSummary meanSummary = SummarizeScalars(meanUs);
     const ScalarSummary medianSummary = SummarizeScalars(medianUs);
+    const ScalarSummary p95Summary = SummarizeScalars(p95Us);
     const ScalarSummary p99Summary = SummarizeScalars(p99Us);
 
     std::ostringstream out;
@@ -206,6 +209,9 @@ inline std::string BuildBatchSummaryRow(const char *benchmarkName,
         << medianSummary.min << ','
         << medianSummary.median << ','
         << medianSummary.max << ','
+        << p95Summary.min << ','
+        << p95Summary.median << ','
+        << p95Summary.max << ','
         << p99Summary.min << ','
         << p99Summary.median << ','
         << p99Summary.max << ','

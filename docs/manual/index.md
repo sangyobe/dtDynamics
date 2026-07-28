@@ -2,31 +2,33 @@
 
 Author: Joonhee Jo
 
-This manual is the source for the generated dtDynamics documentation. It is written as a conceptual manual first and an API index second: users should understand the model/data lifecycle, coordinate conventions, realtime allocation rules, and validation scope before calling the API.
+이 manual은 generated API 목록보다 먼저 읽는 conceptual contract다. model/data lifecycle, coordinate/frame, setup/realtime 경계, validation scope를 먼저 정하고 각 함수 signature를 연결한다.
 
-## Build the manual
+현재 package identity는 **0.1.1**이다.
+
+## Manual 생성
 
 ```bash
 cd /path/to/dtDynamics
 tools/validate_docs.sh
 ```
 
-Generated HTML is written under `build/docs/doxygen/html/` and is not meant to be committed by default.
+`tools/validate_docs.sh`는 current-document content oracle, Doxygen warning scan, Graphviz generation을 함께 실행한다. generated HTML은 `build/docs/doxygen/html/` 아래에 생성한다.
 
 ## Manual map
 
-- @ref dtdynamics_overview "Overview": package scope and non-goals.
-- @ref dtdynamics_modeling "Modeling and Data Lifecycle": `dtDynSpec`, `dtDynModel`, `dtDynData`, tree topology, indexing, and coordinates.
-- @ref dtdynamics_computation "Computation Pipeline": FK, RNEA, CCRBA, Jacobians, CoM, centroidal, and term masks.
-- @ref dtdynamics_example "Minimal End-to-End Usage Example": setup-to-loop code flow for a small tree model.
-- @ref dtdynamics_realtime "Realtime Resource Model": realtime lifecycle, allocation boundaries, and resource measurements.
-- @ref dtdynamics_validation "Validation": native/reference validation and convention transforms.
-- @ref dtdynamics_benchmarks "Benchmarks and Resource Reports": benchmark binaries, CSV sections, resource columns, and interpretation.
-- @ref dtdynamics_integration "Controller Integration": controller/WBC integration pattern.
-- @ref dtdynamics_api_map "API Map": curated public API map.
-- @ref dtdynamics_limitations "Limitations and Scope Boundaries": conservative scope limits and future work.
-- @ref dtdynamics_release "Release and Package Boundary Checks": release/package-boundary checks.
+- @ref dtdynamics_overview "개요": package scope와 non-goal
+- @ref dtdynamics_modeling "모델과 데이터 수명주기": XML, validation, compilation, lookup, coordinates
+- @ref dtdynamics_computation "계산 pipeline": FK, RNEA, CCRBA, Jacobian, CoM, centroidal term
+- @ref dtdynamics_example "최소 end-to-end 예제": load부터 compute까지
+- @ref dtdynamics_realtime "Realtime resource model": setup/loop 분리와 allocation evidence 범위
+- @ref dtdynamics_validation "검증": native/external reference와 fail-closed artifact gate
+- @ref dtdynamics_benchmarks "Benchmark": raw CSV, summary, figure, timing 해석
+- @ref dtdynamics_integration "Controller 통합": WBC handoff와 model update
+- @ref dtdynamics_api_map "API 지도": public setup/compute/error family
+- @ref dtdynamics_limitations "제한": 지원 범위와 compatibility 영향
+- @ref dtdynamics_release "Release 경계": exact package/install/publication gate
 
-## Design principle
+## 설계 원칙
 
-dtDynamics is a standalone dynamics ingredient engine. It computes control-relevant quantities such as mass matrices, bias/gravity/Coriolis terms, Jacobians, derivative products, CoM quantities, and centroidal quantities. It is not a simulator, contact solver, torque controller, or MuJoCo wrapper.
+`dtDynamics`는 mass/bias/gravity/Coriolis, Jacobian/derivative, CoM/centroidal quantity를 계산한다. simulator, contact solver, final torque controller, MuJoCo wrapper가 아니다. 외부 model은 setup에서 fail-closed 검증하고 realtime에는 compiled model, preallocated data, cached numeric mapping만 넘긴다.

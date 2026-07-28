@@ -1,74 +1,113 @@
-# Modeling and Data Lifecycle {#dtdynamics_modeling}
+# 모델과 데이터 수명주기 {#dtdynamics_modeling}
 
 Author: Joonhee Jo
 
-The central lifecycle is:
+외부 모델을 control loop에서 안전하게 사용하려면 아래 경계를 한 번만 통과한다.
 
 @dotfile diagrams/model_layers.dot
 
-## dtDynSpec: editable intent
+```text
+XML/file 또는 XML/text
+  -> dtDynSpec (편집 가능)
+  -> ValidateSpec / CompileSpecChecked
+  -> dtDynModel (주소와 차원 고정)
+  -> dtDynData::Resize (runtime storage 준비)
+  -> ID와 state-address cache
+  -> realtime compute
+```
 
-`dtDynSpec` stores the user's intended tree model before compilation. It is the right layer for adding bodies, joints, sites, inertial data, and supported XML-subset metadata. It is not the realtime layer.
+## XML text와 filesystem XML
 
-## XML text and file I/O
-
-Use `dtDynSpec::DecodeXml(xml)` when XML is already in memory. For filesystem workflows, let the package own the text I/O:
+XML bytes가 이미 memory에 있으면 `DecodeXml()`/`EncodeXml()`를 사용한다. 파일 경로를 다룰 때는 별도 `ReadTextFile` helper를 만들지 말고 package-owned API를 사용한다.
 
 ```cpp
 const dtDynSpec spec = dtDynSpec::LoadXmlFile("model/robot.xml");
 spec.SaveXmlFile("model/robot-native.xml");
 ```
 
-`LoadXmlFile` reports open/read failures and wraps decode errors with the source path. `SaveXmlFile` writes the exact `EncodeXml()` bytes and reports open/write failures with the destination path. It does not create missing parent directories. Both operations belong to offline model construction, not the realtime loop.
+`SaveXmlFile()`은 `EncodeXml()`과 같은 bytes를 기록하며 부모 디렉터리를 만들지 않는다. `LoadXmlFile()`과 `SaveXmlFile()`은 모두 setup/offline API다.
 
-## dtDynModel: compiled structure
+XML semantic failure는 `dtDynXmlError`로 통일된다. machine interface는 `what()` 문자열이 아니라 다음 accessor다.
 
-`dtDynModel` is produced by compiling a spec. It fixes body IDs, joint IDs, `qpos` addresses, `qvel` addresses, site IDs, root metadata, and dimensions such as `nq`, `nv`, `nbody`, `nsite`, and `nroot`.
+- `Code()`: stable `dtDynXmlErrorCode`
+- `SourcePath()`: `LoadXmlFile()`에 전달한 정확한 path; `DecodeXml()`이면 빈 문자열
+- `Offset()`: original input의 **zero-based byte offset**
 
-The model should be treated as immutable during realtime control. Recompile only outside the realtime loop.
+```cpp
+try
+{
+    const dtDynSpec spec = dtDynSpec::LoadXmlFile("model/robot.xml");
+    const dtDynModel model = CompileSpecChecked(spec);
+}
+catch (const dtDynXmlError &error)
+{
+    ReportXmlFailure(error.Code(), error.SourcePath(), error.Offset());
+}
+```
 
-## dtDynData: preallocated runtime storage
+invalid/overflow number, `NaN`/`Inf`, 잘못된 vector arity, malformed/misnested markup, duplicate name, unresolved reference, unsupported syntax·semantics는 조용히 보정하지 않고 실패한다. XML declaration은 original input byte 0에서 한 번만 허용된다.
 
-`dtDynData` owns state vectors, output matrices, and scratch arrays sized for a specific model. Call `dtDynData::Resize(model)` before entering a hard realtime loop. The benchmark resource section measures this resize cost separately because it is intentionally not part of the zero-allocation compute path.
+## Checked compilation과 trusted compilation
 
-## Tree and coordinate convention
+외부 XML과 public mutable array를 거친 spec에는 먼저 setup validation을 적용한다.
 
-The compiled parent links form a tree or forest. Closed loops, parallel mechanisms, equality constraints, tendons, contact, sensors, assets, and full MJCF defaults/classes are outside the current solved-dynamics API unless a specific feature is implemented and validated. MuJoCo-compatible wording in this manual refers to indexing/convention compatibility, not a production MuJoCo dependency.
+```cpp
+dtDynValidationError error;
+if (!ValidateSpec(spec, &error))
+{
+    ReportSpecFailure(error.code, error.object, error.index, error.message);
+}
+const dtDynModel model = CompileSpecChecked(spec);
+```
 
-The compiled model dimensions follow the generalized-coordinate split
+`dtDynValidationError`의 `code`, `object`, `index`가 machine-readable 위치를 제공한다. `CompileSpecChecked()`는 validation 후 기존 compiler를 호출한다. `CompileSpec()`는 backward compatibility를 위해 유지하며, 이미 검증된 trusted setup data에만 사용한다. validation scan은 dynamics hot loop에 들어가지 않는다.
+
+## dtDynSpec와 dtDynModel lookup
+
+두 layer는 body, joint, site, actuator 네 종류를 같은 방식으로 조회한다.
+
+```cpp
+const dtDynIndex body = spec.BodyId("base");
+const dtDynIndex joint = spec.JointId("hip");
+const dtDynIndex site = spec.SiteId("foot");
+const dtDynIndex actuator = spec.ActuatorId("hip_motor");
+
+if (body == DTDYN_INVALID_INDEX ||
+    joint == DTDYN_INVALID_INDEX ||
+    site == DTDYN_INVALID_INDEX ||
+    actuator == DTDYN_INVALID_INDEX)
+{
+    throw std::runtime_error("required body/joint/site/actuator is missing");
+}
+```
+
+`dtDynSpec`의 public arrays는 사용자가 직접 수정할 수 있으므로 lookup은 setup-time linear scan이다. 영구 cache를 두면 direct mutation 뒤 stale map을 숨길 수 있다. compiled `dtDynModel`은 setup boundary가 통제되므로 rebuilt map을 사용한다. 어느 쪽도 missing name에 예외를 던지지 않고 `DTDYN_INVALID_INDEX`를 반환한다.
+
+## 주소와 좌표
+
+body `0`은 world body다. fixed body는 물리적 inertia와 frame을 가질 수 있지만 generalized coordinate column을 추가하지 않는다. joint `j`의 주소는 half-open interval로 해석한다.
 
 \f[
-q \in \mathbb{R}^{n_q}, \qquad v \in \mathbb{R}^{n_v}, \qquad n_q \neq n_v
+[qadr_j, qadr_j+nq_j), \qquad [vadr_j, vadr_j+nv_j).
 \f]
 
-for models with quaternion floating bases. The distinction is deliberate: `qpos` stores configuration coordinates while `qvel` stores tangent-space velocities.
+floating base에서는 `nq != nv`일 수 있다. `qpos`는 configuration coordinate, `qvel`은 tangent-space velocity다. body order, joint order, `qpos` order, `qvel` column order를 같은 것으로 가정하지 않는다. centroidal output의 각 root block은 `[linear; angular]` row 순서를 사용한다.
 
-- Body `0` is the world body.
-- Signed invalid IDs use `-1` where applicable.
-- Fixed/no-joint bodies are physical bodies but do not contribute generalized velocity columns.
-- Floating-base roots use the package's MuJoCo-compatible address convention for the supported coordinate type.
-- Centroidal rows are per-root `[linear; angular]` rows.
+## dtDynData와 compatibility
 
-## Address ownership and state vectors
+`dtDynData::Resize(model)`은 `nq`, `nv`, body/site/root count에 맞춰 state, output, scratch storage를 준비한다. `nq == 0`, `nv == 0`인 fully fixed model도 유효하다. 이때 site Jacobian은 logical `3 x 0`, dynamics matrix는 `0 x 0`이다.
 
-Compiled addresses are the boundary between user code and the algorithms. A joint contributes a configuration interval `[qadr_j, qadr_j + nq_j)`. It also contributes a velocity interval `[vadr_j, vadr_j + nv_j)`. These are standard half-open intervals: the lower address is included and the upper address is excluded.
+`data.IsCompatible(model)`은 **storage dimension과 model-indexed buffer size만** 확인한다. 같은 차원을 가진 서로 다른 model identity, name, topology, inertia가 같다는 뜻은 아니다. model을 다시 compile했다면 차원이 같더라도 cached ID/address assumption을 다시 만들고 `Resize()`를 재검토한다.
 
-For scalar joints the intervals normally have the same length. For floating bases, `qpos` stores position plus orientation coordinates while `qvel` stores tangent-space spatial velocity, so the intervals differ. Write state by compiled addresses or by a higher-level adapter that was built from those addresses; do not assume body order, joint order, and velocity-column order are interchangeable.
+## Neutral/default state initializer 결정
 
-A practical setup checklist is:
+package-level neutral-state initializer는 **NO-GO**다. free/ball joint quaternion, robot-specific rest pose, estimator convention을 하나의 보편적 default로 정하면 benchmark/controller policy가 package에 섞인다. caller는 compiled address와 자신의 model contract에 따라 `qpos`/`qvel`을 명시적으로 초기화해야 한다.
 
-1. Build or decode `dtDynSpec`.
-2. Compile it once with `CompileSpec()`.
-3. Verify expected dimensions and required names (`BodyId`, `JointId`, `SiteId`).
-4. Cache numeric task IDs and any state-address mapping used by the estimator/controller.
-5. Resize one `dtDynData` per concurrently evaluated model instance.
+## Setup checklist
 
-## Model/data compatibility
-
-`dtDynModel` and `dtDynData` are paired objects. A data object resized for one model should not be reused with a different model unless `Resize()` is called again. Integration code should treat `data.IsCompatible(model) == true` as a setup or debug gate before enabling a realtime loop. Recompiling a model invalidates cached assumptions about dimensions, lookup IDs, and address intervals even if the names are unchanged.
-
-## Fixed bodies and sites
-
-A fixed body contributes a transform and inertia but no generalized-velocity column. In address terms, a body with no joint adds no `qpos` or `qvel` interval.
-
-Fixed bodies preserve names, inertial data, task sites, and child topology. They can matter for exported task frames even when they do not add DOFs. Do not remove or fold fixed bodies in a way that breaks public lookup or site/task indexing.
+1. `LoadXmlFile()` 또는 `DecodeXml()`로 `dtDynSpec`을 만든다.
+2. `ValidateSpec()`/`CompileSpecChecked()`로 외부 입력을 fail-closed 검증한다.
+3. expected dimensions와 body/joint/site/actuator name을 확인한다.
+4. `DTDYN_INVALID_INDEX`를 확인한 뒤 numeric ID와 state-address mapping을 cache한다.
+5. 동시 평가 instance마다 하나의 `dtDynData`를 만들고 `Resize(model)`한다.
+6. 그 뒤에만 realtime state update와 compute를 시작한다.

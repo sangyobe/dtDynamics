@@ -3,19 +3,56 @@
  \brief     Editable native dtDynamics model specification.
  \author    Joonhee Jo, joonhee.jo@hyundai.com
  \date      2026. 07. 16
- \version   0.1.0
+ \version   0.1.1
  \copyright RoboticsLab ART All rights reserved.
 */
 
 #ifndef ALGORITHM_DTDYNAMICS_DTDYNSPEC_H_
 #define ALGORITHM_DTDYNAMICS_DTDYNSPEC_H_
+#include <dtDynamics/dtArray.h>
+#include <dtDynamics/dtDynTypes.h>
 
-#include "dtDynamics/dtDynTypes.h"
-
+#include <cstddef>
+#include <stdexcept>
 #include <string>
 
 namespace dt::Dynamics
 {
+
+/*! \brief Stable categories for supported XML decoding failures. */
+enum class dtDynXmlErrorCode : dtDynIndex
+{
+    MalformedSyntax = 0,
+    InvalidNumber = 1,
+    InvalidVectorArity = 2,
+    NonFiniteValue = 3,
+    UnsupportedElement = 4,
+    InvalidReference = 5,
+    DuplicateName = 6
+};
+
+/*! \brief Path- and offset-aware XML decoding error. */
+class dtDynXmlError : public std::runtime_error
+{
+public:
+    /*! \brief Construct a typed XML error with source and byte-offset context. */
+    dtDynXmlError(dtDynXmlErrorCode code,
+                  std::string sourcePath,
+                  std::size_t offset,
+                  const std::string &message);
+
+    /*! \brief Return the stable failure category. */
+    dtDynXmlErrorCode Code() const noexcept;
+    /*! \brief Return the source file path, or an empty string for DecodeXml(). */
+    const std::string &SourcePath() const noexcept;
+    /*! \brief Return the zero-based byte offset in the decoded XML text. */
+    std::size_t Offset() const noexcept;
+
+private:
+    dtDynXmlErrorCode m_code;
+    std::string m_sourcePath;
+    std::size_t m_offset;
+};
 
 /*!
  \brief Editable diagonal inertial properties for one body.
@@ -140,13 +177,28 @@ public:
         \throws std::runtime_error if the file cannot be opened or written. */
     void SaveXmlFile(const std::string &path) const;
     /*! \brief Decode a supported MJCF-like XML string into an editable specification.
-        \throws std::runtime_error for malformed tags/comments, unsupported angle units,
-                closed-chain/equality/tendon elements, or actuators referencing unknown joints. */
+        \throws dtDynXmlError with an empty source path and stable code/offset for malformed
+                syntax, invalid or non-finite numbers, wrong vector arity, duplicate names,
+                unsupported elements/values, or invalid references. */
     static dtDynSpec DecodeXml(const std::string &xml);
     /*! \brief Load and decode a supported MJCF-like XML file into an editable specification.
         \param path XML file path.
-        \throws std::runtime_error if the file cannot be opened/read or its XML cannot be decoded. */
+        \throws std::runtime_error if the file cannot be opened or read.
+        \throws dtDynXmlError with \p path and a byte offset when decoding fails. */
     static dtDynSpec LoadXmlFile(const std::string &path);
+
+    /*! \brief Return body id by name, or DTDYN_INVALID_INDEX when absent.
+        \details Performs a setup-time linear scan so direct mutable-array edits are visible. */
+    dtDynIndex BodyId(const std::string &name) const;
+    /*! \brief Return joint id by name, or DTDYN_INVALID_INDEX when absent.
+        \details Performs a setup-time linear scan so direct mutable-array edits are visible. */
+    dtDynIndex JointId(const std::string &name) const;
+    /*! \brief Return site id by name, or DTDYN_INVALID_INDEX when absent.
+        \details Performs a setup-time linear scan so direct mutable-array edits are visible. */
+    dtDynIndex SiteId(const std::string &name) const;
+    /*! \brief Return actuator id by name, or DTDYN_INVALID_INDEX when absent.
+        \details Performs a setup-time linear scan so direct mutable-array edits are visible. */
+    dtDynIndex ActuatorId(const std::string &name) const;
 
     /*! \brief Return immutable body storage. */
     const dtArray<dtDynBodySpec> &Bodies() const;

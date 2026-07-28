@@ -2,6 +2,10 @@
 
 Author: Joonhee Jo
 
+이 chapter는 runtime 숫자보다 먼저 **측정 scope와 해석 경계**를 정의한다. native dynamics, independently prepared stage, MuJoCo/Pinocchio reference는 서로 다른 호출 집합이므로 median을 더해 다른 row를 만들거나 same-output speed ratio로 읽지 않는다. 각 batch는 fresh `dtDynData`, deterministic state, prerequisite preparation 뒤 warmup과 measurement를 수행한다.
+
+채택 artifact는 raw CSV, seven-batch summary, normalized CSV, PNG를 함께 검증한다. reference output은 exact engine × fixture × state key coverage, unique key, finite value, `median <= p95 <= p99`, raw summary와 promoted value agreement를 통과해야 한다. wall-clock rerun의 byte identity는 요구하지 않지만 candidate figure/CSV는 자신이 기록한 accepted raw run과 일치해야 한다.
+
 The benchmark suite reports both runtime and resource-consumption diagnostics.
 
 ## Main binaries
@@ -20,13 +24,17 @@ Part A contains three package-native dynamics calls for every fixture/state:
 - `native_ccrba_reduced` calls `ComputeDynamicsCCRBA(model, data, gravity, DTDYN_CCRBA_TERM_COM_POS | DTDYN_CCRBA_TERM_CMAMAT | DTDYN_CCRBA_TERM_CENT_MOM)`.
 - `native_ccrba_all` calls `ComputeDynamicsCCRBA(model, data, gravity, DTDYN_CCRBA_TERM_ALL)`.
 
-The same Part A timing figures include MuJoCo and Pinocchio reference call sequences. Those libraries do not expose an identical CCRBA output contract, so the figures are contextual timing comparisons; status-bearing reference-error rows define which numerical quantities are comparable.
+The same Part A timing figures include MuJoCo and Pinocchio reference call sequences. Those libraries do not expose an identical CCRBA output contract, so the figures are contextual library-overhead timings, not same-output speed ratios; status-bearing reference-error rows define which numerical quantities are comparable. Release-active metadata counters require zero native validation runs during each external timing scope. Native comparison runs execute only after the external timing section.
 
 The native CSV `scope` column distinguishes all three native rows. Historical CSVs without `scope` are interpreted as full CCRBA. RNEA reports centroidal-matrix and CoM-velocity consistency as `nan`; reduced CCRBA validates centroidal momentum but reports CoM-velocity consistency as `nan`; full CCRBA validates both.
 
 The deterministic state labels separate configuration and velocity coverage. `nominal` uses model-default positions with identity free/ball orientations and zero velocity. `asymmetric` applies nonuniform position/orientation perturbations while keeping velocity zero. `nonzero_velocity` uses a different perturbed pose plus nonzero generalized velocities, activating velocity-dependent dynamics; it is not the asymmetric pose with velocity simply added. Reference adapters apply those semantics through their engine-specific coordinate mappings.
 
 `fixed_body_heavy` is a one-DOF fixed-topology stress fixture: the canonical 11-body morphology contains a world-fixed base, eight nested fixed mounts, and one terminal revolute link. Native dtDynamics and MuJoCo retain the nested body topology. The hand-built Pinocchio reference folds the fixed offsets into the terminal joint placement and therefore performs less body-recursion work; its timing is representation-specific rather than a same-morphology throughput comparison. The reported `nbody=11` remains the canonical fixture metadata.
+
+The expanded morphology set also includes `multi_robot_fixed_base`, a branching two-root fixed-base model with articulated branches, a fixed sensor frame, multiple sites, and actuators; `multi_robot_floating_base`, the corresponding two-root free-joint topology; and `serial_chain_10` / `serial_chain_30`, matched serial scaling points. These fixtures separate branching, floating-root, welded-body, and increasing-DOF effects instead of treating `nv` as the only work descriptor.
+
+Every repeated native scope and stage batch constructs and resizes a fresh `dtDynData`, restores the deterministic state, and prepares that stage's prerequisites before warmup and measurement. Stage rows therefore begin from independent prepared state and must not be added to reconstruct another row.
 
 ### Part B: LeoQuad controller scope
 
@@ -42,10 +50,12 @@ DTDYN_CCRBA_TERM_CENT_MOM
 
 ## Resource columns
 
-Latency tables report mean, median, and tail timing. The p99 statistic is computed as an empirical order statistic. Let the samples sorted by runtime be \f$t^{\uparrow}_0, \ldots, t^{\uparrow}_{N-1}\f$. The reported tail value is
+Latency tables report mean, median, p95, and p99 timing. Both tail statistics are empirical order statistics. Let the samples sorted by runtime be \f$t^{\uparrow}_0, \ldots, t^{\uparrow}_{N-1}\f$. The reported values are
 
 \f[
-k = \mathrm{floor}(0.99(N - 1)), \qquad T_{99} = t^{\uparrow}_k.
+k_{95} = \mathrm{floor}(0.95(N - 1)), \qquad T_{95} = t^{\uparrow}_{k_{95}},
+\qquad
+k_{99} = \mathrm{floor}(0.99(N - 1)), \qquad T_{99} = t^{\uparrow}_{k_{99}}.
 \f]
 
 Compute rows contain:
@@ -55,7 +65,7 @@ Compute rows contain:
 - `allocation_bytes_mean`: mean counted C++ `operator new` / `operator new[]` allocated bytes per measured compute iteration.
 - `allocation_bytes_max`: maximum counted C++ `operator new` / `operator new[]` allocated bytes in any measured compute iteration.
 
-The setup/off-loop resource sections use similarly named allocation columns. `dtDynModel_resource` rows measure `CompileSpec(spec)`, and `dtDynData_resource` rows measure setup-time construction plus `dtDynData data; data.Resize(model);` iterations, not realtime compute iterations. Units are: `mean_us`, `median_us`, and `p99_us` are microseconds; `allocation_mean` and `allocation_max` are counted allocation-call counts; `allocation_bytes_mean` and `allocation_bytes_max` are counted requested bytes. These columns are benchmark C++ allocation-counter columns, not full malloc-family heap-profiler columns.
+The setup/off-loop resource sections use similarly named allocation columns. `dtDynModel_resource` rows measure `CompileSpec(spec)`, and `dtDynData_resource` rows measure setup-time construction plus `dtDynData data; data.Resize(model);` iterations, not realtime compute iterations. Units are: `mean_us`, `median_us`, `p95_us`, and `p99_us` are microseconds; `allocation_mean` and `allocation_max` are counted allocation-call counts; `allocation_bytes_mean` and `allocation_bytes_max` are counted requested bytes. These columns are benchmark C++ allocation-counter columns, not full malloc-family heap-profiler columns.
 
 Human-facing benchmark tables may omit allocation columns when all rows in the displayed scope are zero. This is presentation-only: the raw CSV sections keep allocation counters so allocation regressions remain machine-checkable.
 
@@ -81,9 +91,20 @@ python3 tools/plot_benchmark_results.py \
   --references /tmp/references.csv \
   --out /tmp/dtdyn_figures \
   --tables-out /tmp/dtdyn_tables
+
+python3 tools/validate_benchmark_results.py \
+  --native /tmp/native.csv \
+  --stages /tmp/stages.csv \
+  --generated /tmp/dtdyn_figures
+
+python3 tools/validate_reference_benchmark.py \
+  --references /tmp/references.csv \
+  --runtime-csv /tmp/dtdyn_figures/runtime_by_fixture.csv
 ```
 
-With multi-batch CSVs, the plotting tool uses the median of the per-batch mean, median, and p99 summaries for human tables and figures. It leaves single-batch/historical CSV behavior unchanged. The raw CSV retains the first timing row plus batch-summary min/max spread. Fixing one logical CPU reduces migration noise, but CPU affinity is not frequency locking or realtime isolation; record the governor and scheduling conditions with published numbers.
+The plot command writes the three human figures and their machine-readable source families side by side: `runtime_by_fixture.{csv,png}`, `scaling_by_dof.{csv,png}`, and `stage_breakdown.{csv,png}`. The CSVs retain mean, median, p95, and p99 values; the figures use medians and leave tail interpretation to the CSV and tables.
+
+With multi-batch CSVs, the plotting tool uses the median of the per-batch mean, median, p95, and p99 summaries for human tables and figures. It leaves single-batch/historical CSV behavior unchanged. The raw CSV retains the first timing row plus batch-summary min/max spread. Fixing one logical CPU reduces migration noise, but CPU affinity is not frequency locking or realtime isolation; record the governor and scheduling conditions with published numbers.
 
 ## Publishing generated Doxygen in GitLab
 
@@ -123,17 +144,17 @@ Pin a project-approved image or runner toolchain before enabling either job. Val
 
 @ref md_docs_benchmark_results contains the longer benchmark report and generated figures. The current manual keeps only a compact evidence snapshot so the API contract is not tied to stale performance numbers.
 
-The current canonical evidence is a Release build pinned to CPU 0 with seven batches. Each batch uses 20 warmup iterations and 200 measured iterations. Human-facing values are the medians of the seven batch-level mean, median, and p99 summaries; they are not pooled-sample percentiles.
+The current canonical evidence is a Release build pinned to CPU 0 with seven batches. Each batch uses 20 warmup iterations and 200 measured iterations. Human-facing values are the medians of the seven batch-level mean, median, p95, and p99 summaries; they are not pooled-sample percentiles.
 
 ### Native floating-base quadruped snapshot
 
-The compact Part A snapshot below reproduces the detailed report's floating-base quadruped rows. Each cell is `median / p99` in microseconds.
+The compact Part A snapshot below reproduces the detailed report's floating-base quadruped rows. Each cell is `median / p95` in microseconds.
 
 | State | RNEA + CoM | Reduced CCRBA | Full CCRBA | MuJoCo | Pinocchio |
 |---|---:|---:|---:|---:|---:|
-| nominal | 4.499 / 4.680 | 4.102 / 4.302 | 5.116 / 7.552 | 5.023 / 5.253 | 11.784 / 13.663 |
-| asymmetric | 4.596 / 6.409 | 4.159 / 4.327 | 5.161 / 5.359 | 5.003 / 5.715 | 13.363 / 15.723 |
-| nonzero_velocity | 4.711 / 4.967 | 5.464 / 5.658 | 6.466 / 6.861 | 5.610 / 5.792 | 12.104 / 14.378 |
+| nominal | 5.751 / 5.881 | 5.073 / 5.213 | 6.398 / 6.560 | 6.320 / 6.384 | 17.962 / 18.090 |
+| asymmetric | 5.877 / 6.032 | 5.182 / 5.310 | 6.518 / 6.685 | 7.000 / 7.072 | 18.367 / 18.511 |
+| nonzero_velocity | 6.049 / 6.187 | 6.907 / 7.045 | 8.166 / 8.293 | 7.039 / 7.119 | 18.364 / 18.507 |
 
 For the same quadruped fixture, the setup-only resource row reported compile median / p99 of `5.263 / 11.240 us`, data-resize median / p99 of `4.249 / 4.983 us`, and 31 counted C++ allocation calls per fresh resize iteration. Setup remains outside the realtime timing loop. The measured native dynamics and stage compute rows reported zero counted C++ `operator new` allocations; this does not cover direct malloc-family paths.
 

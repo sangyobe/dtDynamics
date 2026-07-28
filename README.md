@@ -1,131 +1,98 @@
 # dtDynamics
 
-`dtDynamics` is the standalone ART dynamics ingredient package. It provides
-dtMath-based rigid-body dynamics quantities for whole-body control, state
-estimation, and model-based planning. The package computes ingredients such as
-mass matrix, nonlinear torque, gravity torque, Coriolis torque, Jacobians,
-Jacobian derivatives, CoM quantities, centroidal momentum matrix, and related
-centroidal derivative terms. It does not compute the final controller torque
-command.
+`dtDynamics`는 제어기와 WBC가 사용하는 강체 동역학 **재료(ingredient)** 를 계산하는 독립 패키지다. 질량행렬, 중력·코리올리·비선형 토크, body/site Jacobian과 시간미분 항, CoM, centroidal momentum 항을 제공하지만 접촉 해석, 시뮬레이션 적분, 최종 토크 결정은 수행하지 않는다.
 
-The production library is independent of MuJoCo and Pinocchio. MuJoCo 3.8.0 and
-Pinocchio 3.9.0 are used only by validation tests and benchmarks under the
-private `.validation_deps` cache.
+현재 패키지 버전은 **0.1.1**이다. production library는 `dtMath`에만 의존하며, MuJoCo 3.8.0과 Pinocchio 3.9.0은 `.validation_deps` 아래의 검증·benchmark 전용 참조 구현이다.
 
-## Layout
+## 가장 짧은 사용 흐름
 
-- `include/dtDynamics/`: public dtDyn API headers in namespace `dt::Dynamics`
-- `src/`: production dtMath-only implementation
-- `test/`: native, MuJoCo-reference, and Pinocchio-reference validation tests
-- `benchmark/`: runtime and numerical comparison benchmarks
-- `tools/`: validation dependency and install/export helper scripts
-- `docs/`: package manual, benchmark results, figures, and release notes
+설정 단계와 realtime 단계를 분리한다.
 
-## Dependencies
-
-Production dependency:
-
-- dtMath installed under `${ARTF_INSTALL_DIR:-~/.local/ART_Framework}/include`
-
-Validation-only dependencies:
-
-- MuJoCo 3.8.0
-- Pinocchio 3.9.0
-
-Do not install MuJoCo or Pinocchio into the ART Framework prefix for production
-consumers. Use `.validation_deps` or explicit validation root overrides instead.
-
-## Build And Install
-
-For CMake 3.21 or newer, use the checked-in presets:
-
-```bash
-cmake --preset validation
-cmake --build --preset validation -- -j2
-ctest --preset validation
-
-cmake --preset release
-cmake --build --preset release -- -j2
-cmake --install build/release --prefix "${ARTF_INSTALL_DIR:-$HOME/.local/ART_Framework}"
-
-# Optional: validate against a versioned dtMath include root.
-export ARTF_INSTALL_DIR="${ARTF_INSTALL_DIR:-$HOME/.local/ART_Framework}"
-cmake --preset release -B build/release-dtmath-3 \
-  -DDTDYNAMICS_DTMATH_INCLUDE_DIR="${ARTF_INSTALL_DIR}/include/dtMath_3_0_0"
-cmake --build build/release-dtmath-3 -- -j2
-cmake --install build/release-dtmath-3 --prefix "${ARTF_INSTALL_DIR}"
+```text
+LoadXmlFile / DecodeXml
+        -> ValidateSpec
+        -> CompileSpecChecked
+        -> dtDynData::Resize
+        -> BodyId / JointId / SiteId / ActuatorId cache
+        -> qpos/qvel 입력과 ComputeDynamics* 실행
 ```
 
-Downstream projects should consume the installed package target:
+외부 파일이나 사용자가 수정한 `dtDynSpec`에는 `CompileSpecChecked()`를 사용한다. 기존 `CompileSpec()`는 이미 신뢰 경계 안에서 검증된 setup data를 위한 호환 API다. 이름 조회 실패는 예외가 아니라 `DTDYN_INVALID_INDEX`를 반환하므로, ID를 배열 인덱스로 쓰기 전에 반드시 확인한다.
+
+## 디렉터리
+
+- `include/dtDynamics/`: `dt::Dynamics` public API
+- `src/`: `dtMath` 기반 production 구현
+- `test/`: native, MuJoCo, Pinocchio 참조 검증
+- `benchmark/`: runtime/stage/reference benchmark
+- `tools/`: package, install/export, 문서, benchmark 검증 도구
+- `docs/`: manual, guide, 결과, release note
+
+## 의존성과 설치 위치
+
+기본 ART Framework prefix는 `${ARTF_INSTALL_DIR:-$HOME/.local/ART_Framework}`다. MuJoCo/Pinocchio를 이 production prefix에 설치하지 않는다.
+
+```bash
+export ARTF_INSTALL_DIR="${ARTF_INSTALL_DIR:-$HOME/.local/ART_Framework}"
+cmake --preset release
+cmake --build --preset release -- -j2
+cmake --install build/release --prefix "${ARTF_INSTALL_DIR}"
+```
+
+consumer는 정확한 package identity와 canonical target을 요구한다.
 
 ```cmake
-find_package(dtDynamics CONFIG REQUIRED)
+find_package(dtDynamics 0.1.1 EXACT CONFIG REQUIRED)
 target_link_libraries(my_controller PRIVATE dt::Dynamics)
 ```
 
-## Validation Dependencies
+`dtDynamicsConfigVersion.cmake`, public header의 Doxygen version, installed library가 모두 같은 후보에서 생성되어야 한다. 새로운 library와 오래된 header를 섞으면 `dtDynModel`/`dtDynData` layout이 달라질 수 있다.
 
-Populate the private validation cache when MuJoCo/Pinocchio tests or reference
-benchmarks are needed:
+## 검증
+
+전체 검증 의존성을 준비하려면 다음을 실행한다.
 
 ```bash
 tools/install_validation_deps.sh --all
+cmake --preset validation
+cmake --build --preset validation -- -j2
+ctest --preset validation --output-on-failure
 ```
 
-The cache lives in `.validation_deps/` by default. It is ignored by Git and is
-not part of the production package.
-
-## Package Boundary Check
-
-Run the package validator before handing the package to downstream users:
+package 경계와 installed consumer를 확인한다.
 
 ```bash
 tools/validate_package.sh
-```
-
-This performs the production source boundary scan, configures a Release build,
-builds native/reference tests and benchmark executables, runs `ctest`, and then
-executes the install/export validator.
-
-For a narrower installed-package check:
-
-```bash
 tools/validate_install_export.sh
-```
-
-The narrower check verifies that the installed package exports `dt::Dynamics`,
-production config files do not reference MuJoCo or Pinocchio, package docs are
-installed, and a minimal downstream consumer can link against the package.
-
-Before a release or downstream handoff, run the stricter audit:
-
-```bash
 tools/audit_release_readiness.sh
 ```
 
-It adds static release-invariant scans on top of the package validator: required
-package artifacts, no legacy facade/API names in production files, no MuJoCo or
-Pinocchio production API use, no `std::vector` use in native production files,
-and a production-only `release` preset.
+`validate_install_export.sh`는 다음을 fail-closed로 확인한다.
 
-To create a reproducible source handoff archive from a clean committed tree:
+- `find_package(dtDynamics 0.1.1 EXACT CONFIG REQUIRED)` 성공
+- exported target이 `dt::Dynamics`이고 legacy target이 없음
+- production CMake export에 MuJoCo/Pinocchio가 없음
+- installed public-header version과 current SVG package claim이 `0.1.1`
+- fresh downstream consumer의 configure, compile, link, run
 
-```bash
-tools/package_release.sh --version v0.1.0-rc3 --output-dir dist
-```
+benchmark 결과는 wall-clock byte replay를 보장하지 않는다. 채택된 raw run과 게시 artifact의 provenance는 byte identity로 확인하고, 새 실행은 schema, fixture/state/scope coverage, status, percentile ordering을 확인한다.
 
-The packaging helper runs the release-readiness audit by default, archives git
-`HEAD`, and writes a `.sha256` checksum next to the archive.
+## Realtime 경계
 
-## Documentation
+`ValidateSpec`, XML I/O, compilation, `dtDynData::Resize`, name lookup은 setup 단계다. control loop에서는 미리 할당한 `dtDynData`와 caller-owned output을 사용한다. 문서의 allocation 0은 benchmark가 계측한 C++ `operator new` 경로에 한정되며 `malloc` 계열, OS, logger, 임의의 unsized output까지 포괄하는 보장은 아니다.
 
-Start with `docs/manual.md` for API conventions, computation pipeline, XML
-subset, validation workflow, benchmark workflow, limitations, and roadmap. See
-`docs/benchmark-results.md` for the current measured baseline. Release-candidate
-handoff notes live under `docs/release-notes/`; the current corrected candidate is
-`docs/release-notes/v0.1.0-rc3.md`; rc2 and rc1 are preserved as
-historical context.
+## 문서
 
-## License
+- 시작점: `docs/manual.md`
+- 현재 benchmark evidence: `docs/benchmark-results.md`
+- 현재 release note: `docs/release-notes/v0.1.1.md`
+- model guide: `docs/guides/model_guide/`
+- usage/migration guide: `docs/guides/usage_guide/`
+
+문서 gate `tools/validate_docs.sh`에는 Doxygen, Graphviz, Python 3와 guide PDF 내용·page·font를 검사하는 Poppler 도구(`pdftotext`, `pdfinfo`, `pdffonts`)가 필요하다.
+
+`v0.1.0-rc1`~`rc3` release note는 과거 기준을 보존한다. 현재 `0.1.1`의 근거로 소급해 해석하지 않는다.
+
+## 라이선스
 
 Copyright (c) 2026 RoboticsLab ART. All rights reserved. See [`LICENSE`](LICENSE).
