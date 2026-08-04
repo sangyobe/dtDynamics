@@ -2,7 +2,8 @@
 
 Author: Joonhee Jo
 
-이 예제는 **load → validate → compile → resize → ID cache → state 입력 → compute** 순서를 한 번에 보여 준다. simulator나 torque controller 예제가 아니라 dynamics ingredient 사용 예제다.
+- 이 예제가 보여주는 순서: **load → validate → compile → resize → ID cache → state 입력 → compute**
+- 성격: simulator나 torque controller 예제가 아닌 dynamics ingredient 사용 예제
 
 ## 입력 XML
 
@@ -103,7 +104,7 @@ int main(int argc, char **argv)
 
 ## 실패 진단
 
-파일 XML semantic error는 exact source path와 zero-based byte offset을 보존한다.
+- 파일 XML semantic error 보존 정보: exact source path와 zero-based byte offset
 
 ```cpp
 catch (const dtDynXmlError &error)
@@ -112,12 +113,16 @@ catch (const dtDynXmlError &error)
 }
 ```
 
-programmatic mutation으로 topology가 잘못되면 `ValidateSpec(spec, &error)`가 `error.code`, `error.object`, `error.index`, `error.message`를 채운다. `what()`이나 process exit code만으로 machine category를 추론하지 않는다.
+- programmatic mutation으로 topology 오류 발생 시: `ValidateSpec(spec, &error)`가 `error.code`, `error.object`, `error.index`, `error.message` 채움
+- 금지 사항: `what()`이나 process exit code만으로 machine category 추론
 
 ## `CompileSpec`은 언제 쓰는가
 
-위 예제처럼 외부 파일이나 editable spec을 다루면 `CompileSpecChecked()`가 기본이다. raw `CompileSpec()`는 package 내부 fixture처럼 validation이 별도로 끝난 trusted setup path의 호환성을 위해 남아 있다.
+- 위 예제처럼 외부 파일·editable spec을 다룰 때: `CompileSpecChecked()`가 기본
+- raw `CompileSpec()` 유지 목적: package 내부 fixture처럼 validation이 별도로 끝난 trusted setup path의 호환성
 
 ## Neutral state 주의
 
-free/ball joint의 유효 quaternion과 robot rest pose를 자동으로 정하는 package-level initializer는 제공하지 않는다. `qpos`를 모두 zero로 채우면 floating-base quaternion이 invalid할 수 있다. estimator/controller가 compiled address와 model convention에 따라 state를 명시적으로 기록해야 한다.
+- 미제공 항목: free/ball joint의 유효 quaternion과 robot rest pose를 자동으로 정하는 package-level initializer
+- `qpos`를 모두 zero로 채울 때 위험: floating-base quaternion이 invalid할 수 있음
+- 초기화 책임: estimator/controller가 compiled address와 model convention에 따라 state를 명시적으로 기록

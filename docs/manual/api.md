@@ -2,7 +2,7 @@
 
 Author: Joonhee Jo
 
-이 페이지는 generated signature를 읽기 전에 setup/runtime 경계를 빠르게 찾기 위한 지도다.
+- 이 페이지: generated signature를 읽기 전에 setup/runtime 경계를 빠르게 찾기 위한 지도
 
 ## Model lifecycle
 
@@ -16,14 +16,15 @@ Author: Joonhee Jo
 | compiled model | `dtDynModel`, `ValidateModel` | dimensions/address/name map이 고정된 setup contract |
 | runtime storage | `dtDynData::Resize`, `IsCompatible` | model-indexed storage 준비; compatibility는 dimension-only |
 
-`dtDynSpec`와 `dtDynModel`은 `BodyId`, `JointId`, `SiteId`, `ActuatorId`를 모두 제공한다. missing name은 `DTDYN_INVALID_INDEX`다.
+- `dtDynSpec`, `dtDynModel` 공통 제공: `BodyId`, `JointId`, `SiteId`, `ActuatorId`
+- missing name: `DTDYN_INVALID_INDEX`
 
 ## Error contract
 
 - XML: `dtDynXmlError::Code()`, `SourcePath()`, `Offset()`
 - Spec/model: `dtDynValidationError::{code, object, index, message}`
-
-human-readable text와 machine category를 분리한다. XML offset은 original input의 zero-based byte offset이다.
+- 분리 원칙: human-readable text와 machine category 분리
+- XML offset: original input의 zero-based byte offset
 
 ## Compute API
 
@@ -32,8 +33,10 @@ human-readable text와 machine category를 분리한다. XML offset은 original 
 - `ComputeDynamicsCCRBA`: 선택한 CoM·centroidal·derivative term을 포함하는 path
 - body/site/point Jacobian family: task kinematics와 derivative product
 
-term mask와 prerequisite는 computation chapter를 따른다. output이 필요하지 않으면 무조건 `DTDYN_CCRBA_TERM_ALL`을 요청하지 않는다.
+- term mask, prerequisite: computation chapter 참조
+- 주의: output이 필요하지 않으면 `DTDYN_CCRBA_TERM_ALL` 요청 금지
 
 ## Resource boundary
 
-`Validate*`, XML I/O, `CompileSpec*`, `Resize`, name lookup은 setup API다. compute path의 allocation 주장은 benchmark에서 preallocated `dtDynData`와 pre-sized caller output을 사용한 C++ allocation counter 범위에 한정된다.
+- setup API: `Validate*`, XML I/O, `CompileSpec*`, `Resize`, name lookup
+- compute path의 allocation 주장 범위: benchmark에서 preallocated `dtDynData`와 pre-sized caller output을 사용한 C++ allocation counter 범위에 한정
