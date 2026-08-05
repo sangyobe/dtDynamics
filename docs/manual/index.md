@@ -2,9 +2,10 @@
 
 Author: Joonhee Jo
 
-이 manual은 generated API 목록보다 먼저 읽는 conceptual contract다. model/data lifecycle, coordinate/frame, setup/realtime 경계, validation scope를 먼저 정하고 각 함수 signature를 연결한다.
+- 이 manual: generated API 목록보다 먼저 읽는 conceptual contract
+- 다루는 순서: model/data lifecycle → coordinate/frame → setup/realtime 경계 → validation scope → 각 함수 signature 연결
 
-현재 package identity는 **0.1.1**이다.
+현재 package identity: **0.1.1**
 
 ## Manual 생성
 
@@ -13,7 +14,8 @@ cd /path/to/dtDynamics
 tools/validate_docs.sh
 ```
 
-`tools/validate_docs.sh`는 current-document content oracle, Doxygen warning scan, Graphviz generation을 함께 실행한다. generated HTML은 `build/docs/doxygen/html/` 아래에 생성한다.
+- `tools/validate_docs.sh` 실행 항목: current-document content oracle, Doxygen warning scan, Graphviz generation
+- generated HTML 위치: `build/docs/doxygen/html/` 아래
 
 ## Manual map
 
@@ -31,4 +33,6 @@ tools/validate_docs.sh
 
 ## 설계 원칙
 
-`dtDynamics`는 mass/bias/gravity/Coriolis, Jacobian/derivative, CoM/centroidal quantity를 계산한다. simulator, contact solver, final torque controller, MuJoCo wrapper가 아니다. 외부 model은 setup에서 fail-closed 검증하고 realtime에는 compiled model, preallocated data, cached numeric mapping만 넘긴다.
+- `dtDynamics` 계산 항목: mass/bias/gravity/Coriolis, Jacobian/derivative, CoM/centroidal quantity
+- 아닌 것: simulator, contact solver, final torque controller, MuJoCo wrapper
+- 외부 model 처리: setup에서 fail-closed 검증, realtime에는 compiled model·preallocated data·cached numeric mapping만 전달

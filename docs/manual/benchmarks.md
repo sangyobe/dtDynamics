@@ -2,43 +2,69 @@
 
 Author: Joonhee Jo
 
-이 chapter는 runtime 숫자보다 먼저 **측정 scope와 해석 경계**를 정의한다. native dynamics, independently prepared stage, MuJoCo/Pinocchio reference는 서로 다른 호출 집합이므로 median을 더해 다른 row를 만들거나 same-output speed ratio로 읽지 않는다. 각 batch는 fresh `dtDynData`, deterministic state, prerequisite preparation 뒤 warmup과 measurement를 수행한다.
+- 이 chapter가 runtime 숫자보다 먼저 정의하는 것: **측정 scope와 해석 경계**
+- native dynamics, independently prepared stage, MuJoCo/Pinocchio reference 성격: 서로 다른 호출 집합
+- 금지 사항: median을 더해 다른 row를 만들거나 same-output speed ratio로 해석
+- 각 batch 수행 절차: fresh `dtDynData`, deterministic state, prerequisite preparation 이후 warmup과 measurement
 
-채택 artifact는 raw CSV, seven-batch summary, normalized CSV, PNG를 함께 검증한다. reference output은 exact engine × fixture × state key coverage, unique key, finite value, `median <= p95 <= p99`, raw summary와 promoted value agreement를 통과해야 한다. wall-clock rerun의 byte identity는 요구하지 않지만 candidate figure/CSV는 자신이 기록한 accepted raw run과 일치해야 한다.
+- 채택 artifact 검증 대상: raw CSV, seven-batch summary, normalized CSV, PNG
+- reference output 통과 조건: exact engine × fixture × state key coverage, unique key, finite value, `median <= p95 <= p99`, raw summary와 promoted value agreement
+- wall-clock rerun의 byte identity: 비요구 (단, candidate figure/CSV는 자신이 기록한 accepted raw run과 일치 필요)
 
-The benchmark suite reports both runtime and resource-consumption diagnostics.
+- benchmark suite 보고 대상: runtime과 resource-consumption diagnostics 모두
 
 ## Main binaries
 
-- `benchmark_dtDynamics`: three dynamics-only native scopes (`native_rnea_com_pos`, `native_ccrba_reduced`, and `native_ccrba_all`) plus setup/off-loop `dtDynModel_resource` and `dtDynData_resource` rows.
-- `benchmark_dtDynamicsStages`: per-stage timing for FK, CCRBA substages, Jacobians, and WBC-style reduced update paths.
-- `benchmark_dtDynamicsReferences`: MuJoCo and Pinocchio reference timing/error rows for comparable quantities.
+- `benchmark_dtDynamics`: dynamics-only native scope 3종 (`native_rnea_com_pos`, `native_ccrba_reduced`, `native_ccrba_all`) + setup/off-loop `dtDynModel_resource`와 `dtDynData_resource` row
+- `benchmark_dtDynamicsStages`: FK, CCRBA substage, Jacobian, WBC-style reduced update path의 per-stage timing
+- `benchmark_dtDynamicsReferences`: 비교 가능한 quantity에 대한 MuJoCo, Pinocchio reference timing/error row
 
 ## Benchmark scopes
 
 ### Part A: native dynamics and external references
 
-Part A contains three package-native dynamics calls for every fixture/state:
+- Part A 구성: 모든 fixture/state에 대한 package-native dynamics 호출 3종
+  - `native_rnea_com_pos`: `ComputeDynamicsRNEA(model, data, gravity, DTDYN_RNEA_TERM_COM_POS)` 호출
+  - `native_ccrba_reduced`: `ComputeDynamicsCCRBA(model, data, gravity, DTDYN_CCRBA_TERM_COM_POS | DTDYN_CCRBA_TERM_CMAMAT | DTDYN_CCRBA_TERM_CENT_MOM)` 호출
+  - `native_ccrba_all`: `ComputeDynamicsCCRBA(model, data, gravity, DTDYN_CCRBA_TERM_ALL)` 호출
 
-- `native_rnea_com_pos` calls `ComputeDynamicsRNEA(model, data, gravity, DTDYN_RNEA_TERM_COM_POS)`.
-- `native_ccrba_reduced` calls `ComputeDynamicsCCRBA(model, data, gravity, DTDYN_CCRBA_TERM_COM_POS | DTDYN_CCRBA_TERM_CMAMAT | DTDYN_CCRBA_TERM_CENT_MOM)`.
-- `native_ccrba_all` calls `ComputeDynamicsCCRBA(model, data, gravity, DTDYN_CCRBA_TERM_ALL)`.
+- 동일 Part A timing figure 포함 대상: MuJoCo와 Pinocchio reference call sequence
+- 해석 원칙: 이 라이브러리들은 동일한 CCRBA output contract를 노출하지 않으므로 figure는 contextual library-overhead timing이며 same-output speed ratio 아님
+- 비교 가능 수치 정의: status-bearing reference-error row
+- Release-active metadata counter 요구 사항: 각 external timing scope 동안 zero native validation run
+- Native comparison run 실행 시점: external timing section 이후에만
 
-The same Part A timing figures include MuJoCo and Pinocchio reference call sequences. Those libraries do not expose an identical CCRBA output contract, so the figures are contextual library-overhead timings, not same-output speed ratios; status-bearing reference-error rows define which numerical quantities are comparable. Release-active metadata counters require zero native validation runs during each external timing scope. Native comparison runs execute only after the external timing section.
+- native CSV `scope` column 역할: native row 3종 구분
+- `scope` 없는 historical CSV 해석: full CCRBA로 간주
+- RNEA 보고 방식: centroidal-matrix와 CoM-velocity consistency를 `nan`으로 보고
+- reduced CCRBA 보고 방식: centroidal momentum 검증, CoM-velocity consistency는 `nan`
+- full CCRBA 보고 방식: 둘 다 검증
 
-The native CSV `scope` column distinguishes all three native rows. Historical CSVs without `scope` are interpreted as full CCRBA. RNEA reports centroidal-matrix and CoM-velocity consistency as `nan`; reduced CCRBA validates centroidal momentum but reports CoM-velocity consistency as `nan`; full CCRBA validates both.
+- deterministic state label 구분 기준: configuration과 velocity coverage 분리
+  - `nominal`: model-default position, identity free/ball orientation, zero velocity
+  - `asymmetric`: nonuniform position/orientation perturbation 적용, velocity는 zero 유지
+  - `nonzero_velocity`: 다른 perturbed pose + nonzero generalized velocity로 velocity-dependent dynamics 활성화 (asymmetric pose에 velocity만 단순 추가한 것 아님)
+- Reference adapter 적용 방식: engine-specific coordinate mapping을 통해 위 semantics 적용
 
-The deterministic state labels separate configuration and velocity coverage. `nominal` uses model-default positions with identity free/ball orientations and zero velocity. `asymmetric` applies nonuniform position/orientation perturbations while keeping velocity zero. `nonzero_velocity` uses a different perturbed pose plus nonzero generalized velocities, activating velocity-dependent dynamics; it is not the asymmetric pose with velocity simply added. Reference adapters apply those semantics through their engine-specific coordinate mappings.
+- `fixed_body_heavy`: 1-DOF fixed-topology stress fixture
+  - canonical 11-body morphology 구성: world-fixed base, nested fixed mount 8개, terminal revolute link 1개
+  - Native dtDynamics와 MuJoCo: nested body topology 유지
+  - hand-built Pinocchio reference: fixed offset을 terminal joint placement로 folding → body-recursion 작업량 감소
+  - 결과 해석: timing은 representation-specific (same-morphology throughput 비교 아님)
+  - 보고되는 `nbody=11`: canonical fixture metadata로 유지
 
-`fixed_body_heavy` is a one-DOF fixed-topology stress fixture: the canonical 11-body morphology contains a world-fixed base, eight nested fixed mounts, and one terminal revolute link. Native dtDynamics and MuJoCo retain the nested body topology. The hand-built Pinocchio reference folds the fixed offsets into the terminal joint placement and therefore performs less body-recursion work; its timing is representation-specific rather than a same-morphology throughput comparison. The reported `nbody=11` remains the canonical fixture metadata.
+- 확장된 morphology set 구성:
+  - `multi_robot_fixed_base`: branching two-root fixed-base model, articulated branch, fixed sensor frame, 다중 site/actuator
+  - `multi_robot_floating_base`: 대응하는 two-root free-joint topology
+  - `serial_chain_10` / `serial_chain_30`: matched serial scaling point
+- 목적: branching, floating-root, welded-body, DoF 증가 효과를 `nv` 단일 지표가 아니라 개별적으로 분리
 
-The expanded morphology set also includes `multi_robot_fixed_base`, a branching two-root fixed-base model with articulated branches, a fixed sensor frame, multiple sites, and actuators; `multi_robot_floating_base`, the corresponding two-root free-joint topology; and `serial_chain_10` / `serial_chain_30`, matched serial scaling points. These fixtures separate branching, floating-root, welded-body, and increasing-DOF effects instead of treating `nv` as the only work descriptor.
-
-Every repeated native scope and stage batch constructs and resizes a fresh `dtDynData`, restores the deterministic state, and prepares that stage's prerequisites before warmup and measurement. Stage rows therefore begin from independent prepared state and must not be added to reconstruct another row.
+- 반복되는 native scope/stage batch 공통 절차: fresh `dtDynData` construct/resize, deterministic state 복원, 해당 stage prerequisite 준비 이후 warmup과 measurement
+- 원칙: stage row는 독립적으로 준비된 state에서 시작 → 다른 row 재구성을 위해 합산 금지
 
 ### Part B: LeoQuad controller scope
 
-The controller-shaped stage uses
+- controller-shaped stage 사용 mask:
 
 ```cpp
 DTDYN_CCRBA_TERM_COM_POS |
@@ -46,11 +72,15 @@ DTDYN_CCRBA_TERM_CMAMAT |
 DTDYN_CCRBA_TERM_CENT_MOM
 ```
 
-`leoquad_reduced_ccrba` times only that dynamics call. `leoquad_wbc_update` adds indexed Jacobians for the selected root body and four foot sites. External LeoQuad XML timing is opt-in and does not make LeoQuad an installed-package dependency.
+- `leoquad_reduced_ccrba`: 이 dynamics 호출만 시간 측정
+- `leoquad_wbc_update`: 선택한 root body와 foot site 4개에 대한 indexed Jacobian 추가
+- External LeoQuad XML timing 성격: opt-in (LeoQuad를 installed-package dependency로 만들지 않음)
 
 ## Resource columns
 
-Latency tables report mean, median, p95, and p99 timing. Both tail statistics are empirical order statistics. Let the samples sorted by runtime be \f$t^{\uparrow}_0, \ldots, t^{\uparrow}_{N-1}\f$. The reported values are
+- Latency table 보고 항목: mean, median, p95, p99 timing
+- 두 tail statistic 성격: empirical order statistics
+- runtime 기준 정렬된 sample을 \f$t^{\uparrow}_0, \ldots, t^{\uparrow}_{N-1}\f$라 할 때 보고값:
 
 \f[
 k_{95} = \mathrm{floor}(0.95(N - 1)), \qquad T_{95} = t^{\uparrow}_{k_{95}},
@@ -58,16 +88,20 @@ k_{95} = \mathrm{floor}(0.95(N - 1)), \qquad T_{95} = t^{\uparrow}_{k_{95}},
 k_{99} = \mathrm{floor}(0.99(N - 1)), \qquad T_{99} = t^{\uparrow}_{k_{99}}.
 \f]
 
-Compute rows contain:
+- Compute row 포함 항목:
+  - `allocation_mean`: 측정된 compute iteration당 평균 counted C++ `operator new` / `operator new[]` allocation count
+  - `allocation_max`: 측정된 compute iteration 중 최대 counted allocation count
+  - `allocation_bytes_mean`: 측정된 compute iteration당 평균 counted allocated bytes
+  - `allocation_bytes_max`: 측정된 compute iteration 중 최대 counted allocated bytes
 
-- `allocation_mean`: mean counted C++ `operator new` / `operator new[]` allocation count per measured compute iteration.
-- `allocation_max`: maximum counted C++ `operator new` / `operator new[]` allocation count in any measured compute iteration.
-- `allocation_bytes_mean`: mean counted C++ `operator new` / `operator new[]` allocated bytes per measured compute iteration.
-- `allocation_bytes_max`: maximum counted C++ `operator new` / `operator new[]` allocated bytes in any measured compute iteration.
+- setup/off-loop resource section의 column 명명 방식: 유사
+- `dtDynModel_resource` row 측정 대상: `CompileSpec(spec)`
+- `dtDynData_resource` row 측정 대상: setup-time construction + `dtDynData data; data.Resize(model);` iteration (realtime compute iteration 아님)
+- 단위: `mean_us`, `median_us`, `p95_us`, `p99_us`는 microsecond; `allocation_mean`, `allocation_max`는 counted allocation-call count; `allocation_bytes_mean`, `allocation_bytes_max`는 counted requested bytes
+- 성격: benchmark C++ allocation-counter column (full malloc-family heap-profiler column 아님)
 
-The setup/off-loop resource sections use similarly named allocation columns. `dtDynModel_resource` rows measure `CompileSpec(spec)`, and `dtDynData_resource` rows measure setup-time construction plus `dtDynData data; data.Resize(model);` iterations, not realtime compute iterations. Units are: `mean_us`, `median_us`, `p95_us`, and `p99_us` are microseconds; `allocation_mean` and `allocation_max` are counted allocation-call counts; `allocation_bytes_mean` and `allocation_bytes_max` are counted requested bytes. These columns are benchmark C++ allocation-counter columns, not full malloc-family heap-profiler columns.
-
-Human-facing benchmark tables may omit allocation columns when all rows in the displayed scope are zero. This is presentation-only: the raw CSV sections keep allocation counters so allocation regressions remain machine-checkable.
+- Human-facing benchmark table 생략 조건: 표시 scope의 모든 row가 0일 때 allocation column 생략 가능
+- 성격: presentation-only (raw CSV section은 allocation counter를 유지하여 allocation regression을 machine-checkable하게 보존)
 
 ## Recommended validation command
 
@@ -82,7 +116,7 @@ taskset -c "$DTDYNAMICS_BENCHMARK_CPU" build/validation/bin/benchmark_dtDynamics
 taskset -c "$DTDYNAMICS_BENCHMARK_CPU" build/validation/bin/benchmark_dtDynamicsReferences > /tmp/references.csv
 ```
 
-Then generate tables/figures from those fresh CSVs:
+- 이후 fresh CSV로부터 table/figure 생성:
 
 ```bash
 python3 tools/plot_benchmark_results.py \
@@ -102,15 +136,24 @@ python3 tools/validate_reference_benchmark.py \
   --runtime-csv /tmp/dtdyn_figures/runtime_by_fixture.csv
 ```
 
-The plot command writes the three human figures and their machine-readable source families side by side: `runtime_by_fixture.{csv,png}`, `scaling_by_dof.{csv,png}`, and `stage_breakdown.{csv,png}`. The CSVs retain mean, median, p95, and p99 values; the figures use medians and leave tail interpretation to the CSV and tables.
+- plot 명령어가 나란히 작성하는 human figure 3종과 machine-readable source: `runtime_by_fixture.{csv,png}`, `scaling_by_dof.{csv,png}`, `stage_breakdown.{csv,png}`
+- CSV 보존 값: mean, median, p95, p99
+- figure 사용 값: median (tail 해석은 CSV와 table에 위임)
 
-With multi-batch CSVs, the plotting tool uses the median of the per-batch mean, median, p95, and p99 summaries for human tables and figures. It leaves single-batch/historical CSV behavior unchanged. The raw CSV retains the first timing row plus batch-summary min/max spread. Fixing one logical CPU reduces migration noise, but CPU affinity is not frequency locking or realtime isolation; record the governor and scheduling conditions with published numbers.
+- multi-batch CSV 처리 방식: plotting tool이 per-batch mean/median/p95/p99 summary의 median을 human table/figure에 사용
+- 미변경 대상: single-batch/historical CSV 동작
+- raw CSV 보존 항목: 첫 timing row + batch-summary min/max spread
+- 논리 CPU 1개 고정 효과: migration noise 감소 (단, CPU affinity는 frequency locking·realtime isolation 아님 → 게시 수치와 함께 governor/scheduling 조건 기록 필요)
 
 ## Publishing generated Doxygen in GitLab
 
-Yes. Generated Doxygen can be published immediately as a GitLab CI job artifact without committing HTML. A private GitLab Pages site is also the preferred stable URL when the self-managed instance has Pages enabled. This project requests private Pages access, but no Pages deployment currently exists and the API response does not prove that the instance-level Pages service is configured; confirm that service with the GitLab administrator before relying on a Pages URL.
+- 결론: HTML commit 없이 GitLab CI job artifact로 즉시 게시 가능
+- self-managed instance에 Pages가 활성화되어 있다면 private GitLab Pages site도 선호되는 안정적 URL
+- 현재 상태: 이 project는 private Pages access를 요청했으나 Pages deployment는 미존재, API response는 instance-level Pages service 구성 여부를 증명하지 않음 → Pages URL에 의존하기 전 GitLab administrator에게 서비스 확인 필요
 
-Keep generated HTML out of Git. The CI runner must provide Doxygen, Graphviz, and the LaTeX/Ghostscript tools required by this repository's local formula-image configuration. A guaranteed artifact job shape is:
+- 원칙: generated HTML은 Git에서 제외
+- CI runner 필요 도구: Doxygen, Graphviz, 이 저장소의 local formula-image 구성이 요구하는 LaTeX/Ghostscript 도구
+- 보장된 artifact job 형태:
 
 ```yaml
 doxygen-artifact:
@@ -122,7 +165,7 @@ doxygen-artifact:
       - build/docs/doxygen/html/
 ```
 
-When instance-level Pages is confirmed, add `deploy` to the pipeline's `stages` list and publish the generated directory:
+- instance-level Pages 확인 후 추가 작업: pipeline `stages` 목록에 `deploy` 추가, generated directory 게시
 
 ```yaml
 doxygen-pages:
@@ -137,18 +180,20 @@ doxygen-pages:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
 ```
 
-Pin a project-approved image or runner toolchain before enabling either job. Validate the first pipeline, download the artifact, and verify private Pages access before treating either output as a release artifact.
-
+- 두 job 활성화 전 필수 작업: project-approved image 또는 runner toolchain 고정, 첫 pipeline 검증, artifact 다운로드, private Pages access 확인 (release artifact로 취급하기 전)
 
 ## Current benchmark evidence snapshot
 
-@ref md_docs_benchmark_results contains the longer benchmark report and generated figures. The current manual keeps only a compact evidence snapshot so the API contract is not tied to stale performance numbers.
+- 더 긴 benchmark report와 generated figure 위치: @ref md_docs_benchmark_results
+- 이 manual이 유지하는 범위: compact evidence snapshot만 (API contract가 stale performance number에 종속되지 않도록)
 
-The current canonical evidence is a Release build pinned to CPU 0 with seven batches. Each batch uses 20 warmup iterations and 200 measured iterations. Human-facing values are the medians of the seven batch-level mean, median, p95, and p99 summaries; they are not pooled-sample percentiles.
+- 현재 canonical evidence 조건: CPU 0에 고정된 Release build, seven batch, batch당 warmup 20회·measured iteration 200회
+- Human-facing 값 정의: seven batch-level mean/median/p95/p99 summary의 median (pooled-sample percentile 아님)
 
 ### Native floating-base quadruped snapshot
 
-The compact Part A snapshot below reproduces the detailed report's floating-base quadruped rows. Each cell is `median / p95` in microseconds.
+- 아래 compact Part A snapshot이 재현하는 대상: 상세 report의 floating-base quadruped row
+- 각 cell 형식: `median / p95` (microsecond)
 
 | State | RNEA + CoM | Reduced CCRBA | Full CCRBA | MuJoCo | Pinocchio |
 |---|---:|---:|---:|---:|---:|
@@ -156,19 +201,31 @@ The compact Part A snapshot below reproduces the detailed report's floating-base
 | asymmetric | 5.877 / 6.032 | 5.182 / 5.310 | 6.518 / 6.685 | 7.000 / 7.072 | 18.367 / 18.511 |
 | nonzero_velocity | 6.049 / 6.187 | 6.907 / 7.045 | 8.166 / 8.293 | 7.039 / 7.119 | 18.364 / 18.507 |
 
-For the same quadruped fixture, the setup-only resource row reported compile median / p99 of `5.263 / 11.240 us`, data-resize median / p99 of `4.249 / 4.983 us`, and 31 counted C++ allocation calls per fresh resize iteration. Setup remains outside the realtime timing loop. The measured native dynamics and stage compute rows reported zero counted C++ `operator new` allocations; this does not cover direct malloc-family paths.
+- 같은 quadruped fixture의 setup-only resource row 보고값: compile median/p99 `5.263 / 11.240 us`, data-resize median/p99 `4.249 / 4.983 us`, fresh resize iteration당 counted C++ allocation call 31회
+- setup 위치: realtime timing loop 밖
+- 측정된 native dynamics/stage compute row 결과: counted C++ `operator new` allocation 0회 (direct malloc-family path는 미포함)
 
 ### LeoQuad real-XML snapshot
 
-In the current CPU-affined seven-batch canonical real-XML scope, reduced-CCRBA central medians were `5.162 us`, `5.255 us`, and `6.917 us` for nominal, asymmetric, and nonzero-velocity states. Reduced CCRBA plus indexed Jacobians reported `7.501 us`, `7.630 us`, and `9.213 us`. The separately recorded installed-package headless profile remains useful end-to-end evidence, but it is not mixed into the fresh dynamics-scope table.
+- 현재 CPU-affined seven-batch canonical real-XML scope의 reduced-CCRBA central median: nominal `5.162 us`, asymmetric `5.255 us`, nonzero-velocity `6.917 us`
+- Reduced CCRBA + indexed Jacobian: `7.501 us`, `7.630 us`, `9.213 us`
+- 별도 기록된 installed-package headless profile 성격: 유용한 end-to-end evidence (fresh dynamics-scope table에는 미포함)
 
-These values are evidence snapshots, not release-wide guarantees. They depend on compiler flags, CPU scheduling, model XML, selected CCRBA term mask, indexed body/site task set, CPU affinity, frequency policy, and realtime priority. For new comparisons, regenerate CSVs and tables from the benchmark binaries instead of mixing historic and current rows.
+- 이 값들의 성격: evidence snapshot (release-wide guarantee 아님)
+- 영향 요인: compiler flag, CPU scheduling, model XML, 선택한 CCRBA term mask, indexed body/site task set, CPU affinity, frequency policy, realtime priority
+- 새 비교 시 원칙: historic row와 current row 혼합 대신 benchmark binary로부터 CSV/table 재생성
 
-The current benchmark resource extension also emits setup rows. `dtDynModel_resource` rows measure `CompileSpec(spec)`, and `dtDynData_resource` rows measure setup-time construction plus `dtDynData::Resize(model)` for each fixture, separately from realtime compute rows. Use them to size initialization cost and memory behavior; do not include them in per-tick controller timing.
+- 현재 benchmark resource extension이 방출하는 setup row: `dtDynModel_resource`(측정 대상 `CompileSpec(spec)`), `dtDynData_resource`(측정 대상 fixture별 setup-time construction + `dtDynData::Resize(model)`, realtime compute row와 분리)
+- 용도: initialization cost와 memory behavior 산정 (per-tick controller timing에 포함 금지)
 
-Setup inspection rows are reported in microseconds for timing columns. Human-facing tables omit all-zero compute allocation columns; allocation counters remain in CSV output for regression/debug use.
+- Setup inspection row timing column 단위: microsecond
+- Human-facing table 생략 대상: all-zero compute allocation column (allocation counter는 regression/debug용으로 CSV에 유지)
 
+- Allocation counter 구현 방식: benchmark executable에서 C++ `operator new` / `operator new[]`(aligned form 포함) override
+- 용도: 측정 scope 내 C++ allocation 감지
+- 한계: OS-level heap tracing의 완전한 대체 아님 — dtMath dynamic container는 `malloc`/`calloc`/`realloc`을 통해 allocate 가능, external library는 direct C allocation API나 allocator pool 사용 가능, allocator-internal behavior는 이 counter 범위 밖, 측정 scope 밖의 one-time runtime initialization은 이 column으로 특성화되지 않음
+- final realtime heap certification 시 사용 권장: malloc-family interposer 또는 fail-on-allocation guard
 
-Allocation counters in this benchmark are implemented by overriding C++ `operator new` / `operator new[]` in the benchmark executable, including aligned forms. They are useful for detecting C++ allocation in the measured scope, but they are not a complete replacement for OS-level heap tracing: dtMath dynamic containers can allocate through `malloc`/`calloc`/`realloc`, external libraries may use direct C allocation APIs or allocator pools, allocator-internal behavior is outside this counter, and one-time runtime initialization outside the measured scope is not characterized by these columns. Use a malloc-family interposer or fail-on-allocation guard for final realtime heap certification.
-
-For the current fresh-`dtDynData` resource rows, allocation mean and max are equal because each iteration resizes a fresh data object against the same fixed model and allocates the same set of buffers. Keeping both columns is still useful: the mean summarizes expected setup behavior, while the max would reveal conditional or sporadic allocation regressions. A min allocation column would add little for the current deterministic setup path, but could be added later if resource rows begin mixing reused-data or conditional-allocation cases.
+- 현재 fresh-`dtDynData` resource row에서 allocation mean과 max가 같은 이유: 각 iteration이 같은 fixed model에 대해 fresh data object를 resize하고 같은 buffer set을 allocate
+- 두 column 유지 이유: mean은 expected setup behavior 요약, max는 conditional/sporadic allocation regression 노출
+- min allocation column 미추가 사유: 현재 deterministic setup path에서는 효용이 낮음 (향후 resource row가 reused-data나 conditional-allocation case를 포함하게 되면 추가 검토 가능)

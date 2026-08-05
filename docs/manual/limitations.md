@@ -2,7 +2,7 @@
 
 Author: Joonhee Jo
 
-`dtDynamics 0.1.1`은 tree/forest rigid-body model의 setup 검증과 controller-facing dynamics ingredient에 범위를 둔다.
+- `dtDynamics 0.1.1` 범위: tree/forest rigid-body model의 setup 검증과 controller-facing dynamics ingredient
 
 ## 지원하는 범위
 
@@ -21,20 +21,30 @@ Author: Joonhee Jo
 - generic file utility, directory creation, resource resolver
 - `CompileAndResize`처럼 setup allocation을 숨기는 wrapper
 
-unsupported XML syntax·semantics는 가능한 값으로 추측하지 않고 `dtDynXmlError`로 실패한다.
+- unsupported XML syntax·semantics 처리: 추측값 대입 없이 `dtDynXmlError`로 실패
 
 ## Validation이 증명하는 것과 아닌 것
 
-MuJoCo 3.8.0과 Pinocchio 3.9.0은 production dependency가 아니라 겹치는 quantity의 independent reference다. coordinate/frame transform 뒤 비교 가능한 항만 `status=ok`로 보고하며, equivalent contract가 없는 Pinocchio centroidal row는 `status=skipped`와 diagnostic으로 남긴다. contextual library-overhead timing을 same-output speed ratio로 해석하지 않는다.
+- MuJoCo 3.8.0, Pinocchio 3.9.0 성격: production dependency 아님, 겹치는 quantity의 independent reference
+- `status=ok` 보고 대상: coordinate/frame transform 후 비교 가능한 항만
+- equivalent contract 없는 Pinocchio centroidal row: `status=skipped`와 diagnostic으로 기록
+- 해석 금지: contextual library-overhead timing을 same-output speed ratio로 해석
 
-`dtDynData::IsCompatible(model)`은 storage dimension compatibility만 확인한다. exact model identity, topology, inertia, name equality를 증명하지 않는다.
+- `dtDynData::IsCompatible(model)` 확인 범위: storage dimension compatibility만
+- 미증명 항목: exact model identity, topology, inertia, name equality
 
-benchmark의 C++ allocation 0은 계측한 `operator new`/`operator new[]` scope에 한정된다. direct `malloc` 계열, OS/runtime, external library, unsized caller output까지 포함하는 보장이 아니다. CPU affinity와 seven-batch median/p95는 scheduler/DVFS 영향을 줄이지만 hard-realtime deadline이나 byte-identical timing replay를 증명하지 않는다.
+- benchmark의 C++ allocation 0 범위: 계측한 `operator new`/`operator new[]` scope에 한정
+- 비보장 항목: direct `malloc` 계열, OS/runtime, external library, unsized caller output
+- CPU affinity, seven-batch median/p95 효과: scheduler/DVFS 영향 완화 (hard-realtime deadline·byte-identical timing replay는 미증명)
 
 ## 상태 초기화
 
-neutral/default state initializer는 NO-GO다. floating quaternion, rest pose, estimator convention은 model/controller policy에 속한다. caller가 compiled address와 자신의 state contract로 초기화한다.
+- neutral/default state initializer: NO-GO
+- model/controller policy 소속: floating quaternion, rest pose, estimator convention
+- 초기화 책임: caller가 compiled address와 자신의 state contract로 수행
 
 ## Compatibility 영향
 
-0.1.1의 checked path와 XML loader는 이전에 silent default/partial parse로 통과하던 malformed numeric, wrong arity, duplicate name, invalid reference를 거부할 수 있다. 이것은 fail-closed setup contract이며 real robot XML을 release gate에서 확인해야 한다. raw `CompileSpec()`는 trusted backward-compatible path로 유지된다.
+- 0.1.1의 checked path·XML loader 영향: 이전에 silent default/partial parse로 통과하던 malformed numeric, wrong arity, duplicate name, invalid reference 거부 가능
+- 성격: fail-closed setup contract → real robot XML을 release gate에서 확인 필요
+- raw `CompileSpec()`: trusted backward-compatible path로 유지

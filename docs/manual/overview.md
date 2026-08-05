@@ -2,7 +2,8 @@
 
 Author: Joonhee Jo
 
-`dtDynamics`는 realtime controller와 whole-body control(WBC)이 소비하는 강체 동역학 **재료**를 계산하는 standalone package다. model/data 분리, 명시적 indexing, setup validation, 필요한 항만 선택하는 compute path를 중심으로 설계했다.
+- `dtDynamics`: realtime controller와 whole-body control(WBC)이 소비하는 강체 동역학 **재료** 계산 standalone package
+- 설계 중심: model/data 분리, 명시적 indexing, setup validation, 필요한 항만 선택하는 compute path
 
 ## 제공하는 것
 
@@ -15,12 +16,19 @@ Author: Joonhee Jo
 
 ## 제공하지 않는 것
 
-contact solver, actuator model, simulator stepping, torque controller, estimator mapping, closed-chain constraint solver는 제공하지 않는다. MuJoCo와 Pinocchio는 validation/benchmark reference일 뿐 production dependency가 아니다.
+- 미제공 항목: contact solver, actuator model, simulator stepping, torque controller, estimator mapping, closed-chain constraint solver
+- MuJoCo, Pinocchio: validation/benchmark reference (production dependency 아님)
 
 ## 읽는 순서
 
-처음 사용하는 경우 @ref dtdynamics_modeling 에서 XML → checked compile → resize 경계를 확인한 뒤 @ref dtdynamics_example 을 실행한다. 그 다음 @ref dtdynamics_computation 의 prerequisite/frame convention과 @ref dtdynamics_realtime 의 resource scope를 읽는다. generated signature만 보고 호출하면 coordinate order, lifetime, prerequisite를 놓치기 쉽다.
+1. 처음 사용 시 @ref dtdynamics_modeling 에서 XML → checked compile → resize 경계 확인
+2. @ref dtdynamics_example 실행
+3. @ref dtdynamics_computation 의 prerequisite/frame convention 확인
+4. @ref dtdynamics_realtime 의 resource scope 확인
+
+- 주의: generated signature만 보고 호출 시 coordinate order, lifetime, prerequisite 누락 위험
 
 ## Resource claim의 범위
 
-문서의 zero-allocation 표현은 model compilation, `dtDynData::Resize()`, caller-owned output sizing이 끝난 뒤 benchmark가 측정한 C++ `operator new` 경로를 뜻한다. arbitrary API, logger, `malloc` family, OS/runtime까지 포함하는 보편적 hard-realtime 보장이 아니다.
+- 문서의 zero-allocation 표현 의미: model compilation, `dtDynData::Resize()`, caller-owned output sizing 완료 후 benchmark가 측정한 C++ `operator new` 경로
+- 아닌 것: arbitrary API, logger, `malloc` family, OS/runtime까지 포함하는 보편적 hard-realtime 보장
