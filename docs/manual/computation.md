@@ -1,4 +1,4 @@
-# 계산 파이프라인 {#dtdynamics_computation}
+# 계산 파이프라인
 
 Author: Joonhee Jo
 

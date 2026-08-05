@@ -1,4 +1,4 @@
-# 개요 {#dtdynamics_overview}
+# 개요
 
 Author: Joonhee Jo
 
@@ -21,10 +21,10 @@ Author: Joonhee Jo
 
 ## 읽는 순서
 
-1. 처음 사용 시 @ref dtdynamics_modeling 에서 XML → checked compile → resize 경계 확인
-2. @ref dtdynamics_example 실행
-3. @ref dtdynamics_computation 의 prerequisite/frame convention 확인
-4. @ref dtdynamics_realtime 의 resource scope 확인
+1. 처음 사용 시 @ref md_docs_manual_modeling 에서 XML → checked compile → resize 경계 확인
+2. @ref md_docs_manual_example 실행
+3. @ref md_docs_manual_computation 의 prerequisite/frame convention 확인
+4. @ref md_docs_manual_realtime 의 resource scope 확인
 
 - 주의: generated signature만 보고 호출 시 coordinate order, lifetime, prerequisite 누락 위험
 
