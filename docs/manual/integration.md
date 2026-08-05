@@ -1,4 +1,4 @@
-# Controller 통합 {#dtdynamics_integration}
+# Controller 통합
 
 Author: Joonhee Jo
 

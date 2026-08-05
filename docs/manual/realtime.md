@@ -1,4 +1,4 @@
-# Realtime resource model {#dtdynamics_realtime}
+# Realtime resource model
 
 Author: Joonhee Jo
 

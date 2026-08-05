@@ -1,4 +1,4 @@
-# Release와 package boundary {#dtdynamics_release}
+# Release와 package boundary
 
 Author: Joonhee Jo
 

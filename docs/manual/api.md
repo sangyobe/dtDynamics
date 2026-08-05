@@ -1,4 +1,4 @@
-# API 지도 {#dtdynamics_api_map}
+# API 지도
 
 Author: Joonhee Jo
 

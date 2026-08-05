@@ -1,4 +1,4 @@
-# 검증 {#dtdynamics_validation}
+# 검증
 
 Author: Joonhee Jo
 

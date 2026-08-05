@@ -1,4 +1,4 @@
-# 최소 end-to-end 예제 {#dtdynamics_example}
+# 최소 end-to-end 예제
 
 Author: Joonhee Jo
 

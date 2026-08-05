@@ -1,4 +1,4 @@
-# 제한과 scope 경계 {#dtdynamics_limitations}
+# 제한과 scope 경계
 
 Author: Joonhee Jo
 

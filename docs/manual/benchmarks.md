@@ -1,4 +1,4 @@
-# Benchmarks and Resource Reports {#dtdynamics_benchmarks}
+# Benchmarks and Resource Reports
 
 Author: Joonhee Jo
 

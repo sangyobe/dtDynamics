@@ -1,4 +1,4 @@
-# 모델과 데이터 수명주기 {#dtdynamics_modeling}
+# 모델과 데이터 수명주기
 
 Author: Joonhee Jo
 
