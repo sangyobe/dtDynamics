@@ -1,21 +1,21 @@
-# 계산 파이프라인
+# 3. 계산 파이프라인
 
 Author: Joonhee Jo
 
 @dotfile diagrams/compute_pipeline.dot
 
-## State staging
+## 3-1. State staging
 
 - 일반적인 control tick 동작: 이미 resize된 `dtDynData`에 `qpos`, `qvel`, gravity 기록
 - 필수 조건: state staging이 compiled model dimensions와 address convention에 일치
 
-## Forward kinematics
+## 3-2. Forward kinematics
 
 - Forward kinematics 계산 항목: dynamics와 Jacobian 함수가 사용하는 body/site pose와 motion quantity
 - 명시적 호출 시점: kinematics만 필요할 때
 - 대안: prerequisite kinematic update를 자체 수행하는 dynamics entry point에 의존
 
-## RNEA path
+## 3-3. RNEA path
 
 - controller-facing API가 사용하는 manipulator equation:
 
@@ -31,7 +31,7 @@ M(q)\dot{v} + h(q, v) = \tau + J(q)^\mathsf{T} f,
 - `ComputeDynamicsRNEA` 성격: RNEA contract로 제공되는 mass/bias/gravity/Coriolis-style ingredient용 경량 recursive Newton-Euler path
 - 사용 시점: controller가 CCRBA 전용 centroidal/composite output이 불필요할 때
 
-## CCRBA path
+## 3-4. CCRBA path
 
 - composite/centroidal path 제공 항목: WBC objective가 사용하는 quantity (centroidal momentum relation 포함)
 
@@ -51,7 +51,7 @@ h_G = A_G(q) v,
 - term mask 용도: realtime design tool
 - 원칙: controller tick이 소비하는 output만 요청 (예: LeoQuad는 reduced CCRBA mask 사용, indexed body/site Jacobian은 별도 계산)
 
-## Output families and equations
+## 3-5. Output families and equations
 
 - 기본 dynamics output 구성 방식: 일반적인 분리
 
@@ -88,7 +88,7 @@ h_G = A_G(q)v,
 - CoM quantity 성격: 마찬가지로 선택적
 - WBC objective가 CoM position과 Jacobian만 필요할 때: 해당 flag만 요청, centroidal derivative는 비활성 유지
 
-## Dependency order
+## 3-6. Dependency order
 
 - 안전한 mental model:
 
@@ -101,7 +101,7 @@ h_G = A_G(q)v,
 - `ForwardKinematics()` 명시적 호출로 충분한 경우: tick이 transform 또는 단발성 body/site/point Jacobian만 필요할 때
 - 추가로 현재 `ComputeDynamicsRNEA()` 또는 `ComputeDynamicsCCRBA()` pass가 필요한 경우: Jacobian-derivative, `Jdot*qvel`, combined-term derivative output, bulk/indexed `dtDynData` Jacobian writer (이들은 `subtree_com`, `cvel`, `cdof`, `cdof_dot` 소비)
 
-## Jacobian APIs
+## 3-7. Jacobian APIs
 
 - Task velocity가 따르는 표준 differential relation:
 
@@ -120,3 +120,9 @@ h_G = A_G(q)v,
 
 - realtime WBC 권장 방식: task가 \f$J\f$와 \f$\dot{J}v\f$ 모두 필요할 때 combined `Compute*JacobianTerms()` helper 사용
 - 미사용 output에 `nullptr` 전달 효과: task가 필요로 하는 정확한 ingredient 문서화, 같은 body/site/point에 대한 중복 traversal 작업 방지
+
+## 관련 문서
+
+- 이전 chapter: @ref md_docs_manual_modeling
+- 다음 chapter: @ref md_docs_manual_example
+- 전체 목차: @ref md_docs_manual_index

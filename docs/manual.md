@@ -2,25 +2,41 @@
 
 Author: Joonhee Jo
 
-> 유지되는 canonical manual source: [`docs/manual/`](manual/index.md) 아래
+> 이 문서: **실행 절차(how-to) 전용** 진입점 — 개념/API contract/equation은 `docs/manual/` 하위 chapter가 canonical source
 >
 > ```bash
 > tools/validate_docs.sh
 > ```
 >
-> generated HTML entry: `build/docs/doxygen/html/index.html`
+> generated HTML entry (Doxygen mainpage): `docs/manual/index.md` → `build/docs/doxygen/html/index.html`
 
-## Package boundary
+## 목차
+
+1. [Package boundary와 최소 사용](#1-package-boundary와-최소-사용)
+2. [모델 준비 절차](#2-모델-준비-절차)
+3. [최소 end-to-end 예제](#3-최소-end-to-end-예제)
+4. [Controller/WBC 통합 절차](#4-controllerwbc-통합-절차)
+5. [Realtime 적용 checklist](#5-realtime-적용-checklist)
+6. [검증 실행 방법](#6-검증-실행-방법)
+7. [Benchmark 재현 방법](#7-benchmark-재현-방법)
+8. [문서 생성·Release 절차](#8-문서-생성release-절차)
+9. [Troubleshooting](#9-troubleshooting)
+10. [상세 설명 chapter와 관련 문서](#10-상세-설명-chapter와-관련-문서)
+
+## 1. Package boundary와 최소 사용
 
 - `dtDynamics 0.1.1`: `dtMath` 기반 dynamics ingredient engine
-- MuJoCo 3.8.0, Pinocchio 3.9.0: validation/benchmark reference (production target `dt::Dynamics`에 link되지 않음)
+
+> **주의 — production dependency vs validation dependency**
+>
+> `MuJoCo 3.8.0`, `Pinocchio 3.9.0`: validation/benchmark reference (production target `dt::Dynamics`에 link되지 않음).
 
 ```cmake
 find_package(dtDynamics 0.1.1 EXACT CONFIG REQUIRED)
 target_link_libraries(my_controller PRIVATE dt::Dynamics)
 ```
 
-## Canonical lifecycle
+- Canonical lifecycle (아래 2~5장이 각 단계를 실행 절차로 확장):
 
 ```text
 LoadXmlFile / DecodeXml
@@ -36,24 +52,432 @@ LoadXmlFile / DecodeXml
 - raw `CompileSpec()`: trusted setup path를 위한 호환 API
 - lookup 실패: `DTDYN_INVALID_INDEX` (확인하지 않은 ID로 indexing 금지)
 
-## Redesign figure
-
 ![To-Be dtDynamics architecture](figures/dtdynamics_to_be.svg)
 
-## 읽을 문서
+## 2. 모델 준비 절차
 
-- [개요](manual/overview.md)
-- [모델과 데이터 수명주기](manual/modeling.md)
-- [계산 pipeline](manual/computation.md)
-- [최소 예제](manual/example.md)
-- [Realtime resource model](manual/realtime.md)
-- [검증](manual/validation.md)
-- [Benchmark](manual/benchmarks.md)
-- [Controller 통합](manual/integration.md)
-- [API 지도](manual/api.md)
-- [제한](manual/limitations.md)
-- [Release 경계](manual/release.md)
+### 2-1. XML 로드
 
-- 이 top-level 문서: 중복된 상세 contract 미유지
+```cpp
+const dtDynSpec spec = dtDynSpec::LoadXmlFile("model/robot.xml");
+spec.SaveXmlFile("model/robot-native.xml");
+```
+
+### 2-2. 에러 처리 (`dtDynXmlError`)
+
+```cpp
+try
+{
+    const dtDynSpec spec = dtDynSpec::LoadXmlFile("model/robot.xml");
+    const dtDynModel model = CompileSpecChecked(spec);
+}
+catch (const dtDynXmlError &error)
+{
+    ReportXmlFailure(error.Code(), error.SourcePath(), error.Offset());
+}
+```
+
+### 2-3. Checked compile
+
+```cpp
+dtDynValidationError error;
+if (!ValidateSpec(spec, &error))
+{
+    ReportSpecFailure(error.code, error.object, error.index, error.message);
+}
+const dtDynModel model = CompileSpecChecked(spec);
+```
+
+### 2-4. ID lookup과 cache
+
+```cpp
+const dtDynIndex body = spec.BodyId("base");
+const dtDynIndex joint = spec.JointId("hip");
+const dtDynIndex site = spec.SiteId("foot");
+const dtDynIndex actuator = spec.ActuatorId("hip_motor");
+
+if (body == DTDYN_INVALID_INDEX ||
+    joint == DTDYN_INVALID_INDEX ||
+    site == DTDYN_INVALID_INDEX ||
+    actuator == DTDYN_INVALID_INDEX)
+{
+    throw std::runtime_error("required body/joint/site/actuator is missing");
+}
+```
+
+### 2-5. Setup checklist
+
+1. `LoadXmlFile()` 또는 `DecodeXml()`로 `dtDynSpec` 생성
+2. `ValidateSpec()`/`CompileSpecChecked()`로 외부 입력을 fail-closed 검증
+3. expected dimensions와 body/joint/site/actuator name 확인
+4. `DTDYN_INVALID_INDEX` 확인 후 numeric ID와 state-address mapping cache
+5. 동시 평가 instance마다 하나의 `dtDynData` 생성, `Resize(model)` 실행
+6. 이후 realtime state update와 compute 시작
+
+- 개념(lifecycle, address 규칙, `dtDynSpec`/`dtDynModel` 설계 근거): [modeling.md](manual/modeling.md)
+
+## 3. 최소 end-to-end 예제
+
+- 이 예제가 보여주는 순서: **load → validate → compile → resize → ID cache → state 입력 → compute**
+- 성격: simulator나 torque controller 예제가 아닌 dynamics ingredient 사용 예제
+
+### 3-1. 입력 XML
+
+```xml
+<mujoco>
+  <worldbody>
+    <body name="base">
+      <body name="link1" pos="0.3 0 0">
+        <inertial pos="0.15 0 0" mass="1" diaginertia="0.01 0.02 0.02"/>
+        <joint name="shoulder" type="hinge" axis="0 0 1"/>
+        <body name="link2" pos="0.25 0 0">
+          <inertial pos="0.125 0 0" mass="0.8" diaginertia="0.008 0.012 0.012"/>
+          <joint name="elbow" type="hinge" axis="0 0 1"/>
+          <site name="tool" pos="0.2 0 0"/>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+  <actuator><motor name="shoulder_motor" joint="shoulder"/></actuator>
+</mujoco>
+```
+
+### 3-2. Program
+
+```cpp
+#include <dtDynamics/dtDynCompile.h>
+#include <dtDynamics/dtDynData.h>
+#include <dtDynamics/dtDynDynamics.h>
+#include <dtDynamics/dtDynSpec.h>
+#include <dtDynamics/dtDynValidation.h>
+
+#include <stdexcept>
+#include <string>
+
+using namespace dt::Dynamics;
+
+int main(int argc, char **argv)
+{
+    if (argc != 2)
+    {
+        throw std::runtime_error("usage: example <model.xml>");
+    }
+
+    // Filesystem XML. XML text가 memory에 있으면 DecodeXml(xml)을 사용한다.
+    const dtDynSpec spec = dtDynSpec::LoadXmlFile(argv[1]);
+
+    dtDynValidationError validation;
+    if (!ValidateSpec(spec, &validation))
+    {
+        throw std::runtime_error(validation.message);
+    }
+    const dtDynModel model = CompileSpecChecked(spec);
+
+    dtDynData data;
+    data.Resize(model); // setup-time allocation
+    if (!data.IsCompatible(model))
+    {
+        throw std::runtime_error("storage dimensions do not match model");
+    }
+
+    // Spec와 Model 모두 같은 네 lookup family를 제공한다.
+    const dtDynIndex specBody = spec.BodyId("link2");
+    const dtDynIndex specJoint = spec.JointId("elbow");
+    const dtDynIndex tool = model.SiteId("tool");
+    const dtDynIndex shoulderMotor = model.ActuatorId("shoulder_motor");
+    if (specBody == DTDYN_INVALID_INDEX ||
+        specJoint == DTDYN_INVALID_INDEX ||
+        tool == DTDYN_INVALID_INDEX ||
+        shoulderMotor == DTDYN_INVALID_INDEX)
+    {
+        throw std::runtime_error("required model name is missing");
+    }
+
+    // 이 fixture는 scalar hinge 두 개다. 실제 controller는 compiled address mapping을 사용한다.
+    data.qpos(0) = 0.20;
+    data.qpos(1) = -0.30;
+    data.qvel(0) = 0.10;
+    data.qvel(1) = 0.05;
+
+    dt::Math::Vector3<dtDynReal> gravity;
+    gravity(0) = 0.0;
+    gravity(1) = 0.0;
+    gravity(2) = -9.81;
+
+    const dtDynCcrbaTermFlags terms =
+        DTDYN_CCRBA_TERM_COM_POS |
+        DTDYN_CCRBA_TERM_COM_JMAT |
+        DTDYN_CCRBA_TERM_CENT_MOM;
+    ComputeDynamicsCCRBA(model, data, gravity, terms);
+
+    // 결과는 data.Mmat, data.gravityTorq, data.coriolisTorq,
+    // data.nonlinTorq와 요청한 CoM/centroidal field에 있다.
+    (void)tool;
+    (void)shoulderMotor;
+    return 0;
+}
+```
+
+### 3-3. 실패 진단
+
+- 파일 XML semantic error 보존 정보: exact source path와 zero-based byte offset
+
+```cpp
+catch (const dtDynXmlError &error)
+{
+    Log(error.Code(), error.SourcePath(), error.Offset(), error.what());
+}
+```
+
+- programmatic mutation으로 topology 오류 발생 시: `ValidateSpec(spec, &error)`가 `error.code`, `error.object`, `error.index`, `error.message` 채움
+- 금지 사항: `what()`이나 process exit code만으로 machine category 추론
+
+- 개념(예제 설계 의도, `CompileSpec`/neutral-state 주의): [example.md](manual/example.md)
+
+## 4. Controller/WBC 통합 절차
+
+### 4-1. Setup에서 한 번 수행할 일
+
+1. XML file이면 `dtDynSpec::LoadXmlFile()`, memory text이면 `DecodeXml()` 호출
+2. 외부·편집 입력은 `ValidateSpec()` 또는 `CompileSpecChecked()`로 검증
+3. `dtDynData::Resize(model)`로 storage 준비
+4. `BodyId`, `JointId`, `SiteId`, `ActuatorId` 조회 후 `DTDYN_INVALID_INDEX` 검사
+5. estimator의 state mapping과 active task ID를 controller 쪽에 cache
+
+```cpp
+const dtDynSpec spec = dtDynSpec::LoadXmlFile(modelPath);
+const dtDynModel model = CompileSpecChecked(spec);
+
+dtDynData data;
+data.Resize(model);
+
+const dtDynIndex foot = model.SiteId("front_left_foot");
+const dtDynIndex hipMotor = model.ActuatorId("front_left_hip_motor");
+if (foot == DTDYN_INVALID_INDEX || hipMotor == DTDYN_INVALID_INDEX)
+{
+    throw std::runtime_error("required controller mapping is missing");
+}
+```
+
+### 4-2. Control tick
+
+- 아래는 controller-owned symbol을 포함한 **pseudocode**
+- `Jp`, `Jr`, `JdvP`, `JdvR`: setup에서 `3 x model.nv`로 미리 sizing
+
+```text
+WriteEstimatorStateInto(data.qpos, data.qvel); // controller-owned mapping
+ComputeDynamicsCCRBA(model, data, gravity, wbcTermMask);
+ComputeSiteJacobianTerms(model, data, foot,
+                         &Jp, &Jr, nullptr, nullptr, &JdvP, &JdvR);
+SolveControllerProblem(data.Mmat, data.nonlinTorq,
+                       Jp, Jr, JdvP, JdvR); // controller-owned solver
+```
+
+> **주의 — setup-time vs realtime 경계**
+>
+> tick 안에서 금지: name lookup, XML, validation, compilation, `Resize()`.
+>
+> caller-owned Jacobian matrix 처리: strict zero-allocation path 필요 시 loop 진입 전에 미리 sizing.
+
+- 개념(WBC handoff 식, 여러 instance/model update 원칙, LeoQuad 경계): [integration.md](manual/integration.md)
+
+## 5. Realtime 적용 checklist
+
+### 5-1. Setup phase (loop 밖에서 수행)
+
+1. `LoadXmlFile()`/`DecodeXml()` 또는 programmatic API로 `dtDynSpec` 생성
+2. `ValidateSpec()`/`CompileSpecChecked()` 실행
+3. `dtDynData::Resize(model)` 실행
+4. body/joint/site/actuator ID와 state address cache
+5. caller-owned Jacobian/output matrix pre-size
+6. controller/estimator convention에 따른 explicit state initialization
+
+### 5-2. Realtime phase
+
+1. estimator state를 기존 `qpos`/`qvel` storage에 기록
+2. 필요한 최소 `ComputeDynamicsRNEA()` 또는 reduced-mask `ComputeDynamicsCCRBA()` 호출
+3. active task에 필요한 Jacobian만 계산
+4. 결과를 controller task structure에 전달
+
+> **주의 — setup-time vs realtime 경계**
+>
+> loop 배제 대상: XML I/O, validation, compile, resize, name lookup, model hot-swap.
+
+- 개념(allocation evidence, 여러 evaluation instance, timing 해석): [realtime.md](manual/realtime.md)
+
+## 6. 검증 실행 방법
+
+### 6-1. Reference/artifact 검증
+
+```bash
+python3 tools/validate_reference_benchmark.py \
+  --references /path/to/accepted-reference.csv \
+  --runtime-csv docs/figures/runtime_by_fixture.csv
+
+python3 tools/validate_benchmark_results.py \
+  --native /path/to/native.csv \
+  --stages /path/to/stages.csv \
+  --references /path/to/reference.csv \
+  --generated docs/figures
+```
+
+### 6-2. Package validation gate
+
+```bash
+cmake --preset validation
+cmake --build --preset validation -- -j2
+ctest --preset validation --output-on-failure
+tools/validate_package.sh --skip-benchmarks
+tools/validate_docs.sh
+```
+
+- 개념(setup/native/external validation 의미, artifact 판정 기준): [validation.md](manual/validation.md)
+
+## 7. Benchmark 재현 방법
+
+### 7-1. CSV 생성
+
+```bash
+cd /path/to/dtDynamics
+cmake --preset validation
+cmake --build --preset validation -- -j2
+export DTDYNAMICS_BENCHMARK_CPU=0
+export DTDYNAMICS_BENCHMARK_BATCHES=7
+taskset -c "$DTDYNAMICS_BENCHMARK_CPU" build/validation/bin/benchmark_dtDynamics > /tmp/native.csv
+taskset -c "$DTDYNAMICS_BENCHMARK_CPU" build/validation/bin/benchmark_dtDynamicsStages > /tmp/stages.csv
+taskset -c "$DTDYNAMICS_BENCHMARK_CPU" build/validation/bin/benchmark_dtDynamicsReferences > /tmp/references.csv
+```
+
+### 7-2. Table/figure 생성 및 검증
+
+```bash
+python3 tools/plot_benchmark_results.py \
+  --native /tmp/native.csv \
+  --stages /tmp/stages.csv \
+  --references /tmp/references.csv \
+  --out /tmp/dtdyn_figures \
+  --tables-out /tmp/dtdyn_tables
+
+python3 tools/validate_benchmark_results.py \
+  --native /tmp/native.csv \
+  --stages /tmp/stages.csv \
+  --generated /tmp/dtdyn_figures
+
+python3 tools/validate_reference_benchmark.py \
+  --references /tmp/references.csv \
+  --runtime-csv /tmp/dtdyn_figures/runtime_by_fixture.csv
+```
+
+- 산출물: `runtime_by_fixture.{csv,png}`, `scaling_by_dof.{csv,png}`, `stage_breakdown.{csv,png}` (CSV는 mean/median/p95/p99 보존, figure는 median 사용)
+
+### 7-3. Doxygen 문서 GitLab 게시
+
+- 원칙: generated HTML은 Git에서 제외, HTML commit 없이 GitLab CI job artifact로 즉시 게시 가능
+
+```yaml
+doxygen-artifact:
+  stage: build
+  script:
+    - tools/validate_docs.sh
+  artifacts:
+    paths:
+      - build/docs/doxygen/html/
+```
+
+- instance-level Pages 확인 후 추가 작업: pipeline `stages` 목록에 `deploy` 추가, generated directory 게시
+
+```yaml
+doxygen-pages:
+  stage: deploy
+  script:
+    - tools/validate_docs.sh
+    - mkdir -p public
+    - cp -a build/docs/doxygen/html/. public/
+  pages:
+    publish: public
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+```
+
+- 두 job 활성화 전 필수 작업: project-approved image 또는 runner toolchain 고정, 첫 pipeline 검증, artifact 다운로드, private Pages access 확인 (release artifact로 취급하기 전)
+
+- 개념(측정 scope, 해석 경계, evidence snapshot): [benchmarks.md](manual/benchmarks.md)
+
+## 8. 문서 생성·Release 절차
+
+### 8-1. 문서 생성
+
+```bash
+cd /path/to/dtDynamics
+tools/validate_docs.sh
+```
+
+- 실행 항목: current-document content oracle, Doxygen warning scan, Graphviz generation
+- generated HTML 위치: `build/docs/doxygen/html/` 아래
+
+### 8-2. Release gate
+
+```bash
+cmake --preset validation
+cmake --build --preset validation -- -j2
+ctest --preset validation --output-on-failure
+
+tools/validate_package.sh --skip-benchmarks
+tools/validate_install_export.sh
+tools/validate_docs.sh
+tools/audit_release_readiness.sh
+```
+
+> **주의 — Publication 경계**
+>
+> 검증 PASS ≠ 자동 publication consent. commit/push/tag/release 또는 외부 게시 전 필수 절차: 변경 범위와 evidence 제시, 명시적 승인 획득.
+>
+> source archive 생성 조건: clean committed tree와 exact tag 승인 이후만.
+
+- 개념(package surface 체크리스트, publication 경계 rationale): [release.md](manual/release.md)
+
+## 9. Troubleshooting
+
+| 증상 | 원인/확인 | 참고 |
+|---|---|---|
+| `dtDynXmlError` 발생 | malformed/duplicate/unresolved XML, invalid number, wrong arity, 잘못된 vector arity | `error.Code()`/`SourcePath()`/`Offset()` 확인 — [modeling.md](manual/modeling.md) |
+| lookup이 `DTDYN_INVALID_INDEX` 반환 | 이름 오타, 아직 compile 안 된 spec에서 조회, 모델에 실제로 없는 body/joint/site/actuator | 예외 대신 반환값이므로 반드시 확인 후 indexing — [modeling.md](manual/modeling.md) |
+| `IsCompatible(model)`이 `true`인데 결과가 이상함 | `IsCompatible()`은 storage dimension만 확인, model identity/topology/inertia 동일성 미보장 | model 교체 시 ID/address cache 재생성 — [modeling.md](manual/modeling.md) |
+| model 재compile 후 이상 동작 | 차원이 같아도 cached ID/address가 stale할 수 있음 | `Resize()` 재검토 및 lookup 재수행 — [modeling.md](manual/modeling.md) |
+| `find_package(dtDynamics 0.1.1 EXACT ...)` 실패 | installed package identity가 0.1.1이 아니거나 EXACT 불일치 | `tools/validate_install_export.sh` 재실행 — [release.md](manual/release.md) |
+| 검증에서 external row가 `skipped` | 해당 quantity에 대응하는 Pinocchio/MuJoCo contract가 없음 (equivalent contract 없음) | 정상 동작 (실패 아님) — [validation.md](manual/validation.md) |
+| `qpos`를 0으로 초기화했더니 이상함 | free/ball joint quaternion이 invalid할 수 있음 (package-level neutral initializer 없음) | 명시적 초기화 필요 — [modeling.md](manual/modeling.md), [example.md](manual/example.md) |
+
+## 10. 상세 설명 chapter와 관련 문서
+
+- 1장 [개요](manual/overview.md)
+- 2장 [모델과 데이터 수명주기](manual/modeling.md)
+- 3장 [계산 pipeline](manual/computation.md)
+- 4장 [최소 예제](manual/example.md)
+- 5장 [Realtime resource model](manual/realtime.md)
+- 6장 [검증](manual/validation.md)
+- 7장 [Benchmark](manual/benchmarks.md)
+- 8장 [Controller 통합](manual/integration.md)
+- 9장 [API 지도](manual/api.md)
+- 10장 [제한](manual/limitations.md)
+- 11장 [Release 경계](manual/release.md)
+
+| 독자 | 우선 읽을 곳 |
+|---|---|
+| library/controller consumer | 이 문서 2~4장 → chapter 8 Controller 통합 → chapter 9 API 지도 |
+| model author (XML 작성자) | 이 문서 2장 → chapter 2 모델과 데이터 수명주기 → `docs/guides/model_guide/` |
+| package/release maintainer | 이 문서 6~8장 → chapter 6 검증 → chapter 7 Benchmark → chapter 11 Release 경계 |
+
+- 이 문서: how-to/실행 절차 전용 — 중복된 상세 contract 미유지
 - API, coordinate, benchmark 설명: 위 canonical chapter가 소유
 - 과거 release evidence: `docs/release-notes/`에 별도 보존
+
+## 관련 문서
+
+- Doxygen mainpage(전체 목차): `docs/manual/index.md`
+- model guide: `docs/guides/model_guide/`
+- usage/migration guide: `docs/guides/usage_guide/`
+- benchmark evidence: [docs/benchmark-results.md](benchmark-results.md)
+- release note: `docs/release-notes/v0.1.1.md`
+- 문서 gate `tools/validate_docs.sh` 필요 도구: Doxygen, Graphviz, Python 3, guide PDF 내용·page·font 검사용 Poppler 도구(`pdftotext`, `pdfinfo`, `pdffonts`)
+- `v0.1.0-rc1`~`rc3` release note: 과거 기준 보존 (현재 `0.1.1`의 근거로 소급 해석 금지)

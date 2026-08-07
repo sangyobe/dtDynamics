@@ -17,22 +17,30 @@ tools/validate_docs.sh
 - `tools/validate_docs.sh` 실행 항목: current-document content oracle, Doxygen warning scan, Graphviz generation
 - generated HTML 위치: `build/docs/doxygen/html/` 아래
 
-## Manual map
+## 목차
 
-- @ref md_docs_manual_overview "개요": package scope와 non-goal
-- @ref md_docs_manual_modeling "모델과 데이터 수명주기": XML, validation, compilation, lookup, coordinates
-- @ref md_docs_manual_computation "계산 pipeline": FK, RNEA, CCRBA, Jacobian, CoM, centroidal term
-- @ref md_docs_manual_example "최소 end-to-end 예제": load부터 compute까지
-- @ref md_docs_manual_realtime "Realtime resource model": setup/loop 분리와 allocation evidence 범위
-- @ref md_docs_manual_validation "검증": native/external reference와 fail-closed artifact gate
-- @ref md_docs_manual_benchmarks "Benchmark": raw CSV, summary, figure, timing 해석
-- @ref md_docs_manual_integration "Controller 통합": WBC handoff와 model update
-- @ref md_docs_manual_api "API 지도": public setup/compute/error family
-- @ref md_docs_manual_limitations "제한": 지원 범위와 compatibility 영향
-- @ref md_docs_manual_release "Release 경계": exact package/install/publication gate
+1. @ref md_docs_manual_overview "개요" — package scope와 non-goal
+2. @ref md_docs_manual_modeling "모델과 데이터 수명주기" — XML, validation, compilation, lookup, coordinates
+3. @ref md_docs_manual_computation "계산 pipeline" — FK, RNEA, CCRBA, Jacobian, CoM, centroidal term
+4. @ref md_docs_manual_example "최소 end-to-end 예제" — load부터 compute까지
+5. @ref md_docs_manual_realtime "Realtime resource model" — setup/loop 분리와 allocation evidence 범위
+6. @ref md_docs_manual_validation "검증" — native/external reference와 fail-closed artifact gate
+7. @ref md_docs_manual_benchmarks "Benchmark" — raw CSV, summary, figure, timing 해석
+8. @ref md_docs_manual_integration "Controller 통합" — WBC handoff와 model update
+9. @ref md_docs_manual_api "API 지도" — public setup/compute/error family
+10. @ref md_docs_manual_limitations "제한" — 지원 범위와 compatibility 영향
+11. @ref md_docs_manual_release "Release 경계" — exact package/install/publication gate
 
 ## 설계 원칙
 
 - `dtDynamics` 계산 항목: mass/bias/gravity/Coriolis, Jacobian/derivative, CoM/centroidal quantity
 - 아닌 것: simulator, contact solver, final torque controller, MuJoCo wrapper
 - 외부 model 처리: setup에서 fail-closed 검증, realtime에는 compiled model·preallocated data·cached numeric mapping만 전달
+
+## 관련 문서
+
+- 시작점(top-level landing): `docs/manual.md`
+- model guide: `docs/guides/model_guide/`
+- usage/migration guide: `docs/guides/usage_guide/`
+- benchmark evidence: @ref md_docs_benchmark_results
+- release note: `docs/release-notes/v0.1.1.md`

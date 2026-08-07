@@ -1,11 +1,15 @@
-# Benchmarks and Resource Reports
+# 7. Benchmarks and Resource Reports
 
 Author: Joonhee Jo
 
 - 이 chapter가 runtime 숫자보다 먼저 정의하는 것: **측정 scope와 해석 경계**
 - native dynamics, independently prepared stage, MuJoCo/Pinocchio reference 성격: 서로 다른 호출 집합
-- 금지 사항: median을 더해 다른 row를 만들거나 same-output speed ratio로 해석
-- 각 batch 수행 절차: fresh `dtDynData`, deterministic state, prerequisite preparation 이후 warmup과 measurement
+
+> **주의 — benchmark 해석 한계**
+>
+> 금지 사항: median을 더해 다른 row를 만들거나 same-output speed ratio로 해석.
+>
+> 각 batch 수행 절차: fresh `dtDynData`, deterministic state, prerequisite preparation 이후 warmup과 measurement.
 
 - 채택 artifact 검증 대상: raw CSV, seven-batch summary, normalized CSV, PNG
 - reference output 통과 조건: exact engine × fixture × state key coverage, unique key, finite value, `median <= p95 <= p99`, raw summary와 promoted value agreement
@@ -13,15 +17,15 @@ Author: Joonhee Jo
 
 - benchmark suite 보고 대상: runtime과 resource-consumption diagnostics 모두
 
-## Main binaries
+## 7-1. Main binaries
 
 - `benchmark_dtDynamics`: dynamics-only native scope 3종 (`native_rnea_com_pos`, `native_ccrba_reduced`, `native_ccrba_all`) + setup/off-loop `dtDynModel_resource`와 `dtDynData_resource` row
 - `benchmark_dtDynamicsStages`: FK, CCRBA substage, Jacobian, WBC-style reduced update path의 per-stage timing
 - `benchmark_dtDynamicsReferences`: 비교 가능한 quantity에 대한 MuJoCo, Pinocchio reference timing/error row
 
-## Benchmark scopes
+## 7-2. Benchmark scopes
 
-### Part A: native dynamics and external references
+### 7-2-1. Part A: native dynamics and external references
 
 - Part A 구성: 모든 fixture/state에 대한 package-native dynamics 호출 3종
   - `native_rnea_com_pos`: `ComputeDynamicsRNEA(model, data, gravity, DTDYN_RNEA_TERM_COM_POS)` 호출
@@ -62,7 +66,7 @@ Author: Joonhee Jo
 - 반복되는 native scope/stage batch 공통 절차: fresh `dtDynData` construct/resize, deterministic state 복원, 해당 stage prerequisite 준비 이후 warmup과 measurement
 - 원칙: stage row는 독립적으로 준비된 state에서 시작 → 다른 row 재구성을 위해 합산 금지
 
-### Part B: LeoQuad controller scope
+### 7-2-2. Part B: LeoQuad controller scope
 
 - controller-shaped stage 사용 mask:
 
@@ -76,7 +80,7 @@ DTDYN_CCRBA_TERM_CENT_MOM
 - `leoquad_wbc_update`: 선택한 root body와 foot site 4개에 대한 indexed Jacobian 추가
 - External LeoQuad XML timing 성격: opt-in (LeoQuad를 installed-package dependency로 만들지 않음)
 
-## Resource columns
+## 7-3. Resource columns
 
 - Latency table 보고 항목: mean, median, p95, p99 timing
 - 두 tail statistic 성격: empirical order statistics
@@ -103,40 +107,10 @@ k_{99} = \mathrm{floor}(0.99(N - 1)), \qquad T_{99} = t^{\uparrow}_{k_{99}}.
 - Human-facing benchmark table 생략 조건: 표시 scope의 모든 row가 0일 때 allocation column 생략 가능
 - 성격: presentation-only (raw CSV section은 allocation counter를 유지하여 allocation regression을 machine-checkable하게 보존)
 
-## Recommended validation command
+## 7-4. Recommended validation command
 
-```bash
-cd /path/to/dtDynamics
-cmake --preset validation
-cmake --build --preset validation -- -j2
-export DTDYNAMICS_BENCHMARK_CPU=0
-export DTDYNAMICS_BENCHMARK_BATCHES=7
-taskset -c "$DTDYNAMICS_BENCHMARK_CPU" build/validation/bin/benchmark_dtDynamics > /tmp/native.csv
-taskset -c "$DTDYNAMICS_BENCHMARK_CPU" build/validation/bin/benchmark_dtDynamicsStages > /tmp/stages.csv
-taskset -c "$DTDYNAMICS_BENCHMARK_CPU" build/validation/bin/benchmark_dtDynamicsReferences > /tmp/references.csv
-```
-
-- 이후 fresh CSV로부터 table/figure 생성:
-
-```bash
-python3 tools/plot_benchmark_results.py \
-  --native /tmp/native.csv \
-  --stages /tmp/stages.csv \
-  --references /tmp/references.csv \
-  --out /tmp/dtdyn_figures \
-  --tables-out /tmp/dtdyn_tables
-
-python3 tools/validate_benchmark_results.py \
-  --native /tmp/native.csv \
-  --stages /tmp/stages.csv \
-  --generated /tmp/dtdyn_figures
-
-python3 tools/validate_reference_benchmark.py \
-  --references /tmp/references.csv \
-  --runtime-csv /tmp/dtdyn_figures/runtime_by_fixture.csv
-```
-
-- plot 명령어가 나란히 작성하는 human figure 3종과 machine-readable source: `runtime_by_fixture.{csv,png}`, `scaling_by_dof.{csv,png}`, `stage_breakdown.{csv,png}`
+- CSV 생성, table/figure 생성, 검증 명령: `docs/manual.md` 7장 "Benchmark 재현 방법" 참고
+- 산출물: `runtime_by_fixture.{csv,png}`, `scaling_by_dof.{csv,png}`, `stage_breakdown.{csv,png}`
 - CSV 보존 값: mean, median, p95, p99
 - figure 사용 값: median (tail 해석은 CSV와 table에 위임)
 
@@ -145,7 +119,7 @@ python3 tools/validate_reference_benchmark.py \
 - raw CSV 보존 항목: 첫 timing row + batch-summary min/max spread
 - 논리 CPU 1개 고정 효과: migration noise 감소 (단, CPU affinity는 frequency locking·realtime isolation 아님 → 게시 수치와 함께 governor/scheduling 조건 기록 필요)
 
-## Publishing generated Doxygen in GitLab
+## 7-5. Publishing generated Doxygen in GitLab
 
 - 결론: HTML commit 없이 GitLab CI job artifact로 즉시 게시 가능
 - self-managed instance에 Pages가 활성화되어 있다면 private GitLab Pages site도 선호되는 안정적 URL
@@ -153,36 +127,9 @@ python3 tools/validate_reference_benchmark.py \
 
 - 원칙: generated HTML은 Git에서 제외
 - CI runner 필요 도구: Doxygen, Graphviz, 이 저장소의 local formula-image 구성이 요구하는 LaTeX/Ghostscript 도구
-- 보장된 artifact job 형태:
+- job/pipeline YAML과 활성화 절차: `docs/manual.md` 7장 "Doxygen 문서 GitLab 게시" 참고
 
-```yaml
-doxygen-artifact:
-  stage: build
-  script:
-    - tools/validate_docs.sh
-  artifacts:
-    paths:
-      - build/docs/doxygen/html/
-```
-
-- instance-level Pages 확인 후 추가 작업: pipeline `stages` 목록에 `deploy` 추가, generated directory 게시
-
-```yaml
-doxygen-pages:
-  stage: deploy
-  script:
-    - tools/validate_docs.sh
-    - mkdir -p public
-    - cp -a build/docs/doxygen/html/. public/
-  pages:
-    publish: public
-  rules:
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-```
-
-- 두 job 활성화 전 필수 작업: project-approved image 또는 runner toolchain 고정, 첫 pipeline 검증, artifact 다운로드, private Pages access 확인 (release artifact로 취급하기 전)
-
-## Current benchmark evidence snapshot
+## 7-6. Current benchmark evidence snapshot
 
 - 더 긴 benchmark report와 generated figure 위치: @ref md_docs_benchmark_results
 - 이 manual이 유지하는 범위: compact evidence snapshot만 (API contract가 stale performance number에 종속되지 않도록)
@@ -190,7 +137,7 @@ doxygen-pages:
 - 현재 canonical evidence 조건: CPU 0에 고정된 Release build, seven batch, batch당 warmup 20회·measured iteration 200회
 - Human-facing 값 정의: seven batch-level mean/median/p95/p99 summary의 median (pooled-sample percentile 아님)
 
-### Native floating-base quadruped snapshot
+### 7-6-1. Native floating-base quadruped snapshot
 
 - 아래 compact Part A snapshot이 재현하는 대상: 상세 report의 floating-base quadruped row
 - 각 cell 형식: `median / p95` (microsecond)
@@ -205,7 +152,7 @@ doxygen-pages:
 - setup 위치: realtime timing loop 밖
 - 측정된 native dynamics/stage compute row 결과: counted C++ `operator new` allocation 0회 (direct malloc-family path는 미포함)
 
-### LeoQuad real-XML snapshot
+### 7-6-2. LeoQuad real-XML snapshot
 
 - 현재 CPU-affined seven-batch canonical real-XML scope의 reduced-CCRBA central median: nominal `5.162 us`, asymmetric `5.255 us`, nonzero-velocity `6.917 us`
 - Reduced CCRBA + indexed Jacobian: `7.501 us`, `7.630 us`, `9.213 us`
@@ -229,3 +176,11 @@ doxygen-pages:
 - 현재 fresh-`dtDynData` resource row에서 allocation mean과 max가 같은 이유: 각 iteration이 같은 fixed model에 대해 fresh data object를 resize하고 같은 buffer set을 allocate
 - 두 column 유지 이유: mean은 expected setup behavior 요약, max는 conditional/sporadic allocation regression 노출
 - min allocation column 미추가 사유: 현재 deterministic setup path에서는 효용이 낮음 (향후 resource row가 reused-data나 conditional-allocation case를 포함하게 되면 추가 검토 가능)
+
+## 관련 문서
+
+- 이전 chapter: @ref md_docs_manual_validation
+- 다음 chapter: @ref md_docs_manual_integration
+- 전체 목차: @ref md_docs_manual_index
+- 상세 benchmark report: @ref md_docs_benchmark_results
+- 실행 절차(CSV 생성, plot, GitLab 게시 명령): `docs/manual.md` 7장

@@ -1,10 +1,10 @@
-# API 지도
+# 9. API 지도
 
 Author: Joonhee Jo
 
 - 이 페이지: generated signature를 읽기 전에 setup/runtime 경계를 빠르게 찾기 위한 지도
 
-## Model lifecycle
+## 9-1. Model lifecycle
 
 | Layer | 주요 API | Contract |
 |---|---|---|
@@ -19,14 +19,14 @@ Author: Joonhee Jo
 - `dtDynSpec`, `dtDynModel` 공통 제공: `BodyId`, `JointId`, `SiteId`, `ActuatorId`
 - missing name: `DTDYN_INVALID_INDEX`
 
-## Error contract
+## 9-2. Error contract
 
 - XML: `dtDynXmlError::Code()`, `SourcePath()`, `Offset()`
 - Spec/model: `dtDynValidationError::{code, object, index, message}`
 - 분리 원칙: human-readable text와 machine category 분리
 - XML offset: original input의 zero-based byte offset
 
-## Compute API
+## 9-3. Compute API
 
 - `ForwardKinematics`: body/site kinematic quantity 갱신
 - `ComputeDynamicsRNEA`: 기본 mass/bias/gravity/coriolis ingredient path
@@ -36,7 +36,13 @@ Author: Joonhee Jo
 - term mask, prerequisite: computation chapter 참조
 - 주의: output이 필요하지 않으면 `DTDYN_CCRBA_TERM_ALL` 요청 금지
 
-## Resource boundary
+## 9-4. Resource boundary
 
 - setup API: `Validate*`, XML I/O, `CompileSpec*`, `Resize`, name lookup
 - compute path의 allocation 주장 범위: benchmark에서 preallocated `dtDynData`와 pre-sized caller output을 사용한 C++ allocation counter 범위에 한정
+
+## 관련 문서
+
+- 이전 chapter: @ref md_docs_manual_integration
+- 다음 chapter: @ref md_docs_manual_limitations
+- 전체 목차: @ref md_docs_manual_index
