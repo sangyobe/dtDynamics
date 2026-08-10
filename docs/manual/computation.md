@@ -2,7 +2,7 @@
 
 Author: Joonhee Jo
 
-@dotfile diagrams/compute_pipeline.dot
+![compute pipeline diagram](diagrams/compute_pipeline.svg)
 
 ## 3-1. State staging
 
@@ -19,9 +19,9 @@ Author: Joonhee Jo
 
 - controller-facing API가 사용하는 manipulator equation:
 
-\f[
+```math
 M(q)\dot{v} + h(q, v) = \tau + J(q)^\mathsf{T} f,
-\f]
+```
 
 - `M`: generalized mass matrix
 - `h`: Coriolis, centrifugal, gravity effect 등 bias term 모음
@@ -35,15 +35,15 @@ M(q)\dot{v} + h(q, v) = \tau + J(q)^\mathsf{T} f,
 
 - composite/centroidal path 제공 항목: WBC objective가 사용하는 quantity (centroidal momentum relation 포함)
 
-\f[
+```math
 h_G = A_G(q) v,
-\f]
+```
 
 - 1차 변화량:
 
-\f[
+```math
 \dot{h}_G = A_G(q)\dot{v} + \dot{A}_G(q, v)v.
-\f]
+```
 
 - `ComputeDynamicsCCRBA` 성격: control-oriented composite rigid-body path
 - 계산 항목: mass/bias basis, term mask에 따른 선택적 WBC term (`Cmat`, `MmatDot`, `cmAmat`, `cmAmatDot`, `comJmat`, `comJmatDot`, `centMom`, CoM quantity)
@@ -55,18 +55,18 @@ h_G = A_G(q) v,
 
 - 기본 dynamics output 구성 방식: 일반적인 분리
 
-\f[
+```math
 h(q,v) = C(q,v)v + g(q),
-\f]
+```
 
 - 필드: mass matrix `Mmat`, matrix-style Coriolis representation `Cmat`, gravity torque `gravityTorq`, Coriolis torque `coriolisTorq`, combined nonlinear torque `nonlinTorq`
 - 실제 controller 사용 방식 차이: 일부는 `nonlinTorq` 직접 소비, 일부는 feedforward/diagnostics를 위해 gravity와 velocity term을 분리 유지
 
 - mass matrix 취급 방식: generalized-coordinate inertia matrix
 
-\f[
+```math
 T = \frac{1}{2} v^\mathsf{T} M(q) v,
-\f]
+```
 
 - validation 검사 항목에 symmetry residual 포함
 - controller의 별도 결정 사항: full dense matrix, selected rows, 또는 상위 layer가 공급하는 product만 필요한지 여부
@@ -74,16 +74,16 @@ T = \frac{1}{2} v^\mathsf{T} M(q) v,
 - Centroidal quantity 노출 단위: root별
 - root system의 centroidal momentum matrix 역할: generalized velocity를 centroidal momentum으로 매핑
 
-\f[
+```math
 h_G = A_G(q)v,
-\f]
+```
 
 - 행 순서 문서화: `[linear; angular]`
 - derivative term 요청 시 controller 구성 가능 식:
 
-\f[
+```math
 \dot{h}_G = A_G(q)\dot{v} + \dot{A}_G(q,v)v.
-\f]
+```
 
 - CoM quantity 성격: 마찬가지로 선택적
 - WBC objective가 CoM position과 Jacobian만 필요할 때: 해당 flag만 요청, centroidal derivative는 비활성 유지
@@ -105,24 +105,24 @@ h_G = A_G(q)v,
 
 - Task velocity가 따르는 표준 differential relation:
 
-\f[
+```math
 \dot{x} = J(q)v,
-\f]
+```
 
 - acceleration-level controller가 일반적으로 소비하는 식:
 
-\f[
+```math
 \ddot{x} = J(q)\dot{v} + \dot{J}(q, v)v.
-\f]
+```
 
 - indexed body/site Jacobian 호출 사용 시점: controller가 base body와 선택한 task site만 필요할 때
 - all-body/all-site 호출 용도: diagnostics나 tooling (default realtime path 아님)
 
-- realtime WBC 권장 방식: task가 \f$J\f$와 \f$\dot{J}v\f$ 모두 필요할 때 combined `Compute*JacobianTerms()` helper 사용
+- realtime WBC 권장 방식: task가 $`J`$와 $`\dot{J}v`$ 모두 필요할 때 combined `Compute*JacobianTerms()` helper 사용
 - 미사용 output에 `nullptr` 전달 효과: task가 필요로 하는 정확한 ingredient 문서화, 같은 body/site/point에 대한 중복 traversal 작업 방지
 
 ## 관련 문서
 
-- 이전 chapter: @ref md_docs_manual_modeling
-- 다음 chapter: @ref md_docs_manual_example
-- 전체 목차: @ref md_docs_manual_index
+- 이전 chapter: [모델과 데이터 수명주기](modeling.md)
+- 다음 chapter: [최소 end-to-end 예제](example.md)
+- 전체 목차: [전체 목차](index.md)

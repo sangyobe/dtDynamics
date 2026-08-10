@@ -2,7 +2,7 @@
 
 Author: Joonhee Jo
 
-@dotfile diagrams/realtime_loop.dot
+![realtime loop diagram](diagrams/realtime_loop.svg)
 
 - Realtime 통합 원칙: setup allocation과 control-loop compute 분리
 
@@ -29,10 +29,10 @@ Author: Joonhee Jo
 
 - preallocated `dtDynData`와 pre-sized caller output을 사용한 문서화된 compute scope의 목표값
 
-\f[
+```math
 \mathrm{alloc}_{count}^{tick}=0, \qquad
 \mathrm{alloc}_{bytes}^{tick}=0.
-\f]
+```
 
 - 성격: arbitrary API에 대한 universal guarantee 아님
 - 별도 profiler·deployment test 필요 영역: dtMath container가 사용하는 `malloc`/`calloc`/`realloc`, external library, allocator 내부 동작, OS/runtime, logging, one-time initialization
@@ -59,7 +59,7 @@ Author: Joonhee Jo
 
 ## 관련 문서
 
-- 이전 chapter: @ref md_docs_manual_example
-- 다음 chapter: @ref md_docs_manual_validation
-- 전체 목차: @ref md_docs_manual_index
+- 이전 chapter: [최소 end-to-end 예제](example.md)
+- 다음 chapter: [검증](validation.md)
+- 전체 목차: [전체 목차](index.md)
 - 실행 절차(setup/realtime checklist): `docs/manual.md` 5장

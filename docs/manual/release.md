@@ -18,7 +18,7 @@ target_link_libraries(my_controller PRIVATE dt::Dynamics)
 ## 11-2. 확인할 package surface
 
 - `dtDynamicsConfigVersion.cmake`가 exact `0.1.1`을 수용하고 wrong exact version을 거부
-- installed public Doxygen version과 current SVG package claim이 `0.1.1`
+- installed public header version과 current SVG package claim이 `0.1.1`
 - source/isolated/canonical library provenance와 installed headers가 같은 candidate에서 생성됨
 - production export에 MuJoCo/Pinocchio reference library가 없음
 - fresh out-of-tree consumer가 source include path 없이 compile/link/run
@@ -38,7 +38,7 @@ target_link_libraries(my_controller PRIVATE dt::Dynamics)
 
 ## 관련 문서
 
-- 이전 chapter: @ref md_docs_manual_limitations
-- 전체 목차: @ref md_docs_manual_index
+- 이전 chapter: [제한](limitations.md)
+- 전체 목차: [전체 목차](index.md)
 - top-level landing: `docs/manual.md`
 - 실행 절차(release gate 명령): `docs/manual.md` 8장

@@ -43,6 +43,6 @@ Author: Joonhee Jo
 
 ## 관련 문서
 
-- 이전 chapter: @ref md_docs_manual_integration
-- 다음 chapter: @ref md_docs_manual_limitations
-- 전체 목차: @ref md_docs_manual_index
+- 이전 chapter: [Controller 통합](integration.md)
+- 다음 chapter: [제한](limitations.md)
+- 전체 목차: [전체 목차](index.md)

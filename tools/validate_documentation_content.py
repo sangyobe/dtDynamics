@@ -106,7 +106,7 @@ for directory in (ROOT / "include/dtDynamics", ROOT / "src", ROOT / "benchmark")
             continue
         for match in re.finditer(r"\\version\s+(\S+)", path.read_text()):
             require(match.group(1) == "0.1.1",
-                    f"nonhistorical Doxygen version is stale: {path.relative_to(ROOT)}={match.group(1)}")
+                    f"nonhistorical public-header version is stale: {path.relative_to(ROOT)}={match.group(1)}")
 
 model_guide = guide_sources.get(guide_source_paths[0])
 if model_guide is not None:

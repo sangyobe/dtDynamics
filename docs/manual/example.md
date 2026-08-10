@@ -18,7 +18,7 @@ Author: Joonhee Jo
 
 ## 관련 문서
 
-- 이전 chapter: @ref md_docs_manual_computation
-- 다음 chapter: @ref md_docs_manual_realtime
-- 전체 목차: @ref md_docs_manual_index
+- 이전 chapter: [계산 파이프라인](computation.md)
+- 다음 chapter: [Realtime resource model](realtime.md)
+- 전체 목차: [전체 목차](index.md)
 - 실행 절차(전체 예제 코드, 실패 진단): `docs/manual.md` 3장

@@ -52,7 +52,7 @@ find_package(dtDynamics 0.1.1 EXACT CONFIG REQUIRED)
 target_link_libraries(my_controller PRIVATE dt::Dynamics)
 ```
 
-- `dtDynamicsConfigVersion.cmake`, public header의 Doxygen version, installed library: 모두 같은 후보에서 생성 필수
+- `dtDynamicsConfigVersion.cmake`, public header version, installed library: 모두 같은 후보에서 생성 필수
 - 새 library와 오래된 header 혼용 시: `dtDynModel`/`dtDynData` layout 불일치 위험
 
 ## 검증
@@ -98,7 +98,7 @@ tools/audit_release_readiness.sh
 - 현재 release note: `docs/release-notes/v0.1.1.md`
 - model guide: `docs/guides/model_guide/`
 - usage/migration guide: `docs/guides/usage_guide/`
-- 문서 gate `tools/validate_docs.sh` 필요 도구: Doxygen, Graphviz, Python 3, guide PDF 내용·page·font 검사용 Poppler 도구(`pdftotext`, `pdfinfo`, `pdffonts`)
+- 문서 gate: `python3 tools/validate_docs.py` (Markdown 링크·수식 marker·SVG diagram 검증), `python3 tools/validate_documentation_content.py` (현재 narrative invariant 검증)
 - `v0.1.0-rc1`~`rc3` release note: 과거 기준 보존 (현재 `0.1.1`의 근거로 소급 해석 금지)
 
 ## 라이선스

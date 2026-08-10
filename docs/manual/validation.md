@@ -2,7 +2,7 @@
 
 Author: Joonhee Jo
 
-@dotfile diagrams/validation_refs.dot
+![validation refs diagram](diagrams/validation_refs.svg)
 
 > **주의 — production dependency vs validation dependency**
 >
@@ -25,17 +25,17 @@ Author: Joonhee Jo
 - Native test 확인 항목: dimensions, addresses, world/fixed body, multi-root, Jacobian shape, cross-path residual, zero-DoF resize, lookup copy/rebuild, malformed XML negative path
 - 예: mass symmetry 확인 방식
 
-\f[
+```math
 \epsilon_M=\lVert M-M^\mathsf{T}\rVert_\infty
-\f]
+```
 
 ## 6-3. External numerical reference
 
 - Reference comparison 선행 작업: coordinate, frame, spatial row order 명시적 변환
 
-\f[
+```math
 \epsilon_y=\lVert y_{dtDynamics}-T(y_{ref})\rVert.
-\f]
+```
 
 - MuJoCo 3.8.0 참조 대상: overlapping smooth-dynamics/indexing quantity
 - Pinocchio 3.9.0 참조 대상: independent rigid-body quantity
@@ -70,7 +70,7 @@ Author: Joonhee Jo
 
 ## 관련 문서
 
-- 이전 chapter: @ref md_docs_manual_realtime
-- 다음 chapter: @ref md_docs_manual_benchmarks
-- 전체 목차: @ref md_docs_manual_index
+- 이전 chapter: [Realtime resource model](realtime.md)
+- 다음 chapter: [Benchmark](benchmarks.md)
+- 전체 목차: [전체 목차](index.md)
 - 실행 절차(validation gate 명령): `docs/manual.md` 6장

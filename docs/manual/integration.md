@@ -23,13 +23,13 @@ Author: Joonhee Jo
 
 - 일반적인 WBC 구성 대상 식:
 
-\f[
+```math
 M(q)\dot{v}+h(q,v)=S^\mathsf{T}\tau+J_c(q)^\mathsf{T}f.
-\f]
+```
 
 - `dtDynamics`가 제공하는 항:
   - `Mmat`, `nonlinTorq` 또는 분리된 `gravityTorq`/`coriolisTorq`
-  - body/site/point Jacobian과 \f$\dot{J}v\f$
+  - body/site/point Jacobian과 $`\dot{J}v`$
   - 요청한 CoM·centroidal output
   - compiled dimensions, half-open coordinate addresses, cached IDs
 
@@ -51,7 +51,7 @@ M(q)\dot{v}+h(q,v)=S^\mathsf{T}\tau+J_c(q)^\mathsf{T}f.
 
 ## 관련 문서
 
-- 이전 chapter: @ref md_docs_manual_benchmarks
-- 다음 chapter: @ref md_docs_manual_api
-- 전체 목차: @ref md_docs_manual_index
+- 이전 chapter: [Benchmark](benchmarks.md)
+- 다음 chapter: [API 지도](api.md)
+- 전체 목차: [전체 목차](index.md)
 - 실행 절차(setup 코드, control tick pseudocode): `docs/manual.md` 4장

@@ -84,13 +84,13 @@ DTDYN_CCRBA_TERM_CENT_MOM
 
 - Latency table 보고 항목: mean, median, p95, p99 timing
 - 두 tail statistic 성격: empirical order statistics
-- runtime 기준 정렬된 sample을 \f$t^{\uparrow}_0, \ldots, t^{\uparrow}_{N-1}\f$라 할 때 보고값:
+- runtime 기준 정렬된 sample을 $`t^{\uparrow}_0, \ldots, t^{\uparrow}_{N-1}`$라 할 때 보고값:
 
-\f[
+```math
 k_{95} = \mathrm{floor}(0.95(N - 1)), \qquad T_{95} = t^{\uparrow}_{k_{95}},
 \qquad
 k_{99} = \mathrm{floor}(0.99(N - 1)), \qquad T_{99} = t^{\uparrow}_{k_{99}}.
-\f]
+```
 
 - Compute row 포함 항목:
   - `allocation_mean`: 측정된 compute iteration당 평균 counted C++ `operator new` / `operator new[]` allocation count
@@ -119,19 +119,16 @@ k_{99} = \mathrm{floor}(0.99(N - 1)), \qquad T_{99} = t^{\uparrow}_{k_{99}}.
 - raw CSV 보존 항목: 첫 timing row + batch-summary min/max spread
 - 논리 CPU 1개 고정 효과: migration noise 감소 (단, CPU affinity는 frequency locking·realtime isolation 아님 → 게시 수치와 함께 governor/scheduling 조건 기록 필요)
 
-## 7-5. Publishing generated Doxygen in GitLab
+## 7-5. GitLab Markdown 문서
 
-- 결론: HTML commit 없이 GitLab CI job artifact로 즉시 게시 가능
-- self-managed instance에 Pages가 활성화되어 있다면 private GitLab Pages site도 선호되는 안정적 URL
-- 현재 상태: 이 project는 private Pages access를 요청했으나 Pages deployment는 미존재, API response는 instance-level Pages service 구성 여부를 증명하지 않음 → Pages URL에 의존하기 전 GitLab administrator에게 서비스 확인 필요
-
-- 원칙: generated HTML은 Git에서 제외
-- CI runner 필요 도구: Doxygen, Graphviz, 이 저장소의 local formula-image 구성이 요구하는 LaTeX/Ghostscript 도구
-- job/pipeline YAML과 활성화 절차: `docs/manual.md` 7장 "Doxygen 문서 GitLab 게시" 참고
+- Markdown source를 GitLab 저장소에서 직접 열람, generated HTML artifact와 GitLab Pages 미사용
+- CI `markdown-docs` job: source/link/math-marker/SVG diagram 정합성 검증
+- GitLab Markdown renderer의 수식 직접 렌더링은 웹 화면에서 확인
+- Markdown 문서 검증과 CI 구성: `docs/manual.md` 7장 "GitLab Markdown 문서 확인" 참고
 
 ## 7-6. Current benchmark evidence snapshot
 
-- 더 긴 benchmark report와 generated figure 위치: @ref md_docs_benchmark_results
+- 더 긴 benchmark report와 generated figure 위치: [상세 benchmark report](../benchmark-results.md)
 - 이 manual이 유지하는 범위: compact evidence snapshot만 (API contract가 stale performance number에 종속되지 않도록)
 
 - 현재 canonical evidence 조건: CPU 0에 고정된 Release build, seven batch, batch당 warmup 20회·measured iteration 200회
@@ -179,8 +176,8 @@ k_{99} = \mathrm{floor}(0.99(N - 1)), \qquad T_{99} = t^{\uparrow}_{k_{99}}.
 
 ## 관련 문서
 
-- 이전 chapter: @ref md_docs_manual_validation
-- 다음 chapter: @ref md_docs_manual_integration
-- 전체 목차: @ref md_docs_manual_index
-- 상세 benchmark report: @ref md_docs_benchmark_results
+- 이전 chapter: [검증](validation.md)
+- 다음 chapter: [Controller 통합](integration.md)
+- 전체 목차: [전체 목차](index.md)
+- 상세 benchmark report: [상세 benchmark report](../benchmark-results.md)
 - 실행 절차(CSV 생성, plot, GitLab 게시 명령): `docs/manual.md` 7장

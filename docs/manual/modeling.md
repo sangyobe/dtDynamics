@@ -4,7 +4,7 @@ Author: Joonhee Jo
 
 - 외부 모델을 control loop에서 안전하게 사용하는 조건: 아래 경계를 한 번만 통과
 
-@dotfile diagrams/model_layers.dot
+![model layers diagram](diagrams/model_layers.svg)
 
 ```text
 XML/file 또는 XML/text
@@ -101,9 +101,9 @@ if (body == DTDYN_INVALID_INDEX ||
 - fixed body 특성: 물리적 inertia와 frame 보유 가능, generalized coordinate column은 미추가
 - joint `j`의 주소 해석: half-open interval
 
-\f[
+```math
 [qadr_j, qadr_j+nq_j), \qquad [vadr_j, vadr_j+nv_j).
-\f]
+```
 
 - floating base 특성: `nq != nv` 가능
 - `qpos`: configuration coordinate, `qvel`: tangent-space velocity
@@ -131,7 +131,7 @@ if (body == DTDYN_INVALID_INDEX ||
 
 ## 관련 문서
 
-- 이전 chapter: @ref md_docs_manual_overview
-- 다음 chapter: @ref md_docs_manual_computation
-- 전체 목차: @ref md_docs_manual_index
+- 이전 chapter: [개요](overview.md)
+- 다음 chapter: [계산 파이프라인](computation.md)
+- 전체 목차: [전체 목차](index.md)
 - 실행 절차: `docs/manual.md` 2장

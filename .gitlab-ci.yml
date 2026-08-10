@@ -1,6 +1,5 @@
 stages:
   - docs
-  - deploy
 
 default:
   interruptible: true
@@ -8,46 +7,12 @@ default:
   tags:
     - artplot-server
 
-doxygen-docs:
+markdown-docs:
   stage: docs
-  before_script:
-    - apt-get update
-    - >
-      DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends
-      doxygen graphviz python3 texlive-latex-base ghostscript poppler-utils
-    - rm -rf /var/lib/apt/lists/*
   script:
-    - doxygen --version
-    - dot -V
     - command -v python3
-    - command -v latex
-    - command -v dvips
-    - command -v gs
-    - command -v pdftotext
-    - command -v pdfinfo
-    - command -v pdffonts
-    - DTDYNAMICS_DOCS_OUTPUT_DIR="$CI_PROJECT_DIR/build/docs/doxygen" tools/validate_docs.sh
-  artifacts:
-    when: always
-    name: "dtdynamics-doxygen-$CI_COMMIT_SHORT_SHA"
-    paths:
-      - build/docs/doxygen/html/
-      - build/docs/doxygen/doxygen.log
-    expire_in: 1 week
+    - python3 tools/validate_documentation_content.py
+    - python3 tools/validate_docs.py
   rules:
     - if: '$CI_COMMIT_BRANCH'
-    - if: '$CI_COMMIT_TAG'
-
-pages:
-  stage: deploy
-  needs:
-    - job: doxygen-docs
-      artifacts: true
-  script:
-    - test -s build/docs/doxygen/html/index.html
-  pages:
-    publish: build/docs/doxygen/html
-    expire_in: never
-  rules:
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
     - if: '$CI_COMMIT_TAG'

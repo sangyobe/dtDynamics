@@ -24,10 +24,10 @@ Author: Joonhee Jo
 
 ## 1-3. 읽는 순서
 
-1. 처음 사용 시 @ref md_docs_manual_modeling 에서 XML → checked compile → resize 경계 확인
-2. @ref md_docs_manual_example 실행
-3. @ref md_docs_manual_computation 의 prerequisite/frame convention 확인
-4. @ref md_docs_manual_realtime 의 resource scope 확인
+1. 처음 사용 시 [모델과 데이터 수명주기](modeling.md) 에서 XML → checked compile → resize 경계 확인
+2. [최소 end-to-end 예제](example.md) 실행
+3. [계산 파이프라인](computation.md) 의 prerequisite/frame convention 확인
+4. [Realtime resource model](realtime.md) 의 resource scope 확인
 
 - 주의: generated signature만 보고 호출 시 coordinate order, lifetime, prerequisite 누락 위험
 
@@ -38,5 +38,5 @@ Author: Joonhee Jo
 
 ## 관련 문서
 
-- 전체 목차: @ref md_docs_manual_index
-- 다음 chapter: @ref md_docs_manual_modeling
+- 전체 목차: [전체 목차](index.md)
+- 다음 chapter: [모델과 데이터 수명주기](modeling.md)

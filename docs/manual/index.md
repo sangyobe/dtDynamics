@@ -7,29 +7,30 @@ Author: Joonhee Jo
 
 현재 package identity: **0.1.1**
 
-## Manual 생성
+## Markdown 문서 검증
 
 ```bash
 cd /path/to/dtDynamics
-tools/validate_docs.sh
+python3 tools/validate_documentation_content.py
+python3 tools/validate_docs.py
 ```
 
-- `tools/validate_docs.sh` 실행 항목: current-document content oracle, Doxygen warning scan, Graphviz generation
-- generated HTML 위치: `build/docs/doxygen/html/` 아래
+- GitLab Markdown source, relative link, GitLab 수식 marker, SVG diagram, narrative invariant 검증
+- HTML/PDF 생성·generated HTML·LaTeX 불필요
 
 ## 목차
 
-1. @ref md_docs_manual_overview "개요" — package scope와 non-goal
-2. @ref md_docs_manual_modeling "모델과 데이터 수명주기" — XML, validation, compilation, lookup, coordinates
-3. @ref md_docs_manual_computation "계산 pipeline" — FK, RNEA, CCRBA, Jacobian, CoM, centroidal term
-4. @ref md_docs_manual_example "최소 end-to-end 예제" — load부터 compute까지
-5. @ref md_docs_manual_realtime "Realtime resource model" — setup/loop 분리와 allocation evidence 범위
-6. @ref md_docs_manual_validation "검증" — native/external reference와 fail-closed artifact gate
-7. @ref md_docs_manual_benchmarks "Benchmark" — raw CSV, summary, figure, timing 해석
-8. @ref md_docs_manual_integration "Controller 통합" — WBC handoff와 model update
-9. @ref md_docs_manual_api "API 지도" — public setup/compute/error family
-10. @ref md_docs_manual_limitations "제한" — 지원 범위와 compatibility 영향
-11. @ref md_docs_manual_release "Release 경계" — exact package/install/publication gate
+1. [개요](overview.md) — package scope와 non-goal
+2. [모델과 데이터 수명주기](modeling.md) — XML, validation, compilation, lookup, coordinates
+3. [계산 파이프라인](computation.md) — FK, RNEA, CCRBA, Jacobian, CoM, centroidal term
+4. [최소 end-to-end 예제](example.md) — load부터 compute까지
+5. [Realtime resource model](realtime.md) — setup/loop 분리와 allocation evidence 범위
+6. [검증](validation.md) — native/external reference와 fail-closed artifact gate
+7. [Benchmark](benchmarks.md) — raw CSV, summary, figure, timing 해석
+8. [Controller 통합](integration.md) — WBC handoff와 model update
+9. [API 지도](api.md) — public setup/compute/error family
+10. [제한](limitations.md) — 지원 범위와 compatibility 영향
+11. [Release 경계](release.md) — exact package/install/publication gate
 
 ## 설계 원칙
 
@@ -42,5 +43,5 @@ tools/validate_docs.sh
 - 시작점(top-level landing): `docs/manual.md`
 - model guide: `docs/guides/model_guide/`
 - usage/migration guide: `docs/guides/usage_guide/`
-- benchmark evidence: @ref md_docs_benchmark_results
+- benchmark evidence: [상세 benchmark report](../benchmark-results.md)
 - release note: `docs/release-notes/v0.1.1.md`

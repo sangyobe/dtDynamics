@@ -54,6 +54,6 @@ Author: Joonhee Jo
 
 ## 관련 문서
 
-- 이전 chapter: @ref md_docs_manual_api
-- 다음 chapter: @ref md_docs_manual_release
-- 전체 목차: @ref md_docs_manual_index
+- 이전 chapter: [API 지도](api.md)
+- 다음 chapter: [Release 경계](release.md)
+- 전체 목차: [전체 목차](index.md)

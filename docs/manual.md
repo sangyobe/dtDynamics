@@ -4,15 +4,11 @@ Author: Joonhee Jo
 
 > 이 문서: **실행 절차(how-to) 전용** 진입점 — 개념/API contract/equation은 `docs/manual/` 하위 chapter가 canonical source
 >
-> ```bash
-> tools/validate_docs.sh
-> ```
->
-> generated HTML entry (Doxygen mainpage): `docs/manual/index.md` → `build/docs/doxygen/html/index.html`
+> GitLab Markdown viewer에서 직접 열람. 수식은 GitLab math block/inline math 문법으로 직접 렌더링.
 
 ## 목차
 
-1. [Package boundary와 최소 사용](#1-package-boundary와-최소-사용)
+1. [Package boundary와 최소 사용법](#1-package-boundary와-최소-사용법)
 2. [모델 준비 절차](#2-모델-준비-절차)
 3. [최소 end-to-end 예제](#3-최소-end-to-end-예제)
 4. [Controller/WBC 통합 절차](#4-controllerwbc-통합-절차)
@@ -23,7 +19,7 @@ Author: Joonhee Jo
 9. [Troubleshooting](#9-troubleshooting)
 10. [상세 설명 chapter와 관련 문서](#10-상세-설명-chapter와-관련-문서)
 
-## 1. Package boundary와 최소 사용
+## 1. Package boundary와 최소 사용법
 
 - `dtDynamics 0.1.1`: `dtMath` 기반 dynamics ingredient engine
 
@@ -231,7 +227,6 @@ catch (const dtDynXmlError &error)
 
 - programmatic mutation으로 topology 오류 발생 시: `ValidateSpec(spec, &error)`가 `error.code`, `error.object`, `error.index`, `error.message` 채움
 - 금지 사항: `what()`이나 process exit code만으로 machine category 추론
-
 - 개념(예제 설계 의도, `CompileSpec`/neutral-state 주의): [example.md](manual/example.md)
 
 ## 4. Controller/WBC 통합 절차
@@ -328,7 +323,7 @@ cmake --preset validation
 cmake --build --preset validation -- -j2
 ctest --preset validation --output-on-failure
 tools/validate_package.sh --skip-benchmarks
-tools/validate_docs.sh
+python3 tools/validate_docs.py
 ```
 
 - 개념(setup/native/external validation 의미, artifact 판정 기준): [validation.md](manual/validation.md)
@@ -370,50 +365,26 @@ python3 tools/validate_reference_benchmark.py \
 
 - 산출물: `runtime_by_fixture.{csv,png}`, `scaling_by_dof.{csv,png}`, `stage_breakdown.{csv,png}` (CSV는 mean/median/p95/p99 보존, figure는 median 사용)
 
-### 7-3. Doxygen 문서 GitLab 게시
+### 7-3. GitLab Markdown 문서 확인
 
-- 원칙: generated HTML은 Git에서 제외, HTML commit 없이 GitLab CI job artifact로 즉시 게시 가능
-
-```yaml
-doxygen-artifact:
-  stage: build
-  script:
-    - tools/validate_docs.sh
-  artifacts:
-    paths:
-      - build/docs/doxygen/html/
-```
-
-- instance-level Pages 확인 후 추가 작업: pipeline `stages` 목록에 `deploy` 추가, generated directory 게시
-
-```yaml
-doxygen-pages:
-  stage: deploy
-  script:
-    - tools/validate_docs.sh
-    - mkdir -p public
-    - cp -a build/docs/doxygen/html/. public/
-  pages:
-    publish: public
-  rules:
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-```
-
-- 두 job 활성화 전 필수 작업: project-approved image 또는 runner toolchain 고정, 첫 pipeline 검증, artifact 다운로드, private Pages access 확인 (release artifact로 취급하기 전)
-
+- 원칙: Markdown source를 GitLab 저장소에서 직접 열람, generated HTML/PDF artifact와 GitLab Pages 미사용
+- CI `markdown-docs` job: `python3 tools/validate_documentation_content.py`, `python3 tools/validate_docs.py` 실행
+- GitLab renderer는 fenced `math` block과 `$` backtick-delimited inline math를 직접 렌더링
+- Markdown viewer 렌더링은 GitLab 웹 화면에서 확인; CI는 source/link/math-marker/SVG diagram 정합성만 fail-closed 검증
 - 개념(측정 scope, 해석 경계, evidence snapshot): [benchmarks.md](manual/benchmarks.md)
 
-## 8. 문서 생성·Release 절차
+## 8. Markdown 문서·Release 절차
 
-### 8-1. 문서 생성
+### 8-1. Markdown 문서 검증
 
 ```bash
 cd /path/to/dtDynamics
-tools/validate_docs.sh
+python3 tools/validate_documentation_content.py
+python3 tools/validate_docs.py
 ```
 
-- 실행 항목: current-document content oracle, Doxygen warning scan, Graphviz generation
-- generated HTML 위치: `build/docs/doxygen/html/` 아래
+- Markdown source, relative link, GitLab math marker, SVG diagram, current narrative invariant 검증
+- HTML/PDF 생성·generated HTML·LaTeX·GitLab Pages 불필요
 
 ### 8-2. Release gate
 
@@ -424,7 +395,7 @@ ctest --preset validation --output-on-failure
 
 tools/validate_package.sh --skip-benchmarks
 tools/validate_install_export.sh
-tools/validate_docs.sh
+python3 tools/validate_docs.py
 tools/audit_release_readiness.sh
 ```
 
@@ -438,15 +409,15 @@ tools/audit_release_readiness.sh
 
 ## 9. Troubleshooting
 
-| 증상 | 원인/확인 | 참고 |
-|---|---|---|
-| `dtDynXmlError` 발생 | malformed/duplicate/unresolved XML, invalid number, wrong arity, 잘못된 vector arity | `error.Code()`/`SourcePath()`/`Offset()` 확인 — [modeling.md](manual/modeling.md) |
-| lookup이 `DTDYN_INVALID_INDEX` 반환 | 이름 오타, 아직 compile 안 된 spec에서 조회, 모델에 실제로 없는 body/joint/site/actuator | 예외 대신 반환값이므로 반드시 확인 후 indexing — [modeling.md](manual/modeling.md) |
-| `IsCompatible(model)`이 `true`인데 결과가 이상함 | `IsCompatible()`은 storage dimension만 확인, model identity/topology/inertia 동일성 미보장 | model 교체 시 ID/address cache 재생성 — [modeling.md](manual/modeling.md) |
-| model 재compile 후 이상 동작 | 차원이 같아도 cached ID/address가 stale할 수 있음 | `Resize()` 재검토 및 lookup 재수행 — [modeling.md](manual/modeling.md) |
-| `find_package(dtDynamics 0.1.1 EXACT ...)` 실패 | installed package identity가 0.1.1이 아니거나 EXACT 불일치 | `tools/validate_install_export.sh` 재실행 — [release.md](manual/release.md) |
-| 검증에서 external row가 `skipped` | 해당 quantity에 대응하는 Pinocchio/MuJoCo contract가 없음 (equivalent contract 없음) | 정상 동작 (실패 아님) — [validation.md](manual/validation.md) |
-| `qpos`를 0으로 초기화했더니 이상함 | free/ball joint quaternion이 invalid할 수 있음 (package-level neutral initializer 없음) | 명시적 초기화 필요 — [modeling.md](manual/modeling.md), [example.md](manual/example.md) |
+| 증상                                            | 원인/확인                                                                             | 참고                                                                              |
+| --------------------------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `dtDynXmlError` 발생                            | malformed/duplicate/unresolved XML, invalid number, wrong arity, 잘못된 vector arity | `error.Code()`/`SourcePath()`/`Offset()` 확인 — [modeling.md](manual/modeling.md) |
+| lookup이 `DTDYN_INVALID_INDEX` 반환              | 이름 오타, 아직 compile 안 된 spec에서 조회, 모델에 실제로 없는 body/joint/site/actuator              | 예외 대신 반환값이므로 반드시 확인 후 indexing — [modeling.md](manual/modeling.md)              |
+| `IsCompatible(model)`이 `true`인데 결과가 이상함       | `IsCompatible()`은 storage dimension만 확인, model identity/topology/inertia 동일성 미보장  | model 교체 시 ID/address cache 재생성 — [modeling.md](manual/modeling.md)             |
+| model 재compile 후 이상 동작                        | 차원이 같아도 cached ID/address가 stale할 수 있음                                            | `Resize()` 재검토 및 lookup 재수행 — [modeling.md](manual/modeling.md)                 |
+| `find_package(dtDynamics 0.1.1 EXACT ...)` 실패 | installed package identity가 0.1.1이 아니거나 EXACT 불일치                                 | `tools/validate_install_export.sh` 재실행 — [release.md](manual/release.md)        |
+| 검증에서 external row가 `skipped`                  | 해당 quantity에 대응하는 Pinocchio/MuJoCo contract가 없음 (equivalent contract 없음)          | 정상 동작 (실패 아님) — [validation.md](manual/validation.md)                           |
+| `qpos`를 0으로 초기화했더니 이상함                        | free/ball joint quaternion이 invalid할 수 있음 (package-level neutral initializer 없음)  | 명시적 초기화 필요 — [modeling.md](manual/modeling.md), [example.md](manual/example.md) |
 
 ## 10. 상세 설명 chapter와 관련 문서
 
@@ -462,11 +433,11 @@ tools/audit_release_readiness.sh
 - 10장 [제한](manual/limitations.md)
 - 11장 [Release 경계](manual/release.md)
 
-| 독자 | 우선 읽을 곳 |
-|---|---|
-| library/controller consumer | 이 문서 2~4장 → chapter 8 Controller 통합 → chapter 9 API 지도 |
-| model author (XML 작성자) | 이 문서 2장 → chapter 2 모델과 데이터 수명주기 → `docs/guides/model_guide/` |
-| package/release maintainer | 이 문서 6~8장 → chapter 6 검증 → chapter 7 Benchmark → chapter 11 Release 경계 |
+| 독자                          | 우선 읽을 곳                                                                |
+| --------------------------- | ---------------------------------------------------------------------- |
+| library/controller consumer | 이 문서 2~4장 → chapter 8 Controller 통합 → chapter 9 API 지도                 |
+| model author (XML 작성자)      | 이 문서 2장 → chapter 2 모델과 데이터 수명주기 → `docs/guides/model_guide/`          |
+| package/release maintainer  | 이 문서 6~8장 → chapter 6 검증 → chapter 7 Benchmark → chapter 11 Release 경계 |
 
 - 이 문서: how-to/실행 절차 전용 — 중복된 상세 contract 미유지
 - API, coordinate, benchmark 설명: 위 canonical chapter가 소유
@@ -474,10 +445,10 @@ tools/audit_release_readiness.sh
 
 ## 관련 문서
 
-- Doxygen mainpage(전체 목차): `docs/manual/index.md`
+- 상세 설명 chapter 목차: `docs/manual/index.md`
 - model guide: `docs/guides/model_guide/`
 - usage/migration guide: `docs/guides/usage_guide/`
 - benchmark evidence: [docs/benchmark-results.md](benchmark-results.md)
 - release note: `docs/release-notes/v0.1.1.md`
-- 문서 gate `tools/validate_docs.sh` 필요 도구: Doxygen, Graphviz, Python 3, guide PDF 내용·page·font 검사용 Poppler 도구(`pdftotext`, `pdfinfo`, `pdffonts`)
+- Markdown 문서 gate: Python 3. Diagram source 변경 시 `tools/render_diagrams.sh`와 Graphviz `dot` 사용
 - `v0.1.0-rc1`~`rc3` release note: 과거 기준 보존 (현재 `0.1.1`의 근거로 소급 해석 금지)
