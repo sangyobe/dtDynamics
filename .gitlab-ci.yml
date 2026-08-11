@@ -66,10 +66,10 @@ polyspace-job:
       - reports/polyspace/results/
     policy: pull-push
   variables:
-    POLYSPACE_BIN: /usr/local/Polyspace_Server/R2026a/polyspace/bin
-    POLYSPACE_TEMPLATES: /usr/local/Polyspace_Server/R2026a/toolbox/polyspace/psrptgen/templates
+    POLYSPACE_BIN: /usr/local/Polyspace_Server/R2025b/polyspace/bin
+    POLYSPACE_TEMPLATES: /usr/local/Polyspace_Server/R2025b/toolbox/polyspace/psrptgen/templates
     POLYSPACE_ACCESS_HOST: "10.20.92.67"
-    POLYSPACE_ACCESS_PORT: "9443"
+    POLYSPACE_ACCESS_PORT: "9444"
   script:
     - export PATH="${POLYSPACE_BIN}:${PATH}"
     - polyspace-bug-finder-server -version
