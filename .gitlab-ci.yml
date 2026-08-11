@@ -7,7 +7,7 @@ default:
   interruptible: true
   image: registry.hmc.co.kr/rlab/ardg/arct/project/arch/06-cicd/art-cicd/artf-build:v1.2
   tags:
-    - artplot-server
+    - art-server
 
 lint-job:
   stage: lint
@@ -74,6 +74,9 @@ polyspace-job:
     - export PATH="${POLYSPACE_BIN}:${PATH}"
     - polyspace-bug-finder-server -version
     - mkdir -p reports/polyspace build-polyspace
+    # cache(policy: pull-push, key가 브랜치 단위)가 직전 실행의 -results-dir를 그대로 복원해오므로,
+    # 여기서 비우지 않으면 "풀스캔"이어도 이전 실행 결과가 섞인 상태로 재검증되어 실행마다 결함 집합이 달라진다
+    - rm -rf reports/polyspace/results
     - export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
     - |
       polyspace-configure \
