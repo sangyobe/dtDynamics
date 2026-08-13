@@ -136,8 +136,9 @@ polyspace-job:
     - |
       if [ -n "${POLYSPACE_ACCESS_LOGIN}" ] && [ -n "${POLYSPACE_ACCESS_ENCRYPTED_PASSWORD}" ]; then
         RUN_LABEL="${CI_COMMIT_SHORT_SHA} | pipeline #${CI_PIPELINE_IID} | $(date '+%Y-%m-%d %H:%M')"
-        echo "Polyspace Access 업로드: ${RUN_LABEL}"
-        polyspace-access \
+        ACCESS_OUT="reports/polyspace/access-upload.txt"
+
+        if polyspace-access \
           -protocol http \
           -host "${POLYSPACE_ACCESS_HOST}" \
           -port "${POLYSPACE_ACCESS_PORT}" \
@@ -145,8 +146,28 @@ polyspace-job:
           -encrypted-password "${POLYSPACE_ACCESS_ENCRYPTED_PASSWORD}" \
           -upload reports/polyspace/results \
           -parent-project "art_ws/dtdynamics" \
-          -project "dtdynamics_$(date '+%Y%m%d_%H%M')_${CI_COMMIT_SHORT_SHA}" \
-          && echo "업로드 완료: ${RUN_LABEL}" || echo "Polyspace Access 업로드 실패 (계속 진행)"
+          -project "dtdynamics" \
+          -output "${ACCESS_OUT}"
+        then
+          RUN_ID=$(grep -oP '(?<=RUN_ID )\d+' "${ACCESS_OUT}" | tail -1)
+
+          if [ -n "${RUN_ID}" ]; then
+            polyspace-access \
+              -protocol http \
+              -host "${POLYSPACE_ACCESS_HOST}" \
+              -port "${POLYSPACE_ACCESS_PORT}" \
+              -login "${POLYSPACE_ACCESS_LOGIN}" \
+              -encrypted-password "${POLYSPACE_ACCESS_ENCRYPTED_PASSWORD}" \
+              -add-label "${RUN_LABEL}" \
+              -run-id "${RUN_ID}"
+
+            echo "업로드 완료: Run ${RUN_ID} / ${RUN_LABEL}"
+          else
+            echo "Polyspace Access RUN_ID 확인 실패"
+          fi
+        else
+          echo "Polyspace Access 업로드 실패 (계속 진행)"
+        fi
       else
         echo "POLYSPACE_ACCESS_LOGIN/POLYSPACE_ACCESS_ENCRYPTED_PASSWORD 미설정 — 업로드 건너뜀"
       fi
