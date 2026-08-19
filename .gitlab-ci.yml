@@ -11,7 +11,7 @@ stages:
 
 default:
   interruptible: true
-  image: registry.hmc.co.kr/rlab/ardg/arct/project/arch/06-cicd/art-cicd/artf-build:v1.2
+  image: registry.hmc.co.kr/rlab/ardg/arct/project/arch/06-cicd/art-cicd/artf-build:v1.3
   tags:
     - art-server
 
