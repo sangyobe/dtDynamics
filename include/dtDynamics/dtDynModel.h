@@ -10,10 +10,10 @@
 #ifndef ALGORITHM_DTDYNAMICS_DTDYNMODEL_H_
 #define ALGORITHM_DTDYNAMICS_DTDYNMODEL_H_
 
-#include "dtDynamics/dtDynTypes.h"
-
 #include <string>
 #include <unordered_map>
+
+#include "dtDynamics/dtDynTypes.h"
 
 namespace dt::Dynamics
 {
@@ -61,13 +61,17 @@ public:
     dtArray<std::string> actuator_names; //!< Actuator names (nu).
 
     dtArray<dtDynIndex> body_parentid; //!< Parent body ids; world parent is 0 (nbody).
-    dtArray<dtDynIndex> body_rootid;   //!< Top-level non-world root body id; world body 0 stores 0 (nbody).
-    dtArray<dtDynIndex> body_rootidx;  //!< Compact root slot, or DTDYN_INVALID_INDEX when absent (nbody).
-    dtArray<dtDynIndex> body_jntnum;   //!< Number of joints attached directly to each body (nbody).
-    dtArray<dtDynIndex> body_jntadr;   //!< First attached joint id, or DTDYN_INVALID_INDEX (nbody).
-    dtArray<dtDynIndex> body_dofnum;   //!< Number of scalar qvel DOFs contributed by each body (nbody).
-    dtArray<dtDynIndex> body_dofadr;   //!< First scalar DOF address, or DTDYN_INVALID_INDEX (nbody).
-    dtArray<dtDynIndex> body_weldid;   //!< Nearest jointed ancestor including self, or world body 0 when absent (nbody).
+    dtArray<dtDynIndex>
+        body_rootid; //!< Top-level non-world root body id; world body 0 stores 0 (nbody).
+    dtArray<dtDynIndex>
+        body_rootidx; //!< Compact root slot, or DTDYN_INVALID_INDEX when absent (nbody).
+    dtArray<dtDynIndex> body_jntnum; //!< Number of joints attached directly to each body (nbody).
+    dtArray<dtDynIndex> body_jntadr; //!< First attached joint id, or DTDYN_INVALID_INDEX (nbody).
+    dtArray<dtDynIndex>
+        body_dofnum; //!< Number of scalar qvel DOFs contributed by each body (nbody).
+    dtArray<dtDynIndex> body_dofadr; //!< First scalar DOF address, or DTDYN_INVALID_INDEX (nbody).
+    dtArray<dtDynIndex> body_weldid; //!< Nearest jointed ancestor including self, or world body 0
+                                     //!< when absent (nbody).
 
     dtArray<dtDynIndex> jnt_type;    //!< dtDynJointType values (njnt).
     dtArray<dtDynIndex> jnt_bodyid;  //!< Owning body id for each joint (njnt).
@@ -82,26 +86,41 @@ public:
     dtArray<dtDynIndex> dof_jntid;    //!< Joint id owning each scalar DOF (nv).
     dtDynDenseVector dof_armature;    //!< Armature inertia per scalar DOF (nv).
 
-    dtArray<dtDynIndex> site_bodyid;       //!< Owning body id for each site (nsite).
-    dtArray<dtDynIndex> actuator_jointid;  //!< Driven joint id, or DTDYN_INVALID_INDEX (nu).
-    dtArray<dtDynIndex> root_bodyid;       //!< Body id for each compact root slot (nroot).
-    dtDynDenseVector actuator_gear;        //!< Scalar transmission gear per actuator (nu).
-    dtDynDenseVector root_mass;            //!< Total subtree mass [kg] per compact root slot (nroot).
+    dtArray<dtDynIndex> site_bodyid;      //!< Owning body id for each site (nsite).
+    dtArray<dtDynIndex> actuator_jointid; //!< Driven joint id, or DTDYN_INVALID_INDEX (nu).
+    dtArray<dtDynIndex> root_bodyid;      //!< Body id for each compact root slot (nroot).
+    dtDynDenseVector actuator_gear;       //!< Scalar transmission gear per actuator (nu).
+    dtDynDenseVector root_mass; //!< Total subtree mass [kg] per compact root slot (nroot).
 
     dtDynDenseVector body_mass;        //!< Body mass [kg] (nbody).
     dtDynDenseVector body_subtreemass; //!< Body-plus-descendant mass [kg] (nbody).
-    dtArray<dt::Math::Vector3<dtDynReal>> body_pos;     //!< Body-frame origin position in parent frame [m] (nbody x 3).
-    dtArray<dt::Math::Vector4<dtDynReal>> body_quat;    //!< Body-to-parent unit quaternion in wxyz order (nbody x 4).
-    dtArray<dt::Math::Matrix3<dtDynReal>> body_mat;     //!< Body-to-parent rotation matrix (nbody x 3 x 3).
-    dtArray<dt::Math::Vector3<dtDynReal>> body_ipos;    //!< Inertial origin in body frame [m]; zero-mass bodies store body_pos fallback (nbody x 3).
-    dtArray<dt::Math::Vector4<dtDynReal>> body_iquat;   //!< Inertial-to-body wxyz quaternion; zero-mass bodies store body_quat fallback (nbody x 4).
-    dtArray<dt::Math::Matrix3<dtDynReal>> body_imat;    //!< Inertial-to-body rotation; zero-mass bodies store body_mat fallback (nbody x 3 x 3).
-    dtArray<dt::Math::Vector3<dtDynReal>> body_inertia; //!< Principal rotational inertia [kg m^2] in inertial frame (nbody x 3).
-    dtArray<dt::Math::Vector3<dtDynReal>> jnt_pos;      //!< Joint anchor position in the compiled local frame [m] (njnt x 3).
-    dtArray<dt::Math::Vector3<dtDynReal>> jnt_axis;     //!< Joint axis in the compiled local frame (njnt x 3).
-    dtArray<dt::Math::Vector3<dtDynReal>> site_pos;     //!< Site origin position in owning-body frame [m] (nsite x 3).
-    dtArray<dt::Math::Vector4<dtDynReal>> site_quat;    //!< Site-to-body unit quaternion in wxyz order (nsite x 4).
-    dtArray<dt::Math::Matrix3<dtDynReal>> site_mat;     //!< Site-to-body rotation matrix (nsite x 3 x 3).
+    dtArray<dt::Math::Vector3<dtDynReal>>
+        body_pos; //!< Body-frame origin position in parent frame [m] (nbody x 3).
+    dtArray<dt::Math::Vector4<dtDynReal>>
+        body_quat; //!< Body-to-parent unit quaternion in wxyz order (nbody x 4).
+    dtArray<dt::Math::Matrix3<dtDynReal>>
+        body_mat; //!< Body-to-parent rotation matrix (nbody x 3 x 3).
+    dtArray<dt::Math::Vector3<dtDynReal>>
+        body_ipos; //!< Inertial origin in body frame [m]; zero-mass bodies store body_pos fallback
+                   //!< (nbody x 3).
+    dtArray<dt::Math::Vector4<dtDynReal>>
+        body_iquat; //!< Inertial-to-body wxyz quaternion; zero-mass bodies store body_quat fallback
+                    //!< (nbody x 4).
+    dtArray<dt::Math::Matrix3<dtDynReal>>
+        body_imat; //!< Inertial-to-body rotation; zero-mass bodies store body_mat fallback (nbody x
+                   //!< 3 x 3).
+    dtArray<dt::Math::Vector3<dtDynReal>>
+        body_inertia; //!< Principal rotational inertia [kg m^2] in inertial frame (nbody x 3).
+    dtArray<dt::Math::Vector3<dtDynReal>>
+        jnt_pos; //!< Joint anchor position in the compiled local frame [m] (njnt x 3).
+    dtArray<dt::Math::Vector3<dtDynReal>>
+        jnt_axis; //!< Joint axis in the compiled local frame (njnt x 3).
+    dtArray<dt::Math::Vector3<dtDynReal>>
+        site_pos; //!< Site origin position in owning-body frame [m] (nsite x 3).
+    dtArray<dt::Math::Vector4<dtDynReal>>
+        site_quat; //!< Site-to-body unit quaternion in wxyz order (nsite x 4).
+    dtArray<dt::Math::Matrix3<dtDynReal>>
+        site_mat; //!< Site-to-body rotation matrix (nsite x 3 x 3).
 
     /*! \brief Return named body id, or DTDYN_INVALID_INDEX when the name is absent. */
     dtDynIndex BodyId(const std::string &name) const;

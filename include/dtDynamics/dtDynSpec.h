@@ -10,9 +10,9 @@
 #ifndef ALGORITHM_DTDYNAMICS_DTDYNSPEC_H_
 #define ALGORITHM_DTDYNAMICS_DTDYNSPEC_H_
 
-#include "dtDynamics/dtDynTypes.h"
-
 #include <string>
+
+#include "dtDynamics/dtDynTypes.h"
 
 namespace dt::Dynamics
 {
@@ -25,10 +25,11 @@ namespace dt::Dynamics
 */
 struct dtDynInertialSpec
 {
-    dtDynReal mass = 0.0;                  //!< Body mass [kg]; zero means no inertial element is emitted.
-    dt::Math::Vector3<dtDynReal> pos;      //!< Inertial-frame origin in the body frame [m].
-    dt::Math::Vector4<dtDynReal> quat;     //!< Inertial-frame orientation as \f$[w,x,y,z]\f$.
-    dt::Math::Vector3<dtDynReal> inertia;  //!< Diagonal rotational inertia [kg m^2] in the inertial frame.
+    dtDynReal mass = 0.0; //!< Body mass [kg]; zero means no inertial element is emitted.
+    dt::Math::Vector3<dtDynReal> pos;  //!< Inertial-frame origin in the body frame [m].
+    dt::Math::Vector4<dtDynReal> quat; //!< Inertial-frame orientation as \f$[w,x,y,z]\f$.
+    dt::Math::Vector3<dtDynReal>
+        inertia; //!< Diagonal rotational inertia [kg m^2] in the inertial frame.
 };
 
 /*!
@@ -40,15 +41,16 @@ struct dtDynInertialSpec
 */
 struct dtDynJointSpec
 {
-    std::string name;                         //!< Stable user-facing joint name used by XML and actuators.
+    std::string name; //!< Stable user-facing joint name used by XML and actuators.
     dtDynJointType type = dtDynJointType::Hinge; //!< Joint coordinate type.
-    dtDynIndex body = DTDYN_INVALID_INDEX;    //!< Owning body index, or DTDYN_INVALID_INDEX while detached.
-    dt::Math::Vector3<dtDynReal> pos;         //!< Joint anchor position in the owning body frame [m].
-    dt::Math::Vector3<dtDynReal> axis;        //!< Unit hinge/slide axis in the owning body frame.
-    bool limited = false;                     //!< Whether rangeMin/rangeMax should be interpreted as limits.
-    dtDynReal rangeMin = 0.0;                 //!< Lower limit [rad] for hinge/ball or [m] for slide.
-    dtDynReal rangeMax = 0.0;                 //!< Upper limit [rad] for hinge/ball or [m] for slide.
-    dtDynReal armature = 0.0;                 //!< Added inertia [kg m^2] angular or [kg] linear.
+    dtDynIndex body =
+        DTDYN_INVALID_INDEX;          //!< Owning body index, or DTDYN_INVALID_INDEX while detached.
+    dt::Math::Vector3<dtDynReal> pos; //!< Joint anchor position in the owning body frame [m].
+    dt::Math::Vector3<dtDynReal> axis; //!< Unit hinge/slide axis in the owning body frame.
+    bool limited = false;     //!< Whether rangeMin/rangeMax should be interpreted as limits.
+    dtDynReal rangeMin = 0.0; //!< Lower limit [rad] for hinge/ball or [m] for slide.
+    dtDynReal rangeMax = 0.0; //!< Upper limit [rad] for hinge/ball or [m] for slide.
+    dtDynReal armature = 0.0; //!< Added inertia [kg m^2] angular or [kg] linear.
 };
 
 /*!
@@ -60,15 +62,18 @@ struct dtDynJointSpec
 */
 struct dtDynBodySpec
 {
-    std::string name;                         //!< Stable body name used by XML and name lookup.
-    dtDynIndex parent = DTDYN_INVALID_INDEX;  //!< Parent body index, or DTDYN_INVALID_INDEX for world/root.
+    std::string name; //!< Stable body name used by XML and name lookup.
+    dtDynIndex parent =
+        DTDYN_INVALID_INDEX; //!< Parent body index, or DTDYN_INVALID_INDEX for world/root.
     dtDynIndex firstChild = DTDYN_INVALID_INDEX; //!< First child body index in sibling-list order.
-    dtDynIndex nextSibling = DTDYN_INVALID_INDEX; //!< Next sibling body index, or DTDYN_INVALID_INDEX.
-    dtArray<dtDynIndex> joints;               //!< Joint indices attached directly to this body.
-    dtArray<dtDynIndex> sites;                //!< Site indices attached directly to this body.
-    dt::Math::Vector3<dtDynReal> pos;         //!< Body frame position relative to parent frame [m].
-    dt::Math::Vector4<dtDynReal> quat;        //!< Body frame orientation relative to parent as \f$[w,x,y,z]\f$.
-    dtDynInertialSpec inertial;               //!< Optional inertial properties for this body.
+    dtDynIndex nextSibling =
+        DTDYN_INVALID_INDEX;          //!< Next sibling body index, or DTDYN_INVALID_INDEX.
+    dtArray<dtDynIndex> joints;       //!< Joint indices attached directly to this body.
+    dtArray<dtDynIndex> sites;        //!< Site indices attached directly to this body.
+    dt::Math::Vector3<dtDynReal> pos; //!< Body frame position relative to parent frame [m].
+    dt::Math::Vector4<dtDynReal>
+        quat;                   //!< Body frame orientation relative to parent as \f$[w,x,y,z]\f$.
+    dtDynInertialSpec inertial; //!< Optional inertial properties for this body.
 };
 
 /*!
@@ -77,10 +82,11 @@ struct dtDynBodySpec
 */
 struct dtDynSiteSpec
 {
-    std::string name;                         //!< Stable site name used by XML and name lookup.
-    dtDynIndex body = DTDYN_INVALID_INDEX;    //!< Owning body index, or DTDYN_INVALID_INDEX while detached.
-    dt::Math::Vector3<dtDynReal> pos;         //!< Site frame position in the owning body frame [m].
-    dt::Math::Vector4<dtDynReal> quat;        //!< Site frame orientation as \f$[w,x,y,z]\f$.
+    std::string name; //!< Stable site name used by XML and name lookup.
+    dtDynIndex body =
+        DTDYN_INVALID_INDEX;          //!< Owning body index, or DTDYN_INVALID_INDEX while detached.
+    dt::Math::Vector3<dtDynReal> pos; //!< Site frame position in the owning body frame [m].
+    dt::Math::Vector4<dtDynReal> quat; //!< Site frame orientation as \f$[w,x,y,z]\f$.
 };
 
 /*!
@@ -90,9 +96,10 @@ struct dtDynSiteSpec
 */
 struct dtDynActuatorSpec
 {
-    std::string name;                         //!< Stable actuator name used by XML and name lookup.
-    dtDynIndex joint = DTDYN_INVALID_INDEX;   //!< Actuated joint index, or DTDYN_INVALID_INDEX while detached.
-    dtDynReal gear = 1.0;                     //!< Scalar actuator gear written to/read from XML.
+    std::string name; //!< Stable actuator name used by XML and name lookup.
+    dtDynIndex joint =
+        DTDYN_INVALID_INDEX; //!< Actuated joint index, or DTDYN_INVALID_INDEX while detached.
+    dtDynReal gear = 1.0;    //!< Scalar actuator gear written to/read from XML.
 };
 
 /*!

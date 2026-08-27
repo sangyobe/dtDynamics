@@ -32,32 +32,23 @@ void ForwardKinematics(const dtDynModel &model, dtDynData &data);
   world-frame linear/angular body-origin velocity.
  \pre ForwardKinematics(model, data) has been run for the current state.
 */
-void ComputeBodyJacobian(const dtDynModel &model,
-                         const dtDynData &data,
-                         dtDynIndex bodyId,
-                         dtDynDenseMatrix &jacp,
-                         dtDynDenseMatrix &jacr);
+void ComputeBodyJacobian(const dtDynModel &model, const dtDynData &data, dtDynIndex bodyId,
+                         dtDynDenseMatrix &jacp, dtDynDenseMatrix &jacr);
 /*! \brief Compute translational and rotational Jacobian for one site origin.
  \details Outputs have shape \f$3 \times n_v\f$ and map generalized velocity to
   world-frame linear/angular site velocity.
  \pre ForwardKinematics(model, data) has been run for the current state.
 */
-void ComputeSiteJacobian(const dtDynModel &model,
-                         const dtDynData &data,
-                         dtDynIndex siteId,
-                         dtDynDenseMatrix &jacp,
-                         dtDynDenseMatrix &jacr);
+void ComputeSiteJacobian(const dtDynModel &model, const dtDynData &data, dtDynIndex siteId,
+                         dtDynDenseMatrix &jacp, dtDynDenseMatrix &jacr);
 /*! \brief Compute translational and rotational Jacobian for an arbitrary point on a body.
  \details \p point is expressed in world coordinates. Outputs have shape
   \f$3 \times n_v\f$ and map generalized velocity to point linear/angular
   velocity.
  \pre ForwardKinematics(model, data) has been run for the current state.
 */
-void ComputePointJacobian(const dtDynModel &model,
-                          const dtDynData &data,
-                          dtDynIndex bodyId,
-                          const dt::Math::Vector3<dtDynReal> &point,
-                          dtDynDenseMatrix &jacp,
+void ComputePointJacobian(const dtDynModel &model, const dtDynData &data, dtDynIndex bodyId,
+                          const dt::Math::Vector3<dtDynReal> &point, dtDynDenseMatrix &jacp,
                           dtDynDenseMatrix &jacr);
 /*! \brief Compute the time derivative of a body-fixed point Jacobian.
  \details \p point is expressed in world coordinates. Outputs are world-frame
@@ -67,11 +58,8 @@ void ComputePointJacobian(const dtDynModel &model,
  \note ForwardKinematics() alone does not populate the subtree-CoM,
   motion-subspace, velocity, and derivative buffers used by this routine.
 */
-void ComputePointJacobianDot(const dtDynModel &model,
-                             const dtDynData &data,
-                             dtDynIndex bodyId,
-                             const dt::Math::Vector3<dtDynReal> &point,
-                             dtDynDenseMatrix &jacpDot,
+void ComputePointJacobianDot(const dtDynModel &model, const dtDynData &data, dtDynIndex bodyId,
+                             const dt::Math::Vector3<dtDynReal> &point, dtDynDenseMatrix &jacpDot,
                              dtDynDenseMatrix &jacrDot);
 /*! \brief Compute \f$\dot{J}(q,\dot{q})\dot{q}\f$ for a body-fixed point.
  \details \p point is expressed in world coordinates. \p linear and \p angular
@@ -79,8 +67,7 @@ void ComputePointJacobianDot(const dtDynModel &model,
  \pre \p data is compatible with \p model and has been refreshed for the current
   qpos/qvel state by ComputeDynamicsRNEA() or ComputeDynamicsCCRBA().
 */
-void ComputePointJacobianDotTimesVelocity(const dtDynModel &model,
-                                          const dtDynData &data,
+void ComputePointJacobianDotTimesVelocity(const dtDynModel &model, const dtDynData &data,
                                           dtDynIndex bodyId,
                                           const dt::Math::Vector3<dtDynReal> &point,
                                           dt::Math::Vector3<dtDynReal> &linear,
@@ -95,13 +82,9 @@ void ComputePointJacobianDotTimesVelocity(const dtDynModel &model,
   refreshed for the current qpos/qvel state by ComputeDynamicsRNEA() or
   ComputeDynamicsCCRBA().
 */
-void ComputePointJacobianTerms(const dtDynModel &model,
-                               const dtDynData &data,
-                               dtDynIndex bodyId,
-                               const dt::Math::Vector3<dtDynReal> &point,
-                               dtDynDenseMatrix *jacp,
-                               dtDynDenseMatrix *jacr,
-                               dtDynDenseMatrix *jacpDot,
+void ComputePointJacobianTerms(const dtDynModel &model, const dtDynData &data, dtDynIndex bodyId,
+                               const dt::Math::Vector3<dtDynReal> &point, dtDynDenseMatrix *jacp,
+                               dtDynDenseMatrix *jacr, dtDynDenseMatrix *jacpDot,
                                dtDynDenseMatrix *jacrDot,
                                dt::Math::Vector3<dtDynReal> *linearJdotQvel,
                                dt::Math::Vector3<dtDynReal> *angularJdotQvel);
@@ -112,13 +95,9 @@ void ComputePointJacobianTerms(const dtDynModel &model,
  \pre If any derivative or Jdot*qvel output is non-null, \p data has also been
   refreshed by ComputeDynamicsRNEA() or ComputeDynamicsCCRBA().
 */
-void ComputeBodyJacobianTerms(const dtDynModel &model,
-                              const dtDynData &data,
-                              dtDynIndex bodyId,
-                              dtDynDenseMatrix *jacp,
-                              dtDynDenseMatrix *jacr,
-                              dtDynDenseMatrix *jacpDot,
-                              dtDynDenseMatrix *jacrDot,
+void ComputeBodyJacobianTerms(const dtDynModel &model, const dtDynData &data, dtDynIndex bodyId,
+                              dtDynDenseMatrix *jacp, dtDynDenseMatrix *jacr,
+                              dtDynDenseMatrix *jacpDot, dtDynDenseMatrix *jacrDot,
                               dt::Math::Vector3<dtDynReal> *linearJdotQvel,
                               dt::Math::Vector3<dtDynReal> *angularJdotQvel);
 /*! \brief Compute selected site-origin Jacobian terms in one traversal.
@@ -128,50 +107,36 @@ void ComputeBodyJacobianTerms(const dtDynModel &model,
  \pre If any derivative or Jdot*qvel output is non-null, \p data has also been
   refreshed by ComputeDynamicsRNEA() or ComputeDynamicsCCRBA().
 */
-void ComputeSiteJacobianTerms(const dtDynModel &model,
-                              const dtDynData &data,
-                              dtDynIndex siteId,
-                              dtDynDenseMatrix *jacp,
-                              dtDynDenseMatrix *jacr,
-                              dtDynDenseMatrix *jacpDot,
-                              dtDynDenseMatrix *jacrDot,
+void ComputeSiteJacobianTerms(const dtDynModel &model, const dtDynData &data, dtDynIndex siteId,
+                              dtDynDenseMatrix *jacp, dtDynDenseMatrix *jacr,
+                              dtDynDenseMatrix *jacpDot, dtDynDenseMatrix *jacrDot,
                               dt::Math::Vector3<dtDynReal> *linearJdotQvel,
                               dt::Math::Vector3<dtDynReal> *angularJdotQvel);
 /*! \brief Compute world-frame derivatives of one body-origin Jacobian.
  \pre \p data has been refreshed for the current qpos/qvel state by
   ComputeDynamicsRNEA() or ComputeDynamicsCCRBA().
 */
-void ComputeBodyJacobianDot(const dtDynModel &model,
-                            const dtDynData &data,
-                            dtDynIndex bodyId,
-                            dtDynDenseMatrix &jacpDot,
-                            dtDynDenseMatrix &jacrDot);
+void ComputeBodyJacobianDot(const dtDynModel &model, const dtDynData &data, dtDynIndex bodyId,
+                            dtDynDenseMatrix &jacpDot, dtDynDenseMatrix &jacrDot);
 /*! \brief Compute world-frame derivatives of one site-origin Jacobian.
  \pre \p data has been refreshed for the current qpos/qvel state by
   ComputeDynamicsRNEA() or ComputeDynamicsCCRBA().
 */
-void ComputeSiteJacobianDot(const dtDynModel &model,
-                            const dtDynData &data,
-                            dtDynIndex siteId,
-                            dtDynDenseMatrix &jacpDot,
-                            dtDynDenseMatrix &jacrDot);
+void ComputeSiteJacobianDot(const dtDynModel &model, const dtDynData &data, dtDynIndex siteId,
+                            dtDynDenseMatrix &jacpDot, dtDynDenseMatrix &jacrDot);
 /*! \brief Compute world-frame body-origin Jdot*qvel linear/angular terms.
  \pre \p data has been refreshed for the current qpos/qvel state by
   ComputeDynamicsRNEA() or ComputeDynamicsCCRBA().
 */
-void ComputeBodyJacobianDotTimesVelocity(const dtDynModel &model,
-                                         const dtDynData &data,
-                                         dtDynIndex bodyId,
-                                         dt::Math::Vector3<dtDynReal> &linear,
+void ComputeBodyJacobianDotTimesVelocity(const dtDynModel &model, const dtDynData &data,
+                                         dtDynIndex bodyId, dt::Math::Vector3<dtDynReal> &linear,
                                          dt::Math::Vector3<dtDynReal> &angular);
 /*! \brief Compute world-frame site-origin Jdot*qvel linear/angular terms.
  \pre \p data has been refreshed for the current qpos/qvel state by
   ComputeDynamicsRNEA() or ComputeDynamicsCCRBA().
 */
-void ComputeSiteJacobianDotTimesVelocity(const dtDynModel &model,
-                                         const dtDynData &data,
-                                         dtDynIndex siteId,
-                                         dt::Math::Vector3<dtDynReal> &linear,
+void ComputeSiteJacobianDotTimesVelocity(const dtDynModel &model, const dtDynData &data,
+                                         dtDynIndex siteId, dt::Math::Vector3<dtDynReal> &linear,
                                          dt::Math::Vector3<dtDynReal> &angular);
 
 /*! \name Full-model Jacobian output paths
@@ -195,16 +160,12 @@ void ComputeJacobians(const dtDynModel &model, dtDynData &data);
   ComputeDynamicsRNEA() or ComputeDynamicsCCRBA().
 */
 ///@{
-void ComputeBodyJacobians(const dtDynModel &model,
-                          dtDynData &data,
+void ComputeBodyJacobians(const dtDynModel &model, dtDynData &data,
                           const dtDynArray<dtDynIndex> &bodyIds);
-void ComputeSiteJacobians(const dtDynModel &model,
-                          dtDynData &data,
+void ComputeSiteJacobians(const dtDynModel &model, dtDynData &data,
                           const dtDynArray<dtDynIndex> &siteIds);
-void ComputeJacobians(const dtDynModel &model,
-                      dtDynData &data,
-                      const dtDynArray<dtDynIndex> &bodyIds,
-                      const dtDynArray<dtDynIndex> &siteIds);
+void ComputeJacobians(const dtDynModel &model, dtDynData &data,
+                      const dtDynArray<dtDynIndex> &bodyIds, const dtDynArray<dtDynIndex> &siteIds);
 ///@}
 
 } // namespace dt::Dynamics

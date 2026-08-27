@@ -20,24 +20,19 @@ bool DenseVectorHasSize(const dtDynDenseVector &vector, const dtDynIndex dim)
     return vector.GetDim() == ToDtMathDim(dim);
 }
 
-bool DenseMatrixHasSize(const dtDynDenseMatrix &matrix,
-                        const dtDynIndex rows,
+bool DenseMatrixHasSize(const dtDynDenseMatrix &matrix, const dtDynIndex rows,
                         const dtDynIndex cols)
 {
-    return matrix.GetRowSize() == ToDtMathDim(rows) &&
-           matrix.GetColSize() == ToDtMathDim(cols);
+    return matrix.GetRowSize() == ToDtMathDim(rows) && matrix.GetColSize() == ToDtMathDim(cols);
 }
 
-template <typename T>
-bool ArrayHasSize(const dtArray<T> &array, const dtDynIndex size)
+template <typename T> bool ArrayHasSize(const dtArray<T> &array, const dtDynIndex size)
 {
     return array.size() == static_cast<std::size_t>(size);
 }
 
-bool DenseMatrixArrayHasSize(const dtArray<dtDynDenseMatrix> &array,
-                             const dtDynIndex count,
-                             const dtDynIndex rows,
-                             const dtDynIndex cols)
+bool DenseMatrixArrayHasSize(const dtArray<dtDynDenseMatrix> &array, const dtDynIndex count,
+                             const dtDynIndex rows, const dtDynIndex cols)
 {
     if (!ArrayHasSize(array, count))
     {
@@ -147,18 +142,12 @@ bool dtDynData::IsCompatible(const dtDynModel &model) const
 {
     const dtDynIndex rootCount = model.nroot > 0 ? model.nroot : 1;
 
-    return DenseVectorHasSize(qpos, model.nq) &&
-           DenseVectorHasSize(qvel, model.nv) &&
-           ArrayHasSize(xpos, model.nbody) &&
-           ArrayHasSize(xquat, model.nbody) &&
-           ArrayHasSize(xmat, model.nbody) &&
-           ArrayHasSize(xipos, model.nbody) &&
-           ArrayHasSize(ximat, model.nbody) &&
-           ArrayHasSize(subtree_com, model.nbody) &&
-           ArrayHasSize(xanchor, model.njnt) &&
-           ArrayHasSize(xaxis, model.njnt) &&
-           ArrayHasSize(site_xpos, model.nsite) &&
-           ArrayHasSize(site_xmat, model.nsite) &&
+    return DenseVectorHasSize(qpos, model.nq) && DenseVectorHasSize(qvel, model.nv) &&
+           ArrayHasSize(xpos, model.nbody) && ArrayHasSize(xquat, model.nbody) &&
+           ArrayHasSize(xmat, model.nbody) && ArrayHasSize(xipos, model.nbody) &&
+           ArrayHasSize(ximat, model.nbody) && ArrayHasSize(subtree_com, model.nbody) &&
+           ArrayHasSize(xanchor, model.njnt) && ArrayHasSize(xaxis, model.njnt) &&
+           ArrayHasSize(site_xpos, model.nsite) && ArrayHasSize(site_xmat, model.nsite) &&
            DenseMatrixArrayHasSize(body_jacp, model.nbody, 3, model.nv) &&
            DenseMatrixArrayHasSize(body_jacr, model.nbody, 3, model.nv) &&
            DenseMatrixArrayHasSize(body_jacp_dot, model.nbody, 3, model.nv) &&
@@ -167,32 +156,24 @@ bool dtDynData::IsCompatible(const dtDynModel &model) const
            DenseMatrixArrayHasSize(site_jacr, model.nsite, 3, model.nv) &&
            DenseMatrixArrayHasSize(site_jacp_dot, model.nsite, 3, model.nv) &&
            DenseMatrixArrayHasSize(site_jacr_dot, model.nsite, 3, model.nv) &&
-           ArrayHasSize(cdof, model.nv) &&
-           ArrayHasSize(cdof_dot, model.nv) &&
-           ArrayHasSize(cvel, model.nbody) &&
-           ArrayHasSize(cinert, model.nbody) &&
-           ArrayHasSize(crb, model.nbody) &&
-           ArrayHasSize(BmatComp, model.nbody) &&
-           ArrayHasSize(BmatCompNonzero, model.nbody) &&
-           ArrayHasSize(f1, model.nv) &&
-           ArrayHasSize(f2, model.nv) &&
-           ArrayHasSize(f3, model.nv) &&
-           ArrayHasSize(cacc, model.nbody) &&
-           ArrayHasSize(cfrc, model.nbody) &&
+           ArrayHasSize(cdof, model.nv) && ArrayHasSize(cdof_dot, model.nv) &&
+           ArrayHasSize(cvel, model.nbody) && ArrayHasSize(cinert, model.nbody) &&
+           ArrayHasSize(crb, model.nbody) && ArrayHasSize(BmatComp, model.nbody) &&
+           ArrayHasSize(BmatCompNonzero, model.nbody) && ArrayHasSize(f1, model.nv) &&
+           ArrayHasSize(f2, model.nv) && ArrayHasSize(f3, model.nv) &&
+           ArrayHasSize(cacc, model.nbody) && ArrayHasSize(cfrc, model.nbody) &&
            ArrayHasSize(scratch_weightedCom, model.nbody) &&
            DenseMatrixHasSize(Mmat, model.nv, model.nv) &&
            DenseMatrixHasSize(MmatDot, model.nv, model.nv) &&
            DenseMatrixHasSize(Cmat, model.nv, model.nv) &&
            DenseVectorHasSize(gravityTorq, model.nv) &&
-           DenseVectorHasSize(coriolisTorq, model.nv) &&
-           DenseVectorHasSize(nonlinTorq, model.nv) &&
+           DenseVectorHasSize(coriolisTorq, model.nv) && DenseVectorHasSize(nonlinTorq, model.nv) &&
            DenseMatrixHasSize(comJmat, 3 * rootCount, model.nv) &&
            DenseMatrixHasSize(comJmatDot, 3 * rootCount, model.nv) &&
            DenseMatrixHasSize(cmAmat, 6 * rootCount, model.nv) &&
            DenseMatrixHasSize(cmAmatDot, 6 * rootCount, model.nv) &&
            DenseVectorHasSize(centMom, 6 * rootCount) &&
-           DenseVectorHasSize(comPos, 3 * rootCount) &&
-           DenseVectorHasSize(comVel, 3 * rootCount);
+           DenseVectorHasSize(comPos, 3 * rootCount) && DenseVectorHasSize(comVel, 3 * rootCount);
 }
 
 } // namespace dt::Dynamics

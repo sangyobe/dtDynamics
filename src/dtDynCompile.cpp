@@ -92,9 +92,11 @@ void CompileSpec(const dtDynSpec &spec, dtDynModel &model)
     for (dtDynIndex bodyId = 0; bodyId < model.nbody; ++bodyId)
     {
         const dtDynBodySpec &body = spec.Bodies()[static_cast<std::size_t>(bodyId)];
-        for (dtDynIndex localJointId = 0; localJointId < static_cast<dtDynIndex>(body.joints.size()); ++localJointId)
+        for (dtDynIndex localJointId = 0;
+             localJointId < static_cast<dtDynIndex>(body.joints.size()); ++localJointId)
         {
-            const dtDynJointSpec &joint = spec.Joints()[static_cast<std::size_t>(GetJointSpecId(body, localJointId))];
+            const dtDynJointSpec &joint =
+                spec.Joints()[static_cast<std::size_t>(GetJointSpecId(body, localJointId))];
             const dtDynJointDofSize dofSize = GetJointDofSize(joint.type);
             model.nq += dofSize.qposSize;
             model.nv += dofSize.qvelSize;
@@ -119,16 +121,14 @@ void CompileSpec(const dtDynSpec &spec, dtDynModel &model)
         model.body_names[static_cast<std::size_t>(bodyId)] = body.name;
         model.body_parentid[static_cast<std::size_t>(bodyId)] = bodyId == 0 ? 0 : body.parent;
         model.body_pos[static_cast<std::size_t>(bodyId)] = body.pos;
-        model.body_quat[static_cast<std::size_t>(bodyId)] =
-            math::NormalizeOrIdentity(body.quat);
+        model.body_quat[static_cast<std::size_t>(bodyId)] = math::NormalizeOrIdentity(body.quat);
         model.body_mat[static_cast<std::size_t>(bodyId)] =
             math::QuatToMat(model.body_quat[static_cast<std::size_t>(bodyId)]);
         model.body_ipos[static_cast<std::size_t>(bodyId)] =
             body.inertial.mass == 0.0 ? body.pos : body.inertial.pos;
         model.body_iquat[static_cast<std::size_t>(bodyId)] =
-            body.inertial.mass == 0.0
-                ? model.body_quat[static_cast<std::size_t>(bodyId)]
-                : math::NormalizeOrIdentity(body.inertial.quat);
+            body.inertial.mass == 0.0 ? model.body_quat[static_cast<std::size_t>(bodyId)]
+                                      : math::NormalizeOrIdentity(body.inertial.quat);
         model.body_imat[static_cast<std::size_t>(bodyId)] =
             math::QuatToMat(model.body_iquat[static_cast<std::size_t>(bodyId)]);
         model.body_inertia[static_cast<std::size_t>(bodyId)] = body.inertial.inertia;
@@ -149,13 +149,16 @@ void CompileSpec(const dtDynSpec &spec, dtDynModel &model)
         if (!body.joints.empty())
         {
             model.body_jntadr[static_cast<std::size_t>(bodyId)] = nextJointId;
-            model.body_jntnum[static_cast<std::size_t>(bodyId)] = static_cast<dtDynIndex>(body.joints.size());
+            model.body_jntnum[static_cast<std::size_t>(bodyId)] =
+                static_cast<dtDynIndex>(body.joints.size());
             model.body_dofadr[static_cast<std::size_t>(bodyId)] = nextDofAdr;
 
             dtDynIndex bodyDofNum = 0;
-            dtDynIndex parentDof = parent >= 0 ? bodyLastDof[static_cast<std::size_t>(parent)] : DTDYN_INVALID_INDEX;
+            dtDynIndex parentDof =
+                parent >= 0 ? bodyLastDof[static_cast<std::size_t>(parent)] : DTDYN_INVALID_INDEX;
 
-            for (dtDynIndex localJointId = 0; localJointId < static_cast<dtDynIndex>(body.joints.size()); ++localJointId)
+            for (dtDynIndex localJointId = 0;
+                 localJointId < static_cast<dtDynIndex>(body.joints.size()); ++localJointId)
             {
                 const dtDynIndex specJointId = GetJointSpecId(body, localJointId);
                 const dtDynJointSpec &joint = spec.Joints()[static_cast<std::size_t>(specJointId)];
@@ -164,7 +167,8 @@ void CompileSpec(const dtDynSpec &spec, dtDynModel &model)
 
                 jointIdMap[static_cast<std::size_t>(specJointId)] = modelJointId;
                 model.joint_names[static_cast<std::size_t>(modelJointId)] = joint.name;
-                model.jnt_type[static_cast<std::size_t>(modelJointId)] = static_cast<dtDynIndex>(joint.type);
+                model.jnt_type[static_cast<std::size_t>(modelJointId)] =
+                    static_cast<dtDynIndex>(joint.type);
                 model.jnt_bodyid[static_cast<std::size_t>(modelJointId)] = bodyId;
                 model.jnt_qposadr[static_cast<std::size_t>(modelJointId)] = nextQposAdr;
                 model.jnt_dofadr[static_cast<std::size_t>(modelJointId)] = nextDofAdr;
@@ -195,7 +199,8 @@ void CompileSpec(const dtDynSpec &spec, dtDynModel &model)
         }
         else if (parent >= 0)
         {
-            bodyLastDof[static_cast<std::size_t>(bodyId)] = bodyLastDof[static_cast<std::size_t>(parent)];
+            bodyLastDof[static_cast<std::size_t>(bodyId)] =
+                bodyLastDof[static_cast<std::size_t>(parent)];
         }
     }
 
@@ -205,8 +210,7 @@ void CompileSpec(const dtDynSpec &spec, dtDynModel &model)
         model.site_names[static_cast<std::size_t>(siteId)] = site.name;
         model.site_bodyid[static_cast<std::size_t>(siteId)] = site.body;
         model.site_pos[static_cast<std::size_t>(siteId)] = site.pos;
-        model.site_quat[static_cast<std::size_t>(siteId)] =
-            math::NormalizeOrIdentity(site.quat);
+        model.site_quat[static_cast<std::size_t>(siteId)] = math::NormalizeOrIdentity(site.quat);
         model.site_mat[static_cast<std::size_t>(siteId)] =
             math::QuatToMat(model.site_quat[static_cast<std::size_t>(siteId)]);
     }

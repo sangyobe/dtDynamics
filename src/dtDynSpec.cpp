@@ -44,7 +44,8 @@ std::string Trim(const std::string &text)
 std::string TagName(const std::string &tag)
 {
     std::size_t pos = 0;
-    while (pos < tag.size() && !std::isspace(static_cast<unsigned char>(tag[pos])) && tag[pos] != '/')
+    while (pos < tag.size() && !std::isspace(static_cast<unsigned char>(tag[pos])) &&
+           tag[pos] != '/')
     {
         ++pos;
     }
@@ -67,7 +68,8 @@ AttributeMap ParseAttributes(const std::string &tag)
         }
 
         const std::size_t keyStart = pos;
-        while (pos < tag.size() && tag[pos] != '=' && !std::isspace(static_cast<unsigned char>(tag[pos])))
+        while (pos < tag.size() && tag[pos] != '=' &&
+               !std::isspace(static_cast<unsigned char>(tag[pos])))
         {
             ++pos;
         }
@@ -111,13 +113,15 @@ bool HasAttribute(const AttributeMap &attrs, const std::string &key)
     return attrs.find(key) != attrs.end();
 }
 
-std::string AttributeOr(const AttributeMap &attrs, const std::string &key, const std::string &fallback)
+std::string AttributeOr(const AttributeMap &attrs, const std::string &key,
+                        const std::string &fallback)
 {
     const auto it = attrs.find(key);
     return it == attrs.end() ? fallback : it->second;
 }
 
-dtDynReal RealAttributeOr(const AttributeMap &attrs, const std::string &key, const dtDynReal fallback)
+dtDynReal RealAttributeOr(const AttributeMap &attrs, const std::string &key,
+                          const dtDynReal fallback)
 {
     const auto it = attrs.find(key);
     if (it == attrs.end())
@@ -166,8 +170,8 @@ std::string FormatVector3(const dt::Math::Vector3<dtDynReal> &value)
 
 std::string FormatVector4(const dt::Math::Vector4<dtDynReal> &value)
 {
-    return FormatReal(value(0)) + " " + FormatReal(value(1)) + " " +
-           FormatReal(value(2)) + " " + FormatReal(value(3));
+    return FormatReal(value(0)) + " " + FormatReal(value(1)) + " " + FormatReal(value(2)) + " " +
+           FormatReal(value(3));
 }
 
 void SetIdentityQuat(dt::Math::Vector4<dtDynReal> &quat)
@@ -227,9 +231,7 @@ dtDynReal AngleScaleFromCompilerAttribute(const AttributeMap &attrs)
     throw std::runtime_error("dtDynSpec: unsupported compiler angle unit");
 }
 
-void EncodeBody(const dtDynSpec &spec,
-                const dtDynIndex bodyId,
-                const dtDynIndex depth,
+void EncodeBody(const dtDynSpec &spec, const dtDynIndex bodyId, const dtDynIndex depth,
                 std::ostringstream &out)
 {
     const dtDynBodySpec &body = spec.Bodies()[static_cast<std::size_t>(bodyId)];
@@ -243,9 +245,9 @@ void EncodeBody(const dtDynSpec &spec,
 
     if (body.inertial.mass != 0.0)
     {
-        out << indent << "  <inertial pos=\"" << FormatVector3(body.inertial.pos)
-            << "\" mass=\"" << FormatReal(body.inertial.mass)
-            << "\" diaginertia=\"" << FormatVector3(body.inertial.inertia) << "\"";
+        out << indent << "  <inertial pos=\"" << FormatVector3(body.inertial.pos) << "\" mass=\""
+            << FormatReal(body.inertial.mass) << "\" diaginertia=\""
+            << FormatVector3(body.inertial.inertia) << "\"";
         if (body.inertial.quat(0) != 0.0 || body.inertial.quat(1) != 0.0 ||
             body.inertial.quat(2) != 0.0 || body.inertial.quat(3) != 0.0)
         {
@@ -257,15 +259,13 @@ void EncodeBody(const dtDynSpec &spec,
     for (const dtDynIndex jointId : body.joints)
     {
         const dtDynJointSpec &joint = spec.Joints()[static_cast<std::size_t>(jointId)];
-        out << indent << "  <joint name=\"" << joint.name
-            << "\" type=\"" << JointTypeToXml(joint.type)
-            << "\" pos=\"" << FormatVector3(joint.pos)
-            << "\" axis=\"" << FormatVector3(joint.axis)
-            << "\" armature=\"" << FormatReal(joint.armature) << "\"";
+        out << indent << "  <joint name=\"" << joint.name << "\" type=\""
+            << JointTypeToXml(joint.type) << "\" pos=\"" << FormatVector3(joint.pos) << "\" axis=\""
+            << FormatVector3(joint.axis) << "\" armature=\"" << FormatReal(joint.armature) << "\"";
         if (joint.limited)
         {
-            out << " limited=\"true\" range=\"" << FormatReal(joint.rangeMin)
-                << " " << FormatReal(joint.rangeMax) << "\"";
+            out << " limited=\"true\" range=\"" << FormatReal(joint.rangeMin) << " "
+                << FormatReal(joint.rangeMax) << "\"";
         }
         out << "/>\n";
     }
@@ -273,16 +273,18 @@ void EncodeBody(const dtDynSpec &spec,
     for (const dtDynIndex siteId : body.sites)
     {
         const dtDynSiteSpec &site = spec.Sites()[static_cast<std::size_t>(siteId)];
-        out << indent << "  <site name=\"" << site.name
-            << "\" pos=\"" << FormatVector3(site.pos) << "\"";
-        if (site.quat(0) != 0.0 || site.quat(1) != 0.0 || site.quat(2) != 0.0 || site.quat(3) != 0.0)
+        out << indent << "  <site name=\"" << site.name << "\" pos=\"" << FormatVector3(site.pos)
+            << "\"";
+        if (site.quat(0) != 0.0 || site.quat(1) != 0.0 || site.quat(2) != 0.0 ||
+            site.quat(3) != 0.0)
         {
             out << " quat=\"" << FormatVector4(site.quat) << "\"";
         }
         out << "/>\n";
     }
 
-    for (dtDynIndex child = body.firstChild; child >= 0; child = spec.Bodies()[static_cast<std::size_t>(child)].nextSibling)
+    for (dtDynIndex child = body.firstChild; child >= 0;
+         child = spec.Bodies()[static_cast<std::size_t>(child)].nextSibling)
     {
         EncodeBody(spec, child, depth + 1, out);
     }
@@ -292,10 +294,7 @@ void EncodeBody(const dtDynSpec &spec,
 
 } // namespace
 
-dtDynSpec::dtDynSpec()
-{
-    Clear();
-}
+dtDynSpec::dtDynSpec() { Clear(); }
 
 dtDynIndex dtDynSpec::AddBody(const std::string &name, const dtDynIndex parent)
 {
@@ -317,7 +316,8 @@ dtDynIndex dtDynSpec::AddBody(const std::string &name, const dtDynIndex parent)
     return id;
 }
 
-dtDynIndex dtDynSpec::AddJoint(const dtDynIndex body, const std::string &name, const dtDynJointType type)
+dtDynIndex dtDynSpec::AddJoint(const dtDynIndex body, const std::string &name,
+                               const dtDynJointType type)
 {
     dtDynJointSpec joint;
     joint.name = name;
@@ -382,7 +382,8 @@ std::string dtDynSpec::EncodeXml() const
     out << "<mujoco>\n";
     out << "  <compiler angle=\"radian\"/>\n";
     out << "  <worldbody>\n";
-    for (dtDynIndex child = m_bodies[0].firstChild; child >= 0; child = m_bodies[static_cast<std::size_t>(child)].nextSibling)
+    for (dtDynIndex child = m_bodies[0].firstChild; child >= 0;
+         child = m_bodies[static_cast<std::size_t>(child)].nextSibling)
     {
         EncodeBody(*this, child, 2, out);
     }
@@ -395,7 +396,8 @@ std::string dtDynSpec::EncodeXml() const
             out << "    <motor name=\"" << actuator.name << "\"";
             if (actuator.joint >= 0 && actuator.joint < static_cast<dtDynIndex>(m_joints.size()))
             {
-                out << " joint=\"" << m_joints[static_cast<std::size_t>(actuator.joint)].name << "\"";
+                out << " joint=\"" << m_joints[static_cast<std::size_t>(actuator.joint)].name
+                    << "\"";
             }
             out << " gear=\"" << FormatReal(actuator.gear) << "\"/>\n";
         }
@@ -409,7 +411,8 @@ dtDynSpec dtDynSpec::DecodeXml(const std::string &xml)
 {
     if (xml.find("<equality") != std::string::npos || xml.find("<tendon") != std::string::npos)
     {
-        throw std::runtime_error("dtDynSpec: equality constraints are not supported in the tree-only dynamics phase");
+        throw std::runtime_error(
+            "dtDynSpec: equality constraints are not supported in the tree-only dynamics phase");
     }
 
     dtDynSpec spec;
@@ -543,8 +546,8 @@ dtDynSpec dtDynSpec::DecodeXml(const std::string &xml)
         {
             const dtDynIndex bodyId = bodyStack[bodyStack.size() - 1];
             const std::string jointName = AttributeOr(attrs, "name", "joint");
-            const dtDynIndex jointId =
-                spec.AddJoint(bodyId, jointName, JointTypeFromXml(AttributeOr(attrs, "type", "hinge")));
+            const dtDynIndex jointId = spec.AddJoint(
+                bodyId, jointName, JointTypeFromXml(AttributeOr(attrs, "type", "hinge")));
             dtDynJointSpec &joint = spec.Joints()[jointId];
             if (HasAttribute(attrs, "pos"))
             {
@@ -610,7 +613,8 @@ dtDynSpec dtDynSpec::DecodeXml(const std::string &xml)
             }
             const dtDynIndex actuatorId =
                 spec.AddActuator(jointIt->second, AttributeOr(attrs, "name", "motor"));
-            spec.Actuators()[actuatorId].gear = RealAttributeOr(attrs, "gear", spec.Actuators()[actuatorId].gear);
+            spec.Actuators()[actuatorId].gear =
+                RealAttributeOr(attrs, "gear", spec.Actuators()[actuatorId].gear);
             continue;
         }
     }
@@ -618,44 +622,20 @@ dtDynSpec dtDynSpec::DecodeXml(const std::string &xml)
     return spec;
 }
 
-const dtArray<dtDynBodySpec> &dtDynSpec::Bodies() const
-{
-    return m_bodies;
-}
+const dtArray<dtDynBodySpec> &dtDynSpec::Bodies() const { return m_bodies; }
 
-const dtArray<dtDynJointSpec> &dtDynSpec::Joints() const
-{
-    return m_joints;
-}
+const dtArray<dtDynJointSpec> &dtDynSpec::Joints() const { return m_joints; }
 
-const dtArray<dtDynSiteSpec> &dtDynSpec::Sites() const
-{
-    return m_sites;
-}
+const dtArray<dtDynSiteSpec> &dtDynSpec::Sites() const { return m_sites; }
 
-const dtArray<dtDynActuatorSpec> &dtDynSpec::Actuators() const
-{
-    return m_actuators;
-}
+const dtArray<dtDynActuatorSpec> &dtDynSpec::Actuators() const { return m_actuators; }
 
-dtArray<dtDynBodySpec> &dtDynSpec::Bodies()
-{
-    return m_bodies;
-}
+dtArray<dtDynBodySpec> &dtDynSpec::Bodies() { return m_bodies; }
 
-dtArray<dtDynJointSpec> &dtDynSpec::Joints()
-{
-    return m_joints;
-}
+dtArray<dtDynJointSpec> &dtDynSpec::Joints() { return m_joints; }
 
-dtArray<dtDynSiteSpec> &dtDynSpec::Sites()
-{
-    return m_sites;
-}
+dtArray<dtDynSiteSpec> &dtDynSpec::Sites() { return m_sites; }
 
-dtArray<dtDynActuatorSpec> &dtDynSpec::Actuators()
-{
-    return m_actuators;
-}
+dtArray<dtDynActuatorSpec> &dtDynSpec::Actuators() { return m_actuators; }
 
 } // namespace dt::Dynamics

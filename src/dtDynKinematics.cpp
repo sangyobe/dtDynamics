@@ -9,10 +9,10 @@
 
 #include "dtDynamics/dtDynKinematics.h"
 
+#include <cassert>
+
 #include "dtDynamics/dtDynMath.h"
 #include "dtDynamics/dtDynUtils.h"
-
-#include <cassert>
 
 namespace dt::Dynamics
 {
@@ -34,8 +34,8 @@ void ForwardKinematics(const dtDynModel &model, dtDynData &data)
         const dtDynIndex jntAdr = model.body_jntadr[static_cast<std::size_t>(bodyId)];
         const dtDynIndex jntNum = model.body_jntnum[static_cast<std::size_t>(bodyId)];
 
-        if (jntNum == 1 &&
-            model.jnt_type[static_cast<std::size_t>(jntAdr)] == static_cast<dtDynIndex>(dtDynJointType::Free))
+        if (jntNum == 1 && model.jnt_type[static_cast<std::size_t>(jntAdr)] ==
+                               static_cast<dtDynIndex>(dtDynJointType::Free))
         {
             const dtDynIndex qadr = model.jnt_qposadr[static_cast<std::size_t>(jntAdr)];
             xpos(0) = data.qpos(qadr + 0);
@@ -47,7 +47,8 @@ void ForwardKinematics(const dtDynModel &model, dtDynData &data)
             xquat(3) = data.qpos(qadr + 6);
             xquat = math::NormalizeOrIdentity(xquat);
             data.xanchor[static_cast<std::size_t>(jntAdr)] = xpos;
-            data.xaxis[static_cast<std::size_t>(jntAdr)] = model.jnt_axis[static_cast<std::size_t>(jntAdr)];
+            data.xaxis[static_cast<std::size_t>(jntAdr)] =
+                model.jnt_axis[static_cast<std::size_t>(jntAdr)];
         }
         else
         {
@@ -97,7 +98,8 @@ void ForwardKinematics(const dtDynModel &model, dtDynData &data)
                     }
                     else
                     {
-                        qloc = math::AxisAngleQuat(model.jnt_axis[static_cast<std::size_t>(jointId)], data.qpos(qadr));
+                        qloc = math::AxisAngleQuat(
+                            model.jnt_axis[static_cast<std::size_t>(jointId)], data.qpos(qadr));
                     }
 
                     xquat = math::MulQuat(xquat, qloc);
@@ -138,9 +140,7 @@ void ForwardKinematics(const dtDynModel &model, dtDynData &data)
 namespace
 {
 
-void PrepareJacobianMatrix(dtDynDenseMatrix *matrix,
-                           const dtDynIndex nv,
-                           const bool resetOutput)
+void PrepareJacobianMatrix(dtDynDenseMatrix *matrix, const dtDynIndex nv, const bool resetOutput)
 {
     if (matrix == nullptr)
     {
@@ -160,8 +160,7 @@ struct PointJacobianDotContext
     dt::Math::Vector3<dtDynReal> pointVelocity;
 };
 
-PointJacobianDotContext MakePointJacobianDotContext(const dtDynModel &model,
-                                                    const dtDynData &data,
+PointJacobianDotContext MakePointJacobianDotContext(const dtDynModel &model, const dtDynData &data,
                                                     const dtDynIndex bodyId,
                                                     const dt::Math::Vector3<dtDynReal> &point)
 {
@@ -178,15 +177,12 @@ PointJacobianDotContext MakePointJacobianDotContext(const dtDynModel &model,
         bodyAngularVelocity(row) = data.cvel[static_cast<std::size_t>(bodyId)](row);
         bodyLinearVelocityAtRoot(row) = data.cvel[static_cast<std::size_t>(bodyId)](row + 3);
     }
-    context.pointVelocity =
-        bodyLinearVelocityAtRoot - (context.rootToPoint & bodyAngularVelocity);
+    context.pointVelocity = bodyLinearVelocityAtRoot - (context.rootToPoint & bodyAngularVelocity);
     return context;
 }
 
-void ComputePointJacobianDotColumn(const dtDynModel &model,
-                                   const dtDynData &data,
-                                   const dtDynIndex dofId,
-                                   const PointJacobianDotContext &context,
+void ComputePointJacobianDotColumn(const dtDynModel &model, const dtDynData &data,
+                                   const dtDynIndex dofId, const PointJacobianDotContext &context,
                                    dt::Math::Vector3<dtDynReal> &linearDot,
                                    dt::Math::Vector3<dtDynReal> &angularDot)
 {
@@ -200,8 +196,7 @@ void ComputePointJacobianDotColumn(const dtDynModel &model,
     const dtDynJointType jointType =
         static_cast<dtDynJointType>(model.jnt_type[static_cast<std::size_t>(jointId)]);
     dt::Math::Vector6<dtDynReal> cdofDot = data.cdof_dot[static_cast<std::size_t>(dofId)];
-    if (jointType == dtDynJointType::Ball ||
-        (jointType == dtDynJointType::Free && dofOffset >= 3))
+    if (jointType == dtDynJointType::Ball || (jointType == dtDynJointType::Free && dofOffset >= 3))
     {
         cdofDot = math::CrossSpatialMotion(data.cvel[static_cast<std::size_t>(dofBody)],
                                            data.cdof[static_cast<std::size_t>(dofId)]);
@@ -216,20 +211,15 @@ void ComputePointJacobianDotColumn(const dtDynModel &model,
         linearDotAtRoot(row) = cdofDot(row + 3);
     }
 
-    linearDot =
-        linearDotAtRoot +
-        (angularDot & context.rootToPoint) +
-        (angularColumn & context.pointVelocity);
+    linearDot = linearDotAtRoot + (angularDot & context.rootToPoint) +
+                (angularColumn & context.pointVelocity);
 }
 
-void ComputePointJacobianTermsImpl(const dtDynModel &model,
-                                   const dtDynData &data,
+void ComputePointJacobianTermsImpl(const dtDynModel &model, const dtDynData &data,
                                    const dtDynIndex bodyId,
                                    const dt::Math::Vector3<dtDynReal> &point,
-                                   dtDynDenseMatrix *jacp,
-                                   dtDynDenseMatrix *jacr,
-                                   dtDynDenseMatrix *jacpDot,
-                                   dtDynDenseMatrix *jacrDot,
+                                   dtDynDenseMatrix *jacp, dtDynDenseMatrix *jacr,
+                                   dtDynDenseMatrix *jacpDot, dtDynDenseMatrix *jacrDot,
                                    dt::Math::Vector3<dtDynReal> *linearJdotQvel,
                                    dt::Math::Vector3<dtDynReal> *angularJdotQvel,
                                    const bool resetMatrixOutputs)
@@ -251,9 +241,8 @@ void ComputePointJacobianTermsImpl(const dtDynModel &model,
     }
 
     const bool needJacobian = jacp != nullptr || jacr != nullptr;
-    const bool needDerivative =
-        jacpDot != nullptr || jacrDot != nullptr ||
-        linearJdotQvel != nullptr || angularJdotQvel != nullptr;
+    const bool needDerivative = jacpDot != nullptr || jacrDot != nullptr ||
+                                linearJdotQvel != nullptr || angularJdotQvel != nullptr;
 
     PointJacobianDotContext dotContext;
     if (needDerivative)
@@ -314,176 +303,123 @@ void ComputePointJacobianTermsImpl(const dtDynModel &model,
 
 } // namespace
 
-void ComputeBodyJacobian(const dtDynModel &model,
-                         const dtDynData &data,
-                         const dtDynIndex bodyId,
-                         dtDynDenseMatrix &jacp,
-                         dtDynDenseMatrix &jacr)
+void ComputeBodyJacobian(const dtDynModel &model, const dtDynData &data, const dtDynIndex bodyId,
+                         dtDynDenseMatrix &jacp, dtDynDenseMatrix &jacr)
 {
-    ComputePointJacobian(model, data, bodyId, data.xpos[static_cast<std::size_t>(bodyId)], jacp, jacr);
+    ComputePointJacobian(model, data, bodyId, data.xpos[static_cast<std::size_t>(bodyId)], jacp,
+                         jacr);
 }
 
-void ComputeSiteJacobian(const dtDynModel &model,
-                         const dtDynData &data,
-                         const dtDynIndex siteId,
-                         dtDynDenseMatrix &jacp,
-                         dtDynDenseMatrix &jacr)
+void ComputeSiteJacobian(const dtDynModel &model, const dtDynData &data, const dtDynIndex siteId,
+                         dtDynDenseMatrix &jacp, dtDynDenseMatrix &jacr)
 {
     const dtDynIndex bodyId = model.site_bodyid[static_cast<std::size_t>(siteId)];
-    ComputePointJacobian(model, data, bodyId, data.site_xpos[static_cast<std::size_t>(siteId)], jacp, jacr);
+    ComputePointJacobian(model, data, bodyId, data.site_xpos[static_cast<std::size_t>(siteId)],
+                         jacp, jacr);
 }
 
-void ComputePointJacobian(const dtDynModel &model,
-                          const dtDynData &data,
-                          const dtDynIndex bodyId,
-                          const dt::Math::Vector3<dtDynReal> &point,
-                          dtDynDenseMatrix &jacp,
+void ComputePointJacobian(const dtDynModel &model, const dtDynData &data, const dtDynIndex bodyId,
+                          const dt::Math::Vector3<dtDynReal> &point, dtDynDenseMatrix &jacp,
                           dtDynDenseMatrix &jacr)
 {
-    ComputePointJacobianTermsImpl(model, data, bodyId, point,
-                                  &jacp, &jacr, nullptr, nullptr, nullptr, nullptr, true);
+    ComputePointJacobianTermsImpl(model, data, bodyId, point, &jacp, &jacr, nullptr, nullptr,
+                                  nullptr, nullptr, true);
 }
 
-void ComputePointJacobianDot(const dtDynModel &model,
-                             const dtDynData &data,
-                             const dtDynIndex bodyId,
-                             const dt::Math::Vector3<dtDynReal> &point,
-                             dtDynDenseMatrix &jacpDot,
-                             dtDynDenseMatrix &jacrDot)
+void ComputePointJacobianDot(const dtDynModel &model, const dtDynData &data,
+                             const dtDynIndex bodyId, const dt::Math::Vector3<dtDynReal> &point,
+                             dtDynDenseMatrix &jacpDot, dtDynDenseMatrix &jacrDot)
 {
-    ComputePointJacobianTermsImpl(model, data, bodyId, point,
-                                  nullptr, nullptr, &jacpDot, &jacrDot, nullptr, nullptr, true);
+    ComputePointJacobianTermsImpl(model, data, bodyId, point, nullptr, nullptr, &jacpDot, &jacrDot,
+                                  nullptr, nullptr, true);
 }
 
-void ComputeBodyJacobianDot(const dtDynModel &model,
-                            const dtDynData &data,
-                            const dtDynIndex bodyId,
-                            dtDynDenseMatrix &jacpDot,
-                            dtDynDenseMatrix &jacrDot)
+void ComputeBodyJacobianDot(const dtDynModel &model, const dtDynData &data, const dtDynIndex bodyId,
+                            dtDynDenseMatrix &jacpDot, dtDynDenseMatrix &jacrDot)
 {
-    ComputePointJacobianDot(model, data, bodyId,
-                            data.xpos[static_cast<std::size_t>(bodyId)],
+    ComputePointJacobianDot(model, data, bodyId, data.xpos[static_cast<std::size_t>(bodyId)],
                             jacpDot, jacrDot);
 }
 
-void ComputeSiteJacobianDot(const dtDynModel &model,
-                            const dtDynData &data,
-                            const dtDynIndex siteId,
-                            dtDynDenseMatrix &jacpDot,
-                            dtDynDenseMatrix &jacrDot)
+void ComputeSiteJacobianDot(const dtDynModel &model, const dtDynData &data, const dtDynIndex siteId,
+                            dtDynDenseMatrix &jacpDot, dtDynDenseMatrix &jacrDot)
 {
     const dtDynIndex bodyId = model.site_bodyid[static_cast<std::size_t>(siteId)];
-    ComputePointJacobianDot(model, data, bodyId,
-                            data.site_xpos[static_cast<std::size_t>(siteId)],
+    ComputePointJacobianDot(model, data, bodyId, data.site_xpos[static_cast<std::size_t>(siteId)],
                             jacpDot, jacrDot);
 }
 
-void ComputePointJacobianDotTimesVelocity(const dtDynModel &model,
-                                          const dtDynData &data,
+void ComputePointJacobianDotTimesVelocity(const dtDynModel &model, const dtDynData &data,
                                           const dtDynIndex bodyId,
                                           const dt::Math::Vector3<dtDynReal> &point,
                                           dt::Math::Vector3<dtDynReal> &linear,
                                           dt::Math::Vector3<dtDynReal> &angular)
 {
-    ComputePointJacobianTermsImpl(model, data, bodyId, point,
-                                  nullptr, nullptr, nullptr, nullptr, &linear, &angular, true);
+    ComputePointJacobianTermsImpl(model, data, bodyId, point, nullptr, nullptr, nullptr, nullptr,
+                                  &linear, &angular, true);
 }
 
-void ComputePointJacobianTerms(const dtDynModel &model,
-                               const dtDynData &data,
-                               const dtDynIndex bodyId,
-                               const dt::Math::Vector3<dtDynReal> &point,
-                               dtDynDenseMatrix *jacp,
-                               dtDynDenseMatrix *jacr,
-                               dtDynDenseMatrix *jacpDot,
-                               dtDynDenseMatrix *jacrDot,
+void ComputePointJacobianTerms(const dtDynModel &model, const dtDynData &data,
+                               const dtDynIndex bodyId, const dt::Math::Vector3<dtDynReal> &point,
+                               dtDynDenseMatrix *jacp, dtDynDenseMatrix *jacr,
+                               dtDynDenseMatrix *jacpDot, dtDynDenseMatrix *jacrDot,
                                dt::Math::Vector3<dtDynReal> *linearJdotQvel,
                                dt::Math::Vector3<dtDynReal> *angularJdotQvel)
 {
-    ComputePointJacobianTermsImpl(model, data, bodyId, point,
-                                  jacp, jacr, jacpDot, jacrDot,
+    ComputePointJacobianTermsImpl(model, data, bodyId, point, jacp, jacr, jacpDot, jacrDot,
                                   linearJdotQvel, angularJdotQvel, true);
 }
 
-void ComputeBodyJacobianTerms(const dtDynModel &model,
-                              const dtDynData &data,
-                              const dtDynIndex bodyId,
-                              dtDynDenseMatrix *jacp,
-                              dtDynDenseMatrix *jacr,
-                              dtDynDenseMatrix *jacpDot,
+void ComputeBodyJacobianTerms(const dtDynModel &model, const dtDynData &data,
+                              const dtDynIndex bodyId, dtDynDenseMatrix *jacp,
+                              dtDynDenseMatrix *jacr, dtDynDenseMatrix *jacpDot,
                               dtDynDenseMatrix *jacrDot,
                               dt::Math::Vector3<dtDynReal> *linearJdotQvel,
                               dt::Math::Vector3<dtDynReal> *angularJdotQvel)
 {
-    ComputePointJacobianTerms(model,
-                              data,
-                              bodyId,
-                              data.xpos[static_cast<std::size_t>(bodyId)],
-                              jacp,
-                              jacr,
-                              jacpDot,
-                              jacrDot,
-                              linearJdotQvel,
-                              angularJdotQvel);
+    ComputePointJacobianTerms(model, data, bodyId, data.xpos[static_cast<std::size_t>(bodyId)],
+                              jacp, jacr, jacpDot, jacrDot, linearJdotQvel, angularJdotQvel);
 }
 
-void ComputeSiteJacobianTerms(const dtDynModel &model,
-                              const dtDynData &data,
-                              const dtDynIndex siteId,
-                              dtDynDenseMatrix *jacp,
-                              dtDynDenseMatrix *jacr,
-                              dtDynDenseMatrix *jacpDot,
+void ComputeSiteJacobianTerms(const dtDynModel &model, const dtDynData &data,
+                              const dtDynIndex siteId, dtDynDenseMatrix *jacp,
+                              dtDynDenseMatrix *jacr, dtDynDenseMatrix *jacpDot,
                               dtDynDenseMatrix *jacrDot,
                               dt::Math::Vector3<dtDynReal> *linearJdotQvel,
                               dt::Math::Vector3<dtDynReal> *angularJdotQvel)
 {
     const dtDynIndex bodyId = model.site_bodyid[static_cast<std::size_t>(siteId)];
-    ComputePointJacobianTerms(model,
-                              data,
-                              bodyId,
-                              data.site_xpos[static_cast<std::size_t>(siteId)],
-                              jacp,
-                              jacr,
-                              jacpDot,
-                              jacrDot,
-                              linearJdotQvel,
-                              angularJdotQvel);
+    ComputePointJacobianTerms(model, data, bodyId, data.site_xpos[static_cast<std::size_t>(siteId)],
+                              jacp, jacr, jacpDot, jacrDot, linearJdotQvel, angularJdotQvel);
 }
 
-void ComputeBodyJacobianDotTimesVelocity(const dtDynModel &model,
-                                         const dtDynData &data,
+void ComputeBodyJacobianDotTimesVelocity(const dtDynModel &model, const dtDynData &data,
                                          const dtDynIndex bodyId,
                                          dt::Math::Vector3<dtDynReal> &linear,
                                          dt::Math::Vector3<dtDynReal> &angular)
 {
-    ComputePointJacobianDotTimesVelocity(model, data, bodyId,
-                                         data.xpos[static_cast<std::size_t>(bodyId)],
-                                         linear, angular);
+    ComputePointJacobianDotTimesVelocity(
+        model, data, bodyId, data.xpos[static_cast<std::size_t>(bodyId)], linear, angular);
 }
 
-void ComputeSiteJacobianDotTimesVelocity(const dtDynModel &model,
-                                         const dtDynData &data,
+void ComputeSiteJacobianDotTimesVelocity(const dtDynModel &model, const dtDynData &data,
                                          const dtDynIndex siteId,
                                          dt::Math::Vector3<dtDynReal> &linear,
                                          dt::Math::Vector3<dtDynReal> &angular)
 {
     const dtDynIndex bodyId = model.site_bodyid[static_cast<std::size_t>(siteId)];
-    ComputePointJacobianDotTimesVelocity(model, data, bodyId,
-                                         data.site_xpos[static_cast<std::size_t>(siteId)],
-                                         linear, angular);
+    ComputePointJacobianDotTimesVelocity(
+        model, data, bodyId, data.site_xpos[static_cast<std::size_t>(siteId)], linear, angular);
 }
 
 namespace
 {
 
-void ComputePointJacobiansIntoData(const dtDynModel &model,
-                                   const dtDynData &data,
+void ComputePointJacobiansIntoData(const dtDynModel &model, const dtDynData &data,
                                    const dtDynIndex bodyId,
                                    const dt::Math::Vector3<dtDynReal> &point,
-                                   dtDynDenseMatrix &jacp,
-                                   dtDynDenseMatrix &jacr,
-                                   dtDynDenseMatrix &jacpDot,
-                                   dtDynDenseMatrix &jacrDot)
+                                   dtDynDenseMatrix &jacp, dtDynDenseMatrix &jacr,
+                                   dtDynDenseMatrix &jacpDot, dtDynDenseMatrix &jacrDot)
 {
     // Data-backed Jacobian writer used by all-body/all-site and indexed paths.
     // It reuses the same point equations as the public one-off APIs.
@@ -543,28 +479,19 @@ void ComputePointJacobiansIntoData(const dtDynModel &model,
     }
 }
 
-void ComputeBodyJacobiansIntoData(const dtDynModel &model,
-                                  dtDynData &data,
-                                  const dtDynIndex bodyId)
+void ComputeBodyJacobiansIntoData(const dtDynModel &model, dtDynData &data, const dtDynIndex bodyId)
 {
-    ComputePointJacobiansIntoData(model,
-                                  data,
-                                  bodyId,
-                                  data.xpos[static_cast<std::size_t>(bodyId)],
+    ComputePointJacobiansIntoData(model, data, bodyId, data.xpos[static_cast<std::size_t>(bodyId)],
                                   data.body_jacp[static_cast<std::size_t>(bodyId)],
                                   data.body_jacr[static_cast<std::size_t>(bodyId)],
                                   data.body_jacp_dot[static_cast<std::size_t>(bodyId)],
                                   data.body_jacr_dot[static_cast<std::size_t>(bodyId)]);
 }
 
-void ComputeSiteJacobiansIntoData(const dtDynModel &model,
-                                  dtDynData &data,
-                                  const dtDynIndex siteId)
+void ComputeSiteJacobiansIntoData(const dtDynModel &model, dtDynData &data, const dtDynIndex siteId)
 {
     const dtDynIndex bodyId = model.site_bodyid[static_cast<std::size_t>(siteId)];
-    ComputePointJacobiansIntoData(model,
-                                  data,
-                                  bodyId,
+    ComputePointJacobiansIntoData(model, data, bodyId,
                                   data.site_xpos[static_cast<std::size_t>(siteId)],
                                   data.site_jacp[static_cast<std::size_t>(siteId)],
                                   data.site_jacr[static_cast<std::size_t>(siteId)],
@@ -590,8 +517,7 @@ void ComputeAllSiteJacobians(const dtDynModel &model, dtDynData &data)
     }
 }
 
-void ComputeIndexedBodyJacobians(const dtDynModel &model,
-                                 dtDynData &data,
+void ComputeIndexedBodyJacobians(const dtDynModel &model, dtDynData &data,
                                  const dtDynArray<dtDynIndex> &bodyIds)
 {
     // Controller path: compute only named task bodies cached by the caller.
@@ -603,8 +529,7 @@ void ComputeIndexedBodyJacobians(const dtDynModel &model,
     }
 }
 
-void ComputeIndexedSiteJacobians(const dtDynModel &model,
-                                 dtDynData &data,
+void ComputeIndexedSiteJacobians(const dtDynModel &model, dtDynData &data,
                                  const dtDynArray<dtDynIndex> &siteIds)
 {
     // Controller path: compute only named task sites cached by the caller.
@@ -637,26 +562,22 @@ void ComputeJacobians(const dtDynModel &model, dtDynData &data)
     ComputeAllSiteJacobians(model, data);
 }
 
-void ComputeBodyJacobians(const dtDynModel &model,
-                          dtDynData &data,
+void ComputeBodyJacobians(const dtDynModel &model, dtDynData &data,
                           const dtDynArray<dtDynIndex> &bodyIds)
 {
     assert(data.IsCompatible(model));
     ComputeIndexedBodyJacobians(model, data, bodyIds);
 }
 
-void ComputeSiteJacobians(const dtDynModel &model,
-                          dtDynData &data,
+void ComputeSiteJacobians(const dtDynModel &model, dtDynData &data,
                           const dtDynArray<dtDynIndex> &siteIds)
 {
     assert(data.IsCompatible(model));
     ComputeIndexedSiteJacobians(model, data, siteIds);
 }
 
-void ComputeJacobians(const dtDynModel &model,
-                      dtDynData &data,
-                      const dtDynArray<dtDynIndex> &bodyIds,
-                      const dtDynArray<dtDynIndex> &siteIds)
+void ComputeJacobians(const dtDynModel &model, dtDynData &data,
+                      const dtDynArray<dtDynIndex> &bodyIds, const dtDynArray<dtDynIndex> &siteIds)
 {
     assert(data.IsCompatible(model));
     ComputeIndexedBodyJacobians(model, data, bodyIds);

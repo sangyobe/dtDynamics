@@ -135,7 +135,8 @@ dt::Math::Vector3<dtDynReal> UnitAxis(const dtDynIndex axis)
     return out;
 }
 
-dt::Math::Vector3<dtDynReal> MatrixColumn(const dt::Math::Matrix3<dtDynReal> &m, const dtDynIndex col)
+dt::Math::Vector3<dtDynReal> MatrixColumn(const dt::Math::Matrix3<dtDynReal> &m,
+                                          const dtDynIndex col)
 {
     dt::Math::Vector3<dtDynReal> out;
     out(0) = m(0, col);
@@ -144,7 +145,8 @@ dt::Math::Vector3<dtDynReal> MatrixColumn(const dt::Math::Matrix3<dtDynReal> &m,
     return out;
 }
 
-dt::Math::Vector3<dtDynReal> DenseMatrixColumn3(const dtDynDenseMatrix &matrix, const dtDynIndex col)
+dt::Math::Vector3<dtDynReal> DenseMatrixColumn3(const dtDynDenseMatrix &matrix,
+                                                const dtDynIndex col)
 {
     dt::Math::Vector3<dtDynReal> out;
     out(0) = matrix(0, col);
@@ -193,8 +195,7 @@ dtDynReal SpatialDot(const dt::Math::Vector6<dtDynReal> &a, const dt::Math::Vect
 }
 
 dtDynReal SpatialDot3(const dt::Math::Vector6<dtDynReal> &left,
-                      const dt::Math::Vector6<dtDynReal> &a,
-                      const dt::Math::Vector6<dtDynReal> &b)
+                      const dt::Math::Vector6<dtDynReal> &a, const dt::Math::Vector6<dtDynReal> &b)
 {
     dtDynReal value = 0.0;
     for (dtDynIndex row = 0; row < 6; ++row)
@@ -245,8 +246,7 @@ dt::Math::Vector6<dtDynReal> ScaleSpatial(const dt::Math::Vector6<dtDynReal> &sr
     return out;
 }
 
-void AddSpatialInPlace(dt::Math::Vector6<dtDynReal> &dst,
-                       const dt::Math::Vector6<dtDynReal> &src)
+void AddSpatialInPlace(dt::Math::Vector6<dtDynReal> &dst, const dt::Math::Vector6<dtDynReal> &src)
 {
     for (dtDynIndex row = 0; row < 6; ++row)
     {
@@ -271,12 +271,12 @@ dt::Math::Vector6<dtDynReal> CrossSpatialMotion(const dt::Math::Vector6<dtDynRea
     }
 
     const dt::Math::Vector3<dtDynReal> angularPart = omega & motionOmega;
-    const dt::Math::Vector3<dtDynReal> linearPart =
-        (omega & motionLinear) + (linear & motionOmega);
+    const dt::Math::Vector3<dtDynReal> linearPart = (omega & motionLinear) + (linear & motionOmega);
     return SpatialMotionVector(angularPart, linearPart);
 }
 
-dt::Math::Matrix<6, 6, dtDynReal> CrossSpatialMotionMatrix(const dt::Math::Vector6<dtDynReal> &velocity)
+dt::Math::Matrix<6, 6, dtDynReal>
+CrossSpatialMotionMatrix(const dt::Math::Vector6<dtDynReal> &velocity)
 {
     dt::Math::Matrix<6, 6, dtDynReal> out;
     out.SetZero();
@@ -311,12 +311,14 @@ dt::Math::Matrix<6, 6, dtDynReal> CrossSpatialMotionMatrix(const dt::Math::Vecto
     return out;
 }
 
-dt::Math::Matrix<6, 6, dtDynReal> CrossSpatialMotionMatrixStar(const dt::Math::Vector6<dtDynReal> &velocity)
+dt::Math::Matrix<6, 6, dtDynReal>
+CrossSpatialMotionMatrixStar(const dt::Math::Vector6<dtDynReal> &velocity)
 {
     return CrossSpatialMotionMatrix(velocity).Transpose() * -1.0;
 }
 
-dt::Math::Matrix<6, 6, dtDynReal> CrossSpatialMomentumMatrix(const dt::Math::Vector6<dtDynReal> &momentum)
+dt::Math::Matrix<6, 6, dtDynReal>
+CrossSpatialMomentumMatrix(const dt::Math::Vector6<dtDynReal> &momentum)
 {
     dt::Math::Matrix<6, 6, dtDynReal> out;
     out.SetZero();
@@ -366,8 +368,7 @@ dtDynIndex FindBodyLastDof(const dtDynModel &model, dtDynIndex body)
     return DTDYN_INVALID_INDEX;
 }
 
-dt::Math::Matrix3<dtDynReal> BodyInertiaInWorld(const dtDynModel &model,
-                                                const dtDynData &data,
+dt::Math::Matrix3<dtDynReal> BodyInertiaInWorld(const dtDynModel &model, const dtDynData &data,
                                                 const dtDynIndex bodyId)
 {
     const dt::Math::Matrix3<dtDynReal> &rot = data.ximat[static_cast<std::size_t>(bodyId)];
@@ -387,9 +388,9 @@ dt::Math::Matrix3<dtDynReal> BodyInertiaInWorld(const dtDynModel &model,
     return out;
 }
 
-dt::Math::Matrix<6, 6, dtDynReal> SpatialInertiaAtWorldOrigin(const dtDynReal mass,
-                                                              const dt::Math::Vector3<dtDynReal> &com,
-                                                              const dt::Math::Matrix3<dtDynReal> &rotInertia)
+dt::Math::Matrix<6, 6, dtDynReal>
+SpatialInertiaAtWorldOrigin(const dtDynReal mass, const dt::Math::Vector3<dtDynReal> &com,
+                            const dt::Math::Matrix3<dtDynReal> &rotInertia)
 {
     dt::Math::Matrix<6, 6, dtDynReal> out;
     out.SetZero();
@@ -430,10 +431,10 @@ dt::Math::Matrix<6, 6, dtDynReal> SpatialInertiaAtWorldOrigin(const dtDynReal ma
     return out;
 }
 
-dt::Math::Matrix<6, 6, dtDynReal> SpatialInertiaAtReference(const dtDynReal mass,
-                                                            const dt::Math::Vector3<dtDynReal> &bodyCom,
-                                                            const dt::Math::Vector3<dtDynReal> &reference,
-                                                            const dt::Math::Matrix3<dtDynReal> &rotInertia)
+dt::Math::Matrix<6, 6, dtDynReal>
+SpatialInertiaAtReference(const dtDynReal mass, const dt::Math::Vector3<dtDynReal> &bodyCom,
+                          const dt::Math::Vector3<dtDynReal> &reference,
+                          const dt::Math::Matrix3<dtDynReal> &rotInertia)
 {
     return SpatialInertiaAtWorldOrigin(mass, bodyCom - reference, rotInertia);
 }

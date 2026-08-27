@@ -21,9 +21,9 @@ namespace dt::Dynamics
 namespace detail
 {
 
-/*! \brief Convert an integral array size to std::size_t, clamping signed non-positive values to zero. */
-template <typename Size>
-std::size_t ToArraySize(const Size value)
+/*! \brief Convert an integral array size to std::size_t, clamping signed non-positive values to
+ * zero. */
+template <typename Size> std::size_t ToArraySize(const Size value)
 {
     if constexpr (std::is_signed<Size>::value)
     {
@@ -50,8 +50,7 @@ std::size_t ToArraySize(const Size value)
           allocate and move/copy elements. Element access is unchecked; callers must pass
           indices in the half-open range [0, size()).
 */
-template <typename T>
-class dtArray
+template <typename T> class dtArray
 {
 public:
     /*! \brief Construct an empty array with no allocation. */
@@ -87,10 +86,7 @@ public:
     }
 
     /*! \brief Destroy owned storage. */
-    ~dtArray()
-    {
-        delete[] m_data;
-    }
+    ~dtArray() { delete[] m_data; }
 
     /*! \brief Copy-assign using copy-and-swap semantics. */
     dtArray &operator=(const dtArray &other)
@@ -159,9 +155,8 @@ public:
     }
 
     /*! \brief Integral-size overload for resize; signed non-positive sizes become zero. */
-    template <typename Size,
-              typename = std::enable_if_t<std::is_integral<Size>::value &&
-                                          !std::is_same<Size, bool>::value>>
+    template <typename Size, typename = std::enable_if_t<std::is_integral<Size>::value &&
+                                                         !std::is_same<Size, bool>::value>>
     void resize(const Size size)
     {
         resize(detail::ToArraySize(size));
@@ -178,9 +173,8 @@ public:
     }
 
     /*! \brief Integral-size overload for assign; signed non-positive sizes become zero. */
-    template <typename Size,
-              typename = std::enable_if_t<std::is_integral<Size>::value &&
-                                          !std::is_same<Size, bool>::value>>
+    template <typename Size, typename = std::enable_if_t<std::is_integral<Size>::value &&
+                                                         !std::is_same<Size, bool>::value>>
     void assign(const Size size, const T &value)
     {
         assign(detail::ToArraySize(size), value);
@@ -201,9 +195,11 @@ public:
     /*! \brief Return the number of logical elements. */
     std::size_t size() const { return m_size; }
 
-    /*! \brief Return a mutable pointer to contiguous storage, or nullptr for an empty unallocated array. */
+    /*! \brief Return a mutable pointer to contiguous storage, or nullptr for an empty unallocated
+     * array. */
     T *data() { return m_data; }
-    /*! \brief Return an immutable pointer to contiguous storage, or nullptr for an empty unallocated array. */
+    /*! \brief Return an immutable pointer to contiguous storage, or nullptr for an empty
+     * unallocated array. */
     const T *data() const { return m_data; }
 
     /*! \brief Return element index without bounds checking.
@@ -261,8 +257,7 @@ private:
 };
 
 /*! \brief Backward-compatible alias for package dynamic arrays. */
-template <typename T>
-using dtDynArray = dtArray<T>;
+template <typename T> using dtDynArray = dtArray<T>;
 
 } // namespace dt::Dynamics
 
