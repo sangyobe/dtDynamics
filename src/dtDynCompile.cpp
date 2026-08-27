@@ -18,6 +18,7 @@ namespace
 
 void ResizeModelArrays(dtDynModel &model)
 {
+
     model.body_names.resize(model.nbody);
     model.joint_names.resize(model.njnt);
     model.site_names.resize(model.nsite);
