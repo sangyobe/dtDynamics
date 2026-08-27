@@ -2,6 +2,8 @@ workflow:
   rules:
     # GitLab 웹 UI(Build > Pipelines > New pipeline)에서 직접 실행한 경우만 Pipeline 생성
     - if: '$CI_PIPELINE_SOURCE == "web"'
+    # lint-job이 자동 수정 커밋 push 후 API로 트리거한 파이프라인 허용
+    - if: '$CI_PIPELINE_SOURCE == "api"'
     - when: never
 
 stages:
@@ -11,7 +13,7 @@ stages:
 
 default:
   interruptible: true
-  image: registry.hmc.co.kr/rlab/ardg/arct/project/arch/06-cicd/art-cicd/artf-build:v1.3
+  image: registry.hmc.co.kr/rlab/ardg/arct/project/arch/06-cicd/art-cicd/artf-build:v1.5
   tags:
     - art-server
 
@@ -26,14 +28,17 @@ variables:
 
 lint-job:
   stage: lint
-  # TODO: 전체 코드베이스 clang-format 적용 완료 후 allow_failure: false 로 변경
+  # ci/lint.sh가 clang-format -i로 직접 수정하므로 포맷 문제로는 Job이 실패하지 않는다.
+  # GIT_PUSH_TOKEN(write_repository+api 권한, CI/CD Variables에 Masked로 등록)이
+  # 있으면 수정 결과를 실행 브랜치에 바로 push하고 새 파이프라인을 트리거한다.
   allow_failure: true
   script:
     - bash ci/lint.sh
   artifacts:
     when: always
     paths:
-      - reports/clang-format.txt
+      - reports/clang-format.patch
+      - reports/clang-format-changed-files.txt
     expire_in: 1 week
 
 build-job:
