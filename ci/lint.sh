@@ -70,7 +70,10 @@ if [[ -n "${GIT_PUSH_TOKEN:-}" && -n "${CI_SERVER_HOST:-}" && -n "${CI_PROJECT_P
         echo "clang-format 검사 완료: 수정할 내용 없음"
     fi
 else
-    echo "GIT_PUSH_TOKEN 또는 GitLab CI 환경변수가 없습니다 — reports/clang-format.patch 를 artifacts에서 내려받아 'git apply reports/clang-format.patch'로 반영하세요."
+    echo "ERROR: GIT_PUSH_TOKEN 또는 GitLab CI 환경변수(CI_SERVER_HOST/CI_PROJECT_PATH/CI_COMMIT_REF_NAME)가 등록되어 있지 않습니다."
+    echo "Settings > CI/CD > Variables에 GIT_PUSH_TOKEN(write_repository + api scope)을 등록한 뒤 다시 실행하세요."
+    echo "토큰 미등록 상태에서는 clang-format 위반 여부를 확정할 수 없어 lint-job을 실패 처리하고 이후 단계를 진행하지 않습니다."
+    exit 1
 fi
 
 exit 0
