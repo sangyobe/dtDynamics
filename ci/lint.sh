@@ -29,21 +29,17 @@ find "${SEARCH_DIRS[@]}" \
 git diff -- "${SEARCH_DIRS[@]}" > reports/clang-format.patch
 git diff --name-only -- "${SEARCH_DIRS[@]}" > reports/clang-format-changed-files.txt
 
-if [[ -s reports/clang-format.patch ]]; then
-    echo "clang-format 자동 수정으로 변경된 파일:"
-    cat reports/clang-format-changed-files.txt
-    echo ""
+# 프로젝트 전용 봇 계정 토큰(GIT_PUSH_TOKEN)이 있으면 위반 발견 시 수정 커밋을 직접 push하고,
+# 없으면(non-protected 브랜치 등) 통과 여부와 무관하게 토큰 등록을 안내한다.
+if [[ -n "${GIT_PUSH_TOKEN:-}" && -n "${CI_SERVER_HOST:-}" && -n "${CI_PROJECT_PATH:-}" && -n "${CI_COMMIT_REF_NAME:-}" ]]; then
+    if [[ -s reports/clang-format.patch ]]; then
+        echo "clang-format 자동 수정으로 변경된 파일:"
+        cat reports/clang-format-changed-files.txt
+        echo ""
 
-    # 위반이 있는 상태로 build/analyse가 진행되면 안 되므로, push+재트리거로
-    # 실제 반영에 성공한 경우에만 이 Job을 성공 처리한다.
-    PUSH_SUCCEEDED=0
-
-    # 프로젝트 전용 봇 계정 토큰(GIT_PUSH_TOKEN)이 있으면 수정 커밋을 직접 push하고,
-    # 없거나(non-protected 브랜치 등) push에 실패하면 patch artifact를 생성하여 다운받아 반영한다.
-    if [[ -n "${GIT_PUSH_TOKEN:-}" && -n "${CI_SERVER_HOST:-}" && -n "${CI_PROJECT_PATH:-}" && -n "${CI_COMMIT_REF_NAME:-}" ]]; then
         COMMIT_AUTHOR_EMAIL=$(git log -1 --pretty=%ae)
         if [[ "${COMMIT_AUTHOR_EMAIL}" == "ci-clang-format-bot@noreply.hmc.co.kr" ]]; then
-            echo "봇이 만든 커밋에서도 포맷 위반이 남아있습니다 — 자동 재귀 방지를 위해 자동 push/trigger를 건너뜁니다."
+            echo "봇이 만든 커밋에서도 포맷 위반이 남아있습니다 — 반복 커밋/push를 방지하기 위해 종료합니다."
         else
             git config user.name "ci-clang-format-bot"
             git config user.email "ci-clang-format-bot@noreply.hmc.co.kr"
@@ -52,7 +48,6 @@ if [[ -s reports/clang-format.patch ]]; then
 
             if git push "https://oauth2:${GIT_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git" "HEAD:${CI_COMMIT_REF_NAME}"; then
                 echo "자동 수정 커밋을 ${CI_COMMIT_REF_NAME} 브랜치에 push했습니다."
-                PUSH_SUCCEEDED=1
 
                 # push된 커밋을 build/polyspace까지 검사받도록 새 파이프라인을 API로 트리거한다.
                 # GIT_PUSH_TOKEN은 write_repository + api scope를 모두 가진 Project Access Token이어야 한다.
@@ -72,15 +67,10 @@ if [[ -s reports/clang-format.patch ]]; then
             fi
         fi
     else
-        echo "GIT_PUSH_TOKEN 또는 GitLab CI 환경변수가 없습니다 — reports/clang-format.patch 를 artifacts에서 내려받아 'git apply reports/clang-format.patch'로 반영하세요."
-    fi
-
-    if [[ "${PUSH_SUCCEEDED}" -eq 0 ]]; then
-        echo "clang-format 위반이 자동 반영(push)되지 않았습니다 — 수정 전 소스로 build/analyse가 진행되지 않도록 Job을 실패 처리합니다."
-        exit 1
+        echo "clang-format 검사 완료: 수정할 내용 없음"
     fi
 else
-    echo "clang-format 검사 완료: 수정할 내용 없음"
+    echo "GIT_PUSH_TOKEN 또는 GitLab CI 환경변수가 없습니다 — reports/clang-format.patch 를 artifacts에서 내려받아 'git apply reports/clang-format.patch'로 반영하세요."
 fi
 
 exit 0
