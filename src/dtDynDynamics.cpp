@@ -316,9 +316,9 @@ void ComputeDiffMotion(const dtDynModel &model, dtDynData &data)
 }
 
 void FillBodySpatialInertiaAtRootCom(const dtDynModel &model,
-                                      const dtDynData &data,
-                                      const dtDynIndex bodyId,
-                                      dt::Math::Matrix<6, 6, dtDynReal> &out)
+                                     const dtDynData &data,
+                                     const dtDynIndex bodyId,
+                                     dt::Math::Matrix<6, 6, dtDynReal> &out)
 {
     // Spatial inertia about the root CoM reference:
     //   I = [ R Ic R^T + m(||c||^2 E - c c^T),  m cx

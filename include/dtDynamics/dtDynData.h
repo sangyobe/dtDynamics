@@ -43,16 +43,16 @@ public:
     dtDynDenseVector qvel; //!< Caller-written tangent velocity; free=[v_W(3), omega_B(3)] (nv).
 
     /* Forward-kinematics outputs */
-    dtArray<dt::Math::Vector3<dtDynReal>> xpos;       //!< Body-origin positions in world frame (nbody x 3).
-    dtArray<dt::Math::Vector4<dtDynReal>> xquat;      //!< Body-to-world unit quaternions in wxyz order (nbody x 4).
-    dtArray<dt::Math::Matrix3<dtDynReal>> xmat;       //!< Body-to-world rotation matrices (nbody x 3 x 3).
-    dtArray<dt::Math::Vector3<dtDynReal>> xipos;      //!< Body inertial-origin positions in world frame (nbody x 3).
-    dtArray<dt::Math::Matrix3<dtDynReal>> ximat;      //!< Inertial-to-world rotation matrices (nbody x 3 x 3).
+    dtArray<dt::Math::Vector3<dtDynReal>> xpos;        //!< Body-origin positions in world frame (nbody x 3).
+    dtArray<dt::Math::Vector4<dtDynReal>> xquat;       //!< Body-to-world unit quaternions in wxyz order (nbody x 4).
+    dtArray<dt::Math::Matrix3<dtDynReal>> xmat;        //!< Body-to-world rotation matrices (nbody x 3 x 3).
+    dtArray<dt::Math::Vector3<dtDynReal>> xipos;       //!< Body inertial-origin positions in world frame (nbody x 3).
+    dtArray<dt::Math::Matrix3<dtDynReal>> ximat;       //!< Inertial-to-world rotation matrices (nbody x 3 x 3).
     dtArray<dt::Math::Vector3<dtDynReal>> subtree_com; //!< Subtree centers of mass in world frame (nbody x 3).
-    dtArray<dt::Math::Vector3<dtDynReal>> xanchor;    //!< Joint anchor positions in world frame (njnt x 3).
-    dtArray<dt::Math::Vector3<dtDynReal>> xaxis;      //!< World hinge/slide axes; free-joint entries are local placeholders (njnt x 3).
-    dtArray<dt::Math::Vector3<dtDynReal>> site_xpos;  //!< Site-origin positions in world frame (nsite x 3).
-    dtArray<dt::Math::Matrix3<dtDynReal>> site_xmat;  //!< Site-to-world rotation matrices (nsite x 3 x 3).
+    dtArray<dt::Math::Vector3<dtDynReal>> xanchor;     //!< Joint anchor positions in world frame (njnt x 3).
+    dtArray<dt::Math::Vector3<dtDynReal>> xaxis;       //!< World hinge/slide axes; free-joint entries are local placeholders (njnt x 3).
+    dtArray<dt::Math::Vector3<dtDynReal>> site_xpos;   //!< Site-origin positions in world frame (nsite x 3).
+    dtArray<dt::Math::Matrix3<dtDynReal>> site_xmat;   //!< Site-to-world rotation matrices (nsite x 3 x 3).
 
     /* Body/site task Jacobian outputs */
     dtArray<dtDynDenseMatrix> body_jacp;     //!< World linear Jacobians at body origins (nbody x 3 x nv).
@@ -66,24 +66,24 @@ public:
 
     /* Spatial work arrays use world components, root-subtree CoM references,
        and [angular; linear] order unless stated otherwise. */
-    dtArray<dt::Math::Vector6<dtDynReal>> cdof;     //!< World-frame motion-subspace columns at root CoM references (nv x 6).
-    dtArray<dt::Math::Vector6<dtDynReal>> cdof_dot; //!< Time derivatives of cdof columns (nv x 6).
-    dtArray<dt::Math::Vector6<dtDynReal>> cvel;     //!< Body spatial velocities [omega_W; v_W] at root CoM references (nbody x 6).
-    dtArray<dt::Math::Matrix<6, 6, dtDynReal>> cinert; //!< World-frame body spatial inertias about root CoM references (nbody x 6 x 6).
-    dtArray<dt::Math::Matrix<6, 6, dtDynReal>> crb;    //!< World-frame composite rigid-body inertias (nbody x 6 x 6).
-    dtArray<dt::Math::Matrix<6, 6, dtDynReal>> BmatComp; //!< Composite CCRBA bias matrices; inspect only when flagged nonzero (nbody x 6 x 6).
-    dtArray<dtDynIndex> BmatCompNonzero; //!< Logical-nonzero flags; zero means corresponding BmatComp storage may be stale (nbody).
-    dtArray<dt::Math::Vector6<dtDynReal>> f1; //!< CCRBA workspace: crb*cdof_dot + BmatComp*cdof (nv x 6).
-    dtArray<dt::Math::Vector6<dtDynReal>> f2; //!< CCRBA workspace: crb*cdof (nv x 6).
-    dtArray<dt::Math::Vector6<dtDynReal>> f3; //!< CCRBA workspace: transpose(BmatComp)*cdof (nv x 6).
-    dtArray<dt::Math::Vector6<dtDynReal>> cacc; //!< World-frame body spatial accelerations used by RNEA (nbody x 6).
-    dtArray<dt::Math::Vector6<dtDynReal>> cfrc; //!< World-frame body spatial forces used by RNEA (nbody x 6).
+    dtArray<dt::Math::Vector6<dtDynReal>> cdof;                //!< World-frame motion-subspace columns at root CoM references (nv x 6).
+    dtArray<dt::Math::Vector6<dtDynReal>> cdof_dot;            //!< Time derivatives of cdof columns (nv x 6).
+    dtArray<dt::Math::Vector6<dtDynReal>> cvel;                //!< Body spatial velocities [omega_W; v_W] at root CoM references (nbody x 6).
+    dtArray<dt::Math::Matrix<6, 6, dtDynReal>> cinert;         //!< World-frame body spatial inertias about root CoM references (nbody x 6 x 6).
+    dtArray<dt::Math::Matrix<6, 6, dtDynReal>> crb;            //!< World-frame composite rigid-body inertias (nbody x 6 x 6).
+    dtArray<dt::Math::Matrix<6, 6, dtDynReal>> BmatComp;       //!< Composite CCRBA bias matrices; inspect only when flagged nonzero (nbody x 6 x 6).
+    dtArray<dtDynIndex> BmatCompNonzero;                       //!< Logical-nonzero flags; zero means corresponding BmatComp storage may be stale (nbody).
+    dtArray<dt::Math::Vector6<dtDynReal>> f1;                  //!< CCRBA workspace: crb*cdof_dot + BmatComp*cdof (nv x 6).
+    dtArray<dt::Math::Vector6<dtDynReal>> f2;                  //!< CCRBA workspace: crb*cdof (nv x 6).
+    dtArray<dt::Math::Vector6<dtDynReal>> f3;                  //!< CCRBA workspace: transpose(BmatComp)*cdof (nv x 6).
+    dtArray<dt::Math::Vector6<dtDynReal>> cacc;                //!< World-frame body spatial accelerations used by RNEA (nbody x 6).
+    dtArray<dt::Math::Vector6<dtDynReal>> cfrc;                //!< World-frame body spatial forces used by RNEA (nbody x 6).
     dtArray<dt::Math::Vector3<dtDynReal>> scratch_weightedCom; //!< Mass-weighted CoM scratch values (nbody x 3).
 
     /* Base dynamics outputs */
-    dtDynDenseMatrix Mmat;       //!< Generalized mass matrix (nv x nv).
-    dtDynDenseMatrix MmatDot;    //!< Mass-matrix derivative; filled by CCRBA when MMAT_DOT is requested (nv x nv).
-    dtDynDenseMatrix Cmat;       //!< Coriolis matrix satisfying Cmat*qvel = coriolisTorq; cleared by RNEA (nv x nv).
+    dtDynDenseMatrix Mmat;         //!< Generalized mass matrix (nv x nv).
+    dtDynDenseMatrix MmatDot;      //!< Mass-matrix derivative; filled by CCRBA when MMAT_DOT is requested (nv x nv).
+    dtDynDenseMatrix Cmat;         //!< Coriolis matrix satisfying Cmat*qvel = coriolisTorq; cleared by RNEA (nv x nv).
     dtDynDenseVector gravityTorq;  //!< Generalized gravity-force vector (nv).
     dtDynDenseVector coriolisTorq; //!< Generalized Coriolis-force vector (nv).
     dtDynDenseVector nonlinTorq;   //!< Generalized nonlinear force, gravity plus Coriolis (nv).

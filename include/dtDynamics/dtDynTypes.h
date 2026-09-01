@@ -10,8 +10,8 @@
 #ifndef ALGORITHM_DTDYNAMICS_DTDYNTYPES_H_
 #define ALGORITHM_DTDYNAMICS_DTDYNTYPES_H_
 
-#include "dtDynamics/dtArray.h"
 #include "config.h"
+#include "dtDynamics/dtArray.h"
 
 #include <cassert>
 #include <cstddef>

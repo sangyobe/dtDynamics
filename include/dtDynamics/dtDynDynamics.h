@@ -20,21 +20,21 @@ namespace dt::Dynamics
 using dtDynRneaTermFlags = std::uint32_t;  //!< Bitmask type for optional RNEA outputs.
 using dtDynCcrbaTermFlags = std::uint32_t; //!< Bitmask type for optional CCRBA outputs.
 
-static constexpr dtDynRneaTermFlags DTDYN_RNEA_TERM_NONE = 0u;        //!< Compute Mmat, gravityTorq, coriolisTorq, and nonlinTorq; clear Cmat.
+static constexpr dtDynRneaTermFlags DTDYN_RNEA_TERM_NONE = 0u;         //!< Compute Mmat, gravityTorq, coriolisTorq, and nonlinTorq; clear Cmat.
 static constexpr dtDynRneaTermFlags DTDYN_RNEA_TERM_COM_POS = 1u << 0; //!< Also fill stacked world-frame root CoM positions [m] (3*nr).
 static constexpr dtDynRneaTermFlags DTDYN_RNEA_TERM_ALL =              //!< Compute all RNEA optional outputs.
     DTDYN_RNEA_TERM_COM_POS;
 
-static constexpr dtDynCcrbaTermFlags DTDYN_CCRBA_TERM_NONE = 0u;            //!< Compute base CCRBA outputs: Mmat, Cmat, gravityTorq, coriolisTorq, and nonlinTorq.
-static constexpr dtDynCcrbaTermFlags DTDYN_CCRBA_TERM_COM_POS = 1u << 0;    //!< Also compute root CoM position.
-static constexpr dtDynCcrbaTermFlags DTDYN_CCRBA_TERM_CMAMAT = 1u << 1;     //!< Also compute centroidal momentum matrix.
-static constexpr dtDynCcrbaTermFlags DTDYN_CCRBA_TERM_CMAMAT_DOT = 1u << 2; //!< Also compute CMM time derivative.
-static constexpr dtDynCcrbaTermFlags DTDYN_CCRBA_TERM_COM_JMAT = 1u << 3;   //!< Also compute CoM Jacobian from CCRBA forces.
+static constexpr dtDynCcrbaTermFlags DTDYN_CCRBA_TERM_NONE = 0u;              //!< Compute base CCRBA outputs: Mmat, Cmat, gravityTorq, coriolisTorq, and nonlinTorq.
+static constexpr dtDynCcrbaTermFlags DTDYN_CCRBA_TERM_COM_POS = 1u << 0;      //!< Also compute root CoM position.
+static constexpr dtDynCcrbaTermFlags DTDYN_CCRBA_TERM_CMAMAT = 1u << 1;       //!< Also compute centroidal momentum matrix.
+static constexpr dtDynCcrbaTermFlags DTDYN_CCRBA_TERM_CMAMAT_DOT = 1u << 2;   //!< Also compute CMM time derivative.
+static constexpr dtDynCcrbaTermFlags DTDYN_CCRBA_TERM_COM_JMAT = 1u << 3;     //!< Also compute CoM Jacobian from CCRBA forces.
 static constexpr dtDynCcrbaTermFlags DTDYN_CCRBA_TERM_COM_JMAT_DOT = 1u << 4; //!< Also compute CoM Jacobian time derivative.
-static constexpr dtDynCcrbaTermFlags DTDYN_CCRBA_TERM_CENT_MOM = 1u << 5;   //!< Also compute centroidal momentum.
-static constexpr dtDynCcrbaTermFlags DTDYN_CCRBA_TERM_COM_VEL = 1u << 6;    //!< Also compute CoM velocity.
-static constexpr dtDynCcrbaTermFlags DTDYN_CCRBA_TERM_MMAT_DOT = 1u << 7;   //!< Also compute mass matrix time derivative.
-static constexpr dtDynCcrbaTermFlags DTDYN_CCRBA_TERM_ALL =                 //!< Compute all CCRBA optional outputs.
+static constexpr dtDynCcrbaTermFlags DTDYN_CCRBA_TERM_CENT_MOM = 1u << 5;     //!< Also compute centroidal momentum.
+static constexpr dtDynCcrbaTermFlags DTDYN_CCRBA_TERM_COM_VEL = 1u << 6;      //!< Also compute CoM velocity.
+static constexpr dtDynCcrbaTermFlags DTDYN_CCRBA_TERM_MMAT_DOT = 1u << 7;     //!< Also compute mass matrix time derivative.
+static constexpr dtDynCcrbaTermFlags DTDYN_CCRBA_TERM_ALL =                   //!< Compute all CCRBA optional outputs.
     DTDYN_CCRBA_TERM_COM_POS |
     DTDYN_CCRBA_TERM_CMAMAT |
     DTDYN_CCRBA_TERM_CMAMAT_DOT |
