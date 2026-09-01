@@ -10,14 +10,14 @@
 #ifndef ALGORITHM_DTDYNAMICS_DTDYNTYPES_H_
 #define ALGORITHM_DTDYNAMICS_DTDYNTYPES_H_
 
+#include "dtDynamics/dtArray.h"
+#include "config.h"
+
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <string>
-
-#include "config.h"
-#include "dtDynamics/dtArray.h"
 
 #include <dtMath/dtMath.h>
 
@@ -34,10 +34,8 @@ static constexpr dtDynIndex DTDYN_INVALID_INDEX = -1; //!< Invalid model/data in
              not for validating model indices where DTDYN_INVALID_INDEX must stay invalid. */
 std::size_t ToSize(dtDynIndex value);
 
-using dtDynDenseVector =
-    dt::Math::VectorX<dtDynReal>; //!< Dynamic dense vector storage from dtMath.
-using dtDynDenseMatrix =
-    dt::Math::MatrixX<dtDynReal>; //!< Dynamic dense matrix storage from dtMath.
+using dtDynDenseVector = dt::Math::VectorX<dtDynReal>; //!< Dynamic dense vector storage from dtMath.
+using dtDynDenseMatrix = dt::Math::MatrixX<dtDynReal>; //!< Dynamic dense matrix storage from dtMath.
 
 /*! \brief Convert a checked runtime dimension to the dtMath dynamic-dimension type.
     \pre value must be in the range [0, UINT16_MAX]; debug builds assert this contract. */
@@ -46,8 +44,7 @@ uint16_t ToDtMathDim(dtDynIndex value);
     \pre dim must satisfy ToDtMathDim(). Existing values are subject to dtMath ReSize semantics. */
 void ResizeDenseVector(dtDynDenseVector &vector, dtDynIndex dim);
 /*! \brief Resize a dtMath dynamic matrix to rows by cols.
-    \pre rows and cols must satisfy ToDtMathDim(). Existing values are subject to dtMath ReSize
-   semantics. */
+    \pre rows and cols must satisfy ToDtMathDim(). Existing values are subject to dtMath ReSize semantics. */
 void ResizeDenseMatrix(dtDynDenseMatrix &matrix, dtDynIndex rows, dtDynIndex cols);
 /*! \brief Resize a dtMath dynamic vector only when its dimension differs from dim. */
 void EnsureDenseVectorSize(dtDynDenseVector &vector, dtDynIndex dim);
@@ -74,8 +71,7 @@ enum class dtDynObjectType : dtDynIndex
     Joint = 2,    //!< Joint object.
     Site = 3,     //!< Site/frame object.
     Actuator = 4, //!< Actuator object.
-    Equality = 5  //!< Reserved category; equality/closed-chain constraints are not supported by
-                  //!< native dynamics.
+    Equality = 5  //!< Reserved category; equality/closed-chain constraints are not supported by native dynamics.
 };
 
 /*! \brief qpos/qvel dimensions for one joint type. */
@@ -98,10 +94,8 @@ dtDynJointDofSize GetJointDofSize(dtDynJointType type);
 */
 struct dtDynVelocityConvention
 {
-    static constexpr bool baseLinearVelocityInGlobal =
-        true; //!< Base linear velocity is expressed in global frame.
-    static constexpr bool baseAngularVelocityInBase =
-        true; //!< Base angular velocity is expressed in base frame.
+    static constexpr bool baseLinearVelocityInGlobal = true; //!< Base linear velocity is expressed in global frame.
+    static constexpr bool baseAngularVelocityInBase = true;  //!< Base angular velocity is expressed in base frame.
 };
 
 } // namespace dt::Dynamics

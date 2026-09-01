@@ -17,7 +17,7 @@ using SYSREAL = float; //!< Scalar type selected by DTDYNAMICS_USE_FLOAT.
 #ifdef USE_UINT16_T
 using SYSINDEX = uint16_t; //!< Index type selected by USE_UINT16_T.
 #else
-using SYSINDEX = int;  //!< Default index type when USE_UINT16_T is not defined.
+using SYSINDEX = int; //!< Default index type when USE_UINT16_T is not defined.
 #endif
 
 #ifndef SYSMINVAL

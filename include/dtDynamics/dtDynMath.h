@@ -33,8 +33,7 @@ dt::Math::Vector4<dtDynReal> NormalizeOrIdentity(const dt::Math::Vector4<dtDynRe
 dt::Math::Vector4<dtDynReal> MulQuat(const dt::Math::Vector4<dtDynReal> &a,
                                      const dt::Math::Vector4<dtDynReal> &b);
 /*! \brief Return a normalized quaternion for a rotation of angle radians about axis. */
-dt::Math::Vector4<dtDynReal> AxisAngleQuat(const dt::Math::Vector3<dtDynReal> &axis,
-                                           dtDynReal angle);
+dt::Math::Vector4<dtDynReal> AxisAngleQuat(const dt::Math::Vector3<dtDynReal> &axis, dtDynReal angle);
 /*! \brief Rotate vector v by quaternion q. q is assumed to be normalized by the caller. */
 dt::Math::Vector3<dtDynReal> Rotate(const dt::Math::Vector4<dtDynReal> &q,
                                     const dt::Math::Vector3<dtDynReal> &v);
@@ -62,7 +61,8 @@ dt::Math::Vector3<dtDynReal> MatrixColumn(const dt::Math::Matrix3<dtDynReal> &m,
 dt::Math::Vector3<dtDynReal> DenseMatrixColumn3(const dtDynDenseMatrix &matrix, dtDynIndex col);
 /*! \brief Return a 3x3 block starting at rowOffset, colOffset.
     \pre The complete requested 3x3 block lies within \p matrix. */
-dt::Math::Matrix3<dtDynReal> DenseMatrixBlock3(const dtDynDenseMatrix &matrix, dtDynIndex rowOffset,
+dt::Math::Matrix3<dtDynReal> DenseMatrixBlock3(const dtDynDenseMatrix &matrix,
+                                               dtDynIndex rowOffset,
                                                dtDynIndex colOffset);
 ///@}
 
@@ -81,7 +81,8 @@ dt::Math::Vector6<dtDynReal> SpatialMotionVector(const dt::Math::Vector3<dtDynRe
 dtDynReal SpatialDot(const dt::Math::Vector6<dtDynReal> &a, const dt::Math::Vector6<dtDynReal> &b);
 /*! \brief Return \f$\sum_i left_i (a_i + b_i)\f$ for six spatial rows. */
 dtDynReal SpatialDot3(const dt::Math::Vector6<dtDynReal> &left,
-                      const dt::Math::Vector6<dtDynReal> &a, const dt::Math::Vector6<dtDynReal> &b);
+                      const dt::Math::Vector6<dtDynReal> &a,
+                      const dt::Math::Vector6<dtDynReal> &b);
 /*! \brief Return matrix * vector for a 6x6 spatial matrix. */
 dt::Math::Vector6<dtDynReal> SpatialMul(const dt::Math::Matrix<6, 6, dtDynReal> &matrix,
                                         const dt::Math::Vector6<dtDynReal> &vector);
@@ -92,19 +93,17 @@ dt::Math::Vector6<dtDynReal> SpatialMulTranspose(const dt::Math::Matrix<6, 6, dt
 dt::Math::Vector6<dtDynReal> ScaleSpatial(const dt::Math::Vector6<dtDynReal> &src,
                                           dtDynReal scalar);
 /*! \brief Add src into dst in place for all six spatial rows. */
-void AddSpatialInPlace(dt::Math::Vector6<dtDynReal> &dst, const dt::Math::Vector6<dtDynReal> &src);
+void AddSpatialInPlace(dt::Math::Vector6<dtDynReal> &dst,
+                       const dt::Math::Vector6<dtDynReal> &src);
 /*! \brief Return the spatial motion cross product velocity x motion. */
 dt::Math::Vector6<dtDynReal> CrossSpatialMotion(const dt::Math::Vector6<dtDynReal> &velocity,
                                                 const dt::Math::Vector6<dtDynReal> &motion);
 /*! \brief Return the 6x6 matrix representation of the spatial motion cross product. */
-dt::Math::Matrix<6, 6, dtDynReal>
-CrossSpatialMotionMatrix(const dt::Math::Vector6<dtDynReal> &velocity);
+dt::Math::Matrix<6, 6, dtDynReal> CrossSpatialMotionMatrix(const dt::Math::Vector6<dtDynReal> &velocity);
 /*! \brief Return the dual spatial cross-product matrix \f$-crm(v)^T\f$ for force/momentum rows. */
-dt::Math::Matrix<6, 6, dtDynReal>
-CrossSpatialMotionMatrixStar(const dt::Math::Vector6<dtDynReal> &velocity);
+dt::Math::Matrix<6, 6, dtDynReal> CrossSpatialMotionMatrixStar(const dt::Math::Vector6<dtDynReal> &velocity);
 /*! \brief Return the matrix form used for momentum cross-product terms. */
-dt::Math::Matrix<6, 6, dtDynReal>
-CrossSpatialMomentumMatrix(const dt::Math::Vector6<dtDynReal> &momentum);
+dt::Math::Matrix<6, 6, dtDynReal> CrossSpatialMomentumMatrix(const dt::Math::Vector6<dtDynReal> &momentum);
 ///@}
 
 /*!
@@ -118,19 +117,19 @@ CrossSpatialMomentumMatrix(const dt::Math::Vector6<dtDynReal> &momentum);
     \details Returns DTDYN_INVALID_INDEX if neither body nor any non-world ancestor owns dofs. */
 dtDynIndex FindBodyLastDof(const dtDynModel &model, dtDynIndex body);
 /*! \brief Return a body's diagonal inertial tensor rotated into the world frame. */
-dt::Math::Matrix3<dtDynReal> BodyInertiaInWorld(const dtDynModel &model, const dtDynData &data,
+dt::Math::Matrix3<dtDynReal> BodyInertiaInWorld(const dtDynModel &model,
+                                                const dtDynData &data,
                                                 dtDynIndex bodyId);
 /*! \brief Build a 6x6 spatial inertia about the world origin for a body CoM and rotational inertia.
-    \details The returned matrix uses \f$[\omega; v]\f$ row order and applies the parallel-axis
-   term. */
-dt::Math::Matrix<6, 6, dtDynReal>
-SpatialInertiaAtWorldOrigin(dtDynReal mass, const dt::Math::Vector3<dtDynReal> &com,
-                            const dt::Math::Matrix3<dtDynReal> &rotInertia);
+    \details The returned matrix uses \f$[\omega; v]\f$ row order and applies the parallel-axis term. */
+dt::Math::Matrix<6, 6, dtDynReal> SpatialInertiaAtWorldOrigin(dtDynReal mass,
+                                                              const dt::Math::Vector3<dtDynReal> &com,
+                                                              const dt::Math::Matrix3<dtDynReal> &rotInertia);
 /*! \brief Build a 6x6 spatial inertia about reference from a body CoM and rotational inertia. */
-dt::Math::Matrix<6, 6, dtDynReal>
-SpatialInertiaAtReference(dtDynReal mass, const dt::Math::Vector3<dtDynReal> &bodyCom,
-                          const dt::Math::Vector3<dtDynReal> &reference,
-                          const dt::Math::Matrix3<dtDynReal> &rotInertia);
+dt::Math::Matrix<6, 6, dtDynReal> SpatialInertiaAtReference(dtDynReal mass,
+                                                            const dt::Math::Vector3<dtDynReal> &bodyCom,
+                                                            const dt::Math::Vector3<dtDynReal> &reference,
+                                                            const dt::Math::Matrix3<dtDynReal> &rotInertia);
 /*! \brief Return the quadratic form \f$left^T inertia\, right\f$. */
 dtDynReal QuadraticInertia(const dt::Math::Vector3<dtDynReal> &left,
                            const dt::Math::Matrix3<dtDynReal> &inertia,

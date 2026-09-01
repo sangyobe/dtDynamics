@@ -29,7 +29,10 @@ void AssignDenseVector(dtDynDenseVector &dst, const dtDynDenseVector &src)
 
 } // namespace
 
-dtDynModel::dtDynModel(const dtDynModel &other) { *this = other; }
+dtDynModel::dtDynModel(const dtDynModel &other)
+{
+    *this = other;
+}
 
 dtDynModel &dtDynModel::operator=(const dtDynModel &other)
 {
@@ -119,7 +122,10 @@ dtDynIndex dtDynModel::SiteId(const std::string &name) const
     return it == m_siteNameToId.end() ? DTDYN_INVALID_INDEX : it->second;
 }
 
-bool dtDynModel::IsWorldBody(const dtDynIndex body) const { return body == 0; }
+bool dtDynModel::IsWorldBody(const dtDynIndex body) const
+{
+    return body == 0;
+}
 
 bool dtDynModel::IsFixedBody(const dtDynIndex body) const
 {
@@ -128,8 +134,10 @@ bool dtDynModel::IsFixedBody(const dtDynIndex body) const
         return false;
     }
 
-    return body_jntnum[body] == 0 && body_jntadr[body] == DTDYN_INVALID_INDEX &&
-           body_dofnum[body] == 0 && body_dofadr[body] == DTDYN_INVALID_INDEX;
+    return body_jntnum[body] == 0 &&
+           body_jntadr[body] == DTDYN_INVALID_INDEX &&
+           body_dofnum[body] == 0 &&
+           body_dofadr[body] == DTDYN_INVALID_INDEX;
 }
 
 void dtDynModel::RebuildNameMaps()

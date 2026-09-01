@@ -16,7 +16,10 @@ namespace dt::Dynamics
 namespace utils
 {
 
-dtDynIndex EffectiveRootCount(const dtDynModel &model) { return model.nroot > 0 ? model.nroot : 1; }
+dtDynIndex EffectiveRootCount(const dtDynModel &model)
+{
+    return model.nroot > 0 ? model.nroot : 1;
+}
 
 dtDynIndex RootIndex(const dtDynModel &model, const dtDynIndex bodyId)
 {
@@ -27,16 +30,23 @@ dtDynIndex RootIndex(const dtDynModel &model, const dtDynIndex bodyId)
     return model.body_rootidx[static_cast<std::size_t>(bodyId)];
 }
 
-dtDynIndex RootCentroidalLinearRow(const dtDynIndex rootIdx) { return 6 * rootIdx; }
+dtDynIndex RootCentroidalLinearRow(const dtDynIndex rootIdx)
+{
+    return 6 * rootIdx;
+}
 
 dtDynIndex RootCentroidalAngularRow(const dtDynIndex rootIdx)
 {
     return RootCentroidalLinearRow(rootIdx) + 3;
 }
 
-dtDynIndex RootComRow(const dtDynIndex rootIdx) { return 3 * rootIdx; }
+dtDynIndex RootComRow(const dtDynIndex rootIdx)
+{
+    return 3 * rootIdx;
+}
 
-dt::Math::Vector3<dtDynReal> RootCom(const dtDynModel &model, const dtDynData &data,
+dt::Math::Vector3<dtDynReal> RootCom(const dtDynModel &model,
+                                     const dtDynData &data,
                                      const dtDynIndex bodyId)
 {
     const dtDynIndex rootBody = model.body_rootid[static_cast<std::size_t>(bodyId)];
@@ -47,7 +57,8 @@ dt::Math::Vector3<dtDynReal> RootCom(const dtDynModel &model, const dtDynData &d
     return data.subtree_com[0];
 }
 
-dt::Math::Vector6<dtDynReal> MotionSubspaceAtPoint(const dtDynModel &model, const dtDynData &data,
+dt::Math::Vector6<dtDynReal> MotionSubspaceAtPoint(const dtDynModel &model,
+                                                   const dtDynData &data,
                                                    const dtDynIndex dofId,
                                                    const dt::Math::Vector3<dtDynReal> &point)
 {
@@ -79,8 +90,7 @@ dt::Math::Vector6<dtDynReal> MotionSubspaceAtPoint(const dtDynModel &model, cons
         }
         else
         {
-            angular =
-                math::MatrixColumn(data.xmat[static_cast<std::size_t>(jointBody)], dofOffset - 3);
+            angular = math::MatrixColumn(data.xmat[static_cast<std::size_t>(jointBody)], dofOffset - 3);
             linear = angular & (point - data.xpos[static_cast<std::size_t>(jointBody)]);
         }
     }

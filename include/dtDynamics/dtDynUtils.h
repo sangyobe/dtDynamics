@@ -40,7 +40,8 @@ dtDynIndex RootComRow(dtDynIndex rootIdx);
 /*! \brief Return the world-frame subtree center of mass [m] for bodyId's root.
     \details bodyId must be a valid body index. If the body has no positive root body,
              the aggregate/world subtree CoM entry is returned. */
-dt::Math::Vector3<dtDynReal> RootCom(const dtDynModel &model, const dtDynData &data,
+dt::Math::Vector3<dtDynReal> RootCom(const dtDynModel &model,
+                                     const dtDynData &data,
                                      dtDynIndex bodyId);
 
 /*!
@@ -51,7 +52,8 @@ dt::Math::Vector3<dtDynReal> RootCom(const dtDynModel &model, const dtDynData &d
           pure linear motion. dofId and point are assumed to correspond to a valid, current
           dtDynData kinematic state.
 */
-dt::Math::Vector6<dtDynReal> MotionSubspaceAtPoint(const dtDynModel &model, const dtDynData &data,
+dt::Math::Vector6<dtDynReal> MotionSubspaceAtPoint(const dtDynModel &model,
+                                                   const dtDynData &data,
                                                    dtDynIndex dofId,
                                                    const dt::Math::Vector3<dtDynReal> &point);
 
