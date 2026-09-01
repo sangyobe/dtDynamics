@@ -1,188 +1,221 @@
 ---
-Language: Cpp
-# ART Framework 코딩 표준 + art.clang-format_v16.txt 기반
-# clang-format 14.0 호환
-
-# ── 줄 길이 ──────────────────────────────────────────────────────────────
-ColumnLimit: 100
-
-# ── 들여쓰기 ──────────────────────────────────────────────────────────────
-IndentWidth:                       4
-TabWidth:                          4
-UseTab:                            Never
-AccessModifierOffset:              -4
-IndentAccessModifiers:             false
-IndentCaseLabels:                  false
-IndentCaseBlocks:                  false
-IndentPPDirectives:                None
-IndentWrappedFunctionNames:        false
-IndentExternBlock:                 AfterExternBlock
-IndentGotoLabels:                  true
-IndentRequires:                    false
-ContinuationIndentWidth:           4
-ConstructorInitializerIndentWidth: 4
-
-# ── 중괄호 스타일 (Allman) ────────────────────────────────────────────────
-BreakBeforeBraces: Allman
-
-# ── 짧은 구문 한 줄 허용 ──────────────────────────────────────────────────
-AllowShortBlocksOnASingleLine:       Empty
-AllowShortCaseLabelsOnASingleLine:   false
-AllowShortEnumsOnASingleLine:        true
-AllowShortFunctionsOnASingleLine:    All
-AllowShortIfStatementsOnASingleLine: Never
-AllowShortLambdasOnASingleLine:      All
-AllowShortLoopsOnASingleLine:        false
-
-# ── 포인터 / 참조 정렬 ────────────────────────────────────────────────────
-PointerAlignment:       Right
-ReferenceAlignment:     Pointer
-DerivePointerAlignment: false
-
-# ── 함수 선언 / 호출 ──────────────────────────────────────────────────────
-AllowAllArgumentsOnNextLine:               true
+Language:        Cpp
+# BasedOnStyle:  LLVM
+AccessModifierOffset: -4
+AlignAfterOpenBracket: Align
+AlignArrayOfStructures: None
+AlignConsecutiveAssignments:
+  Enabled:         false
+  AcrossEmptyLines: false
+  AcrossComments:  false
+  AlignCompound:   false
+  PadOperators:    true
+AlignConsecutiveBitFields:
+  Enabled:         false
+  AcrossEmptyLines: false
+  AcrossComments:  false
+  AlignCompound:   false
+  PadOperators:    false
+AlignConsecutiveDeclarations:
+  Enabled:         false
+  AcrossEmptyLines: false
+  AcrossComments:  false
+  AlignCompound:   false
+  PadOperators:    false
+AlignConsecutiveMacros:
+  Enabled:         false
+  AcrossEmptyLines: false
+  AcrossComments:  false
+  AlignCompound:   false
+  PadOperators:    false
+AlignEscapedNewlines: Right
+AlignOperands:   Align
+AlignTrailingComments:
+  Kind:            Always
+  OverEmptyLines:  0
+AllowAllArgumentsOnNextLine: true
 AllowAllParametersOfDeclarationOnNextLine: true
-AlwaysBreakAfterReturnType:                None
-AlwaysBreakAfterDefinitionReturnType:      None
-AlwaysBreakBeforeMultilineStrings:         false
-AlwaysBreakTemplateDeclarations:           No
-BinPackArguments:  true
-BinPackParameters: true
-
-# ── 생성자 초기화 리스트 ──────────────────────────────────────────────────
-BreakConstructorInitializers: BeforeColon
-PackConstructorInitializers:  BinPack
-
-# ── 상속 목록 ────────────────────────────────────────────────────────────
-BreakInheritanceList: BeforeColon
-
-# ── 네임스페이스 ──────────────────────────────────────────────────────────
-NamespaceIndentation: None
-CompactNamespaces:    false
-FixNamespaceComments: true
-ShortNamespaceLines:  1
-
-# ── 연산자 / 표현식 ───────────────────────────────────────────────────────
-AlignAfterOpenBracket:          Align
-AlignOperands:                  Align
-AlignEscapedNewlines:           Right
-BreakBeforeBinaryOperators:     None
-BreakBeforeTernaryOperators:    true
-BreakStringLiterals:            true
-BreakBeforeConceptDeclarations: true
-
-# ── 연속 정렬 (비활성) ────────────────────────────────────────────────────
-AlignConsecutiveAssignments:  None
-AlignConsecutiveBitFields:    None
-AlignConsecutiveDeclarations: None
-AlignConsecutiveMacros:       None
-
-# ── 주석 정렬 ────────────────────────────────────────────────────────────
-AlignTrailingComments:        true
-SpacesBeforeTrailingComments: 1
-ReflowComments:               true
-CommentPragmas:               '^ IWYU pragma:'
-SpacesInLineCommentPrefix:
-    Minimum: 1
-    Maximum: -1
-
-# ── 접근 제어자 빈 줄 ─────────────────────────────────────────────────────
-EmptyLineAfterAccessModifier:  Never
-EmptyLineBeforeAccessModifier: LogicalBlock
-
-# ── 공백 ─────────────────────────────────────────────────────────────────
-SpaceAfterCStyleCast:              false
-SpaceAfterLogicalNot:              false
-SpaceAfterTemplateKeyword:         true
-SpaceAroundPointerQualifiers:      Default
-SpaceBeforeAssignmentOperators:    true
-SpaceBeforeCaseColon:              false
-SpaceBeforeCpp11BracedList:        false
-SpaceBeforeCtorInitializerColon:   true
-SpaceBeforeInheritanceColon:       true
-SpaceBeforeParens:                 ControlStatements
-SpaceBeforeParensOptions:
-    AfterControlStatements:       true
-    AfterForeachMacros:           true
-    AfterFunctionDefinitionName:  false
-    AfterFunctionDeclarationName: false
-    AfterIfMacros:                true
-    AfterOverloadedOperator:      false
-    BeforeNonEmptyParentheses:    false
-SpaceBeforeRangeBasedForLoopColon: true
-SpaceBeforeSquareBrackets:         false
-SpaceInEmptyBlock:                 false
-SpaceInEmptyParentheses:           false
-SpacesInAngles:                    Never
-SpacesInConditionalStatement:      false
-SpacesInContainerLiterals:         true
-SpacesInCStyleCastParentheses:     false
-SpacesInParentheses:               false
-SpacesInSquareBrackets:            false
-BitFieldColonSpacing:              Both
-
-# ── 빈 줄 ────────────────────────────────────────────────────────────────
-MaxEmptyLinesToKeep:              1
-KeepEmptyLinesAtTheStartOfBlocks: true
-SeparateDefinitionBlocks:         Leave
-
-# ── #include 정렬 ─────────────────────────────────────────────────────────
-#   1) Related header  2) C system  3) C++ std  4) Third-party  5) Project
-IncludeBlocks:           Regroup
-SortIncludes:            CaseSensitive
-IncludeIsMainRegex:      '(Test)?$'
-IncludeIsMainSourceRegex: ''
-IncludeCategories:
-    # C system headers: POSIX / OS-level .h
-    - Regex:         '^<(sys|pthread|unistd|errno|signal|fcntl|X11)[\./]'
-      Priority:      2
-      SortPriority:  0
-      CaseSensitive: false
-    # C++ standard library: <string>, <vector>, <memory> ...
-    - Regex:         '^<[a-z_]+>$'
-      Priority:      3
-      SortPriority:  0
-      CaseSensitive: false
-    # Third-party (angle brackets): gRPC, protobuf, GLFW, mcap, ART Framework
-    - Regex:         '^<(grpc|grpcpp|google|GLFW|GL|mcap|dtCore|dtProto|proto|spdlog)/'
-      Priority:      4
-      SortPriority:  0
-      CaseSensitive: true
-    # Project headers: "xxxx.h" ...
-    - Regex:         '^"'
-      Priority:      5
-      SortPriority:  0
-      CaseSensitive: false
-
-# ── using 선언 정렬 ───────────────────────────────────────────────────────
-SortUsingDeclarations: true
-
-# ── 기타 ─────────────────────────────────────────────────────────────────
-Standard:                         Latest
-Cpp11BracedListStyle:             true
-QualifierAlignment:               Leave
-PPIndentWidth:                    -1
-LambdaBodyIndentation:            Signature
-DisableFormat:                    false
-ExperimentalAutoDetectBinPacking: false
-RemoveBracesLLVM:                 false
-InsertTrailingCommas:             None
-
-# ── 매크로 ────────────────────────────────────────────────────────────────
+AllowShortBlocksOnASingleLine: Always
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortEnumsOnASingleLine: true
+AllowShortFunctionsOnASingleLine: All
+AllowShortIfStatementsOnASingleLine: AllIfsAndElse
+AllowShortLambdasOnASingleLine: All
+AllowShortLoopsOnASingleLine: false
+AlwaysBreakAfterDefinitionReturnType: None
+AlwaysBreakAfterReturnType: None
+AlwaysBreakBeforeMultilineStrings: false
+AlwaysBreakTemplateDeclarations: No
 AttributeMacros:
-    - __capability
+  - __capability
+BinPackArguments: true
+BinPackParameters: true
+BitFieldColonSpacing: Both
+BraceWrapping:
+  AfterCaseLabel:  false
+  AfterClass:      false
+  AfterControlStatement: Never
+  AfterEnum:       false
+  AfterExternBlock: false
+  AfterFunction:   false
+  AfterNamespace:  false
+  AfterObjCDeclaration: false
+  AfterStruct:     false
+  AfterUnion:      false
+  BeforeCatch:     false
+  BeforeElse:      false
+  BeforeLambdaBody: false
+  BeforeWhile:     false
+  IndentBraces:    false
+  SplitEmptyFunction: true
+  SplitEmptyRecord: true
+  SplitEmptyNamespace: true
+BreakAfterAttributes: Never
+BreakAfterJavaFieldAnnotations: false
+BreakArrays:     true
+BreakBeforeBinaryOperators: None
+BreakBeforeConceptDeclarations: Always
+BreakBeforeBraces: Allman
+BreakBeforeInlineASMColon: OnlyMultiline
+BreakBeforeTernaryOperators: true
+BreakConstructorInitializers: BeforeColon
+BreakInheritanceList: BeforeColon
+BreakStringLiterals: true
+ColumnLimit:     0
+CommentPragmas:  '^ IWYU pragma:'
+CompactNamespaces: false
+ConstructorInitializerIndentWidth: 4
+ContinuationIndentWidth: 4
+Cpp11BracedListStyle: true
+DerivePointerAlignment: false
+DisableFormat:   false
+EmptyLineAfterAccessModifier: Never
+EmptyLineBeforeAccessModifier: LogicalBlock
+ExperimentalAutoDetectBinPacking: false
+FixNamespaceComments: true
 ForEachMacros:
-    - foreach
-    - Q_FOREACH
-    - BOOST_FOREACH
+  - foreach
+  - Q_FOREACH
+  - BOOST_FOREACH
 IfMacros:
-    - KJ_IF_MAYBE
-StatementMacros:
-    - Q_UNUSED
-WhitespaceSensitiveMacros:
-    - BOOST_PP_STRINGIZE
-    - PP_STRINGIZE
-    - STRINGIZE
+  - KJ_IF_MAYBE
+IncludeBlocks:   Preserve
+IncludeCategories:
+  - Regex:           '^"(llvm|llvm-c|clang|clang-c)/'
+    Priority:        2
+    SortPriority:    0
+    CaseSensitive:   false
+  - Regex:           '^(<|"(gtest|gmock|isl|json)/)'
+    Priority:        3
+    SortPriority:    0
+    CaseSensitive:   false
+  - Regex:           '.*'
+    Priority:        1
+    SortPriority:    0
+    CaseSensitive:   false
+IncludeIsMainRegex: '(Test)?$'
+IncludeIsMainSourceRegex: ''
+IndentAccessModifiers: false
+IndentCaseBlocks: false
+IndentCaseLabels: false
+IndentExternBlock: AfterExternBlock
+IndentGotoLabels: true
+IndentPPDirectives: None
+IndentRequiresClause: true
+IndentWidth:     4
+IndentWrappedFunctionNames: false
+InsertBraces:    false
+InsertNewlineAtEOF: false
+InsertTrailingCommas: None
+IntegerLiteralSeparator:
+  Binary:          0
+  Decimal:         0
+  Hex:             0
+JavaScriptQuotes: Leave
+JavaScriptWrapImports: true
+KeepEmptyLinesAtTheStartOfBlocks: true
+LambdaBodyIndentation: Signature
+LineEnding:      DeriveLF
 MacroBlockBegin: ''
 MacroBlockEnd:   ''
+MaxEmptyLinesToKeep: 1
+NamespaceIndentation: None
+ObjCBinPackProtocolList: Auto
+ObjCBlockIndentWidth: 2
+ObjCBreakBeforeNestedBlockParam: true
+ObjCSpaceAfterProperty: false
+ObjCSpaceBeforeProtocolList: true
+PackConstructorInitializers: BinPack
+PenaltyBreakAssignment: 2
+PenaltyBreakBeforeFirstCallParameter: 19
+PenaltyBreakComment: 300
+PenaltyBreakFirstLessLess: 120
+PenaltyBreakOpenParenthesis: 0
+PenaltyBreakString: 1000
+PenaltyBreakTemplateDeclaration: 10
+PenaltyExcessCharacter: 1000000
+PenaltyIndentedWhitespace: 0
+PenaltyReturnTypeOnItsOwnLine: 60
+PointerAlignment: Right
+PPIndentWidth:   -1
+QualifierAlignment: Leave
+ReferenceAlignment: Pointer
+ReflowComments:  true
+RemoveBracesLLVM: false
+RemoveSemicolon: false
+RequiresClausePosition: OwnLine
+RequiresExpressionIndentation: OuterScope
+SeparateDefinitionBlocks: Leave
+ShortNamespaceLines: 1
+SortIncludes:    CaseSensitive
+SortJavaStaticImport: Before
+SortUsingDeclarations: LexicographicNumeric
+SpaceAfterCStyleCast: false
+SpaceAfterLogicalNot: false
+SpaceAfterTemplateKeyword: true
+SpaceAroundPointerQualifiers: Default
+SpaceBeforeAssignmentOperators: true
+SpaceBeforeCaseColon: false
+SpaceBeforeCpp11BracedList: false
+SpaceBeforeCtorInitializerColon: true
+SpaceBeforeInheritanceColon: true
+SpaceBeforeParens: ControlStatements
+SpaceBeforeParensOptions:
+  AfterControlStatements: true
+  AfterForeachMacros: true
+  AfterFunctionDefinitionName: false
+  AfterFunctionDeclarationName: false
+  AfterIfMacros:   true
+  AfterOverloadedOperator: false
+  AfterRequiresInClause: false
+  AfterRequiresInExpression: false
+  BeforeNonEmptyParentheses: false
+SpaceBeforeRangeBasedForLoopColon: true
+SpaceBeforeSquareBrackets: false
+SpaceInEmptyBlock: false
+SpaceInEmptyParentheses: false
+SpacesBeforeTrailingComments: 1
+SpacesInAngles:  Never
+SpacesInConditionalStatement: false
+SpacesInContainerLiterals: true
+SpacesInCStyleCastParentheses: false
+SpacesInLineCommentPrefix:
+  Minimum:         1
+  Maximum:         -1
+SpacesInParentheses: false
+SpacesInSquareBrackets: false
+Standard:        Latest
+StatementAttributeLikeMacros:
+  - Q_EMIT
+StatementMacros:
+  - Q_UNUSED
+  - QT_REQUIRE_VERSION
+TabWidth:        4
+UseTab:          Never
+WhitespaceSensitiveMacros:
+  - BOOST_PP_STRINGIZE
+  - CF_SWIFT_NAME
+  - NS_SWIFT_NAME
+  - PP_STRINGIZE
+  - STRINGIZE
 ...
