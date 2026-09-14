@@ -30,21 +30,6 @@ dtDynIndex RootIndex(const dtDynModel &model, const dtDynIndex bodyId)
     return model.body_rootidx[static_cast<std::size_t>(bodyId)];
 }
 
-dtDynIndex RootCentroidalLinearRow(const dtDynIndex rootIdx)
-{
-    return 6 * rootIdx;
-}
-
-dtDynIndex RootCentroidalAngularRow(const dtDynIndex rootIdx)
-{
-    return RootCentroidalLinearRow(rootIdx) + 3;
-}
-
-dtDynIndex RootComRow(const dtDynIndex rootIdx)
-{
-    return 3 * rootIdx;
-}
-
 dt::Math::Vector3<dtDynReal> RootCom(const dtDynModel &model,
                                      const dtDynData &data,
                                      const dtDynIndex bodyId)

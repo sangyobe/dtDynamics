@@ -14,11 +14,6 @@
 namespace dt::Dynamics
 {
 
-std::size_t ToSize(const dtDynIndex value)
-{
-    return value > 0 ? static_cast<std::size_t>(value) : static_cast<std::size_t>(0);
-}
-
 uint16_t ToDtMathDim(const dtDynIndex value)
 {
     assert(value >= 0 && value <= static_cast<dtDynIndex>(std::numeric_limits<uint16_t>::max()));

@@ -235,22 +235,17 @@ bool ValidateSpec(const dtDynSpec &spec, dtDynValidationError *error)
             !IsFinite(body.inertial.quat) || !IsFinite(body.inertial.inertia))
         {
             return Fail(error, dtDynValidationCode::NonFiniteValue, dtDynObjectType::Body,
-                        static_cast<dtDynIndex>(bodyIndex), "body[" +
-                            std::to_string(bodyIndex) + "] contains a non-finite value");
+                        static_cast<dtDynIndex>(bodyIndex), "body[" + std::to_string(bodyIndex) + "] contains a non-finite value");
         }
         if (body.inertial.mass < 0.0 || !IsPhysicalInertia(body.inertial.inertia))
         {
             return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body,
-                        static_cast<dtDynIndex>(bodyIndex), "body[" +
-                            std::to_string(bodyIndex) +
-                            "] has a negative mass or physically invalid principal inertia");
+                        static_cast<dtDynIndex>(bodyIndex), "body[" + std::to_string(bodyIndex) + "] has a negative mass or physically invalid principal inertia");
         }
         if (!IsUnitQuaternion(body.quat) || !IsUnitQuaternion(body.inertial.quat))
         {
             return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body,
-                        static_cast<dtDynIndex>(bodyIndex), "body[" +
-                            std::to_string(bodyIndex) +
-                            "] has a non-unit body or inertial quaternion");
+                        static_cast<dtDynIndex>(bodyIndex), "body[" + std::to_string(bodyIndex) + "] has a non-unit body or inertial quaternion");
         }
     }
 
@@ -273,8 +268,7 @@ bool ValidateSpec(const dtDynSpec &spec, dtDynValidationError *error)
         if (nq > maximum || nv > maximum)
         {
             return Fail(error, dtDynValidationCode::DimensionOverflow, dtDynObjectType::Joint,
-                        static_cast<dtDynIndex>(jointIndex), "joint[" +
-                            std::to_string(jointIndex) + "] makes nq/nv exceed UINT16_MAX");
+                        static_cast<dtDynIndex>(jointIndex), "joint[" + std::to_string(jointIndex) + "] makes nq/nv exceed UINT16_MAX");
         }
     }
     long long nroot = 0;
@@ -303,8 +297,7 @@ bool ValidateSpec(const dtDynSpec &spec, dtDynValidationError *error)
             if (child <= 0 || static_cast<std::size_t>(child) >= bodies.size())
             {
                 return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body,
-                            parentId, "body[" + std::to_string(parentId) +
-                                          "] child list contains invalid body " + std::to_string(child));
+                            parentId, "body[" + std::to_string(parentId) + "] child list contains invalid body " + std::to_string(child));
             }
             if (++steps > bodies.size() || childSeen[static_cast<std::size_t>(child)] != 0)
             {
@@ -326,8 +319,7 @@ bool ValidateSpec(const dtDynSpec &spec, dtDynValidationError *error)
         if (childSeen[bodyIndex] != 1)
         {
             return Fail(error, dtDynValidationCode::InvalidOwner, dtDynObjectType::Body,
-                        static_cast<dtDynIndex>(bodyIndex), "body[" + std::to_string(bodyIndex) +
-                                                                  "] is absent from its parent's child list");
+                        static_cast<dtDynIndex>(bodyIndex), "body[" + std::to_string(bodyIndex) + "] is absent from its parent's child list");
         }
     }
 
@@ -347,14 +339,12 @@ bool ValidateSpec(const dtDynSpec &spec, dtDynValidationError *error)
             if (jointId < 0 || static_cast<std::size_t>(jointId) >= joints.size())
             {
                 return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body,
-                            bodyId, "body[" + std::to_string(bodyId) +
-                                        "] contains invalid joint " + std::to_string(jointId));
+                            bodyId, "body[" + std::to_string(bodyId) + "] contains invalid joint " + std::to_string(jointId));
             }
             if (joints[static_cast<std::size_t>(jointId)].body != bodyId)
             {
                 return Fail(error, dtDynValidationCode::InvalidOwner, dtDynObjectType::Joint,
-                            jointId, "joint[" + std::to_string(jointId) +
-                                         "] owner disagrees with body joint list");
+                            jointId, "joint[" + std::to_string(jointId) + "] owner disagrees with body joint list");
             }
             ++jointBacklinks[static_cast<std::size_t>(jointId)];
         }
@@ -364,14 +354,12 @@ bool ValidateSpec(const dtDynSpec &spec, dtDynValidationError *error)
             if (siteId < 0 || static_cast<std::size_t>(siteId) >= sites.size())
             {
                 return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body,
-                            bodyId, "body[" + std::to_string(bodyId) +
-                                        "] contains invalid site " + std::to_string(siteId));
+                            bodyId, "body[" + std::to_string(bodyId) + "] contains invalid site " + std::to_string(siteId));
             }
             if (sites[static_cast<std::size_t>(siteId)].body != bodyId)
             {
                 return Fail(error, dtDynValidationCode::InvalidOwner, dtDynObjectType::Site,
-                            siteId, "site[" + std::to_string(siteId) +
-                                        "] owner disagrees with body site list");
+                            siteId, "site[" + std::to_string(siteId) + "] owner disagrees with body site list");
             }
             ++siteBacklinks[static_cast<std::size_t>(siteId)];
         }
@@ -457,15 +445,12 @@ bool ValidateSpec(const dtDynSpec &spec, dtDynValidationError *error)
         if (!std::isfinite(actuator.gear))
         {
             return Fail(error, dtDynValidationCode::NonFiniteValue, dtDynObjectType::Actuator,
-                        actuatorId, "actuator[" + std::to_string(actuatorId) +
-                                        "] contains a non-finite value");
+                        actuatorId, "actuator[" + std::to_string(actuatorId) + "] contains a non-finite value");
         }
         if (actuator.joint < 0 || static_cast<std::size_t>(actuator.joint) >= joints.size())
         {
             return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Actuator,
-                        actuatorId, "actuator[" + std::to_string(actuatorId) + "] '" +
-                                        actuator.name + "' references invalid joint " +
-                                        std::to_string(actuator.joint));
+                        actuatorId, "actuator[" + std::to_string(actuatorId) + "] '" + actuator.name + "' references invalid joint " + std::to_string(actuator.joint));
         }
     }
     return ValidateUniqueNames(bodies, dtDynObjectType::Body, "body", error) &&
@@ -484,18 +469,13 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
         long long value;
     };
     const NamedDimension dimensions[] = {
-        {"nq", model.nq},       {"nv", model.nv},       {"nbody", model.nbody},
-        {"njnt", model.njnt},   {"nsite", model.nsite}, {"nu", model.nu},
-        {"nroot", model.nroot}, {"3*nroot", 3LL * model.nroot},
-        {"6*nroot", 6LL * model.nroot}};
+        {"nq", model.nq}, {"nv", model.nv}, {"nbody", model.nbody}, {"njnt", model.njnt}, {"nsite", model.nsite}, {"nu", model.nu}, {"nroot", model.nroot}, {"3*nroot", 3LL * model.nroot}, {"6*nroot", 6LL * model.nroot}};
     for (const NamedDimension &dimension : dimensions)
     {
         if (dimension.value < 0 || dimension.value > maximum)
         {
             return Fail(error, dtDynValidationCode::DimensionOverflow, dtDynObjectType::Body,
-                        DTDYN_INVALID_INDEX, std::string("model dimension ") + dimension.name +
-                            "=" + std::to_string(dimension.value) +
-                            " is outside [0, UINT16_MAX]");
+                        DTDYN_INVALID_INDEX, std::string("model dimension ") + dimension.name + "=" + std::to_string(dimension.value) + " is outside [0, UINT16_MAX]");
         }
     }
     if (model.nbody == 0)
@@ -505,24 +485,27 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
     }
 
     const auto requireSize = [error](const char *name, const std::size_t actual,
-                                     const dtDynIndex expected) -> bool {
+                                     const dtDynIndex expected) -> bool
+    {
         if (actual == static_cast<std::size_t>(expected))
         {
             return true;
         }
         return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body,
-                    DTDYN_INVALID_INDEX, std::string("model array ") + name + " has size " +
-                        std::to_string(actual) + ", expected " + std::to_string(expected));
+                    DTDYN_INVALID_INDEX, std::string("model array ") + name + " has size " + std::to_string(actual) + ", expected " + std::to_string(expected));
     };
     const auto requireDense = [&requireSize](const char *name, const dtDynDenseVector &vector,
-                                             const dtDynIndex expected) -> bool {
+                                             const dtDynIndex expected) -> bool
+    {
         return requireSize(name, static_cast<std::size_t>(vector.GetDim()), expected);
     };
 
-#define DTDYN_REQUIRE_ARRAY(member, count) \
-    if (!requireSize(#member, model.member.size(), model.count)) return false
-#define DTDYN_REQUIRE_DENSE(member, count) \
-    if (!requireDense(#member, model.member, model.count)) return false
+#define DTDYN_REQUIRE_ARRAY(member, count)                       \
+    if (!requireSize(#member, model.member.size(), model.count)) \
+    return false
+#define DTDYN_REQUIRE_DENSE(member, count)                 \
+    if (!requireDense(#member, model.member, model.count)) \
+    return false
 
     DTDYN_REQUIRE_ARRAY(body_names, nbody);
     DTDYN_REQUIRE_ARRAY(body_parentid, nbody);
@@ -928,8 +911,7 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
             model.jnt_bodyid[static_cast<std::size_t>(jointId)] != bodyId)
         {
             return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Joint,
-                        jointId, "compiled DOF[" + std::to_string(dofId) +
-                                     "] has invalid body/joint ownership");
+                        jointId, "compiled DOF[" + std::to_string(dofId) + "] has invalid body/joint ownership");
         }
         if (parent < DTDYN_INVALID_INDEX)
         {
@@ -939,8 +921,7 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
         if (parent >= dofId)
         {
             return Fail(error, dtDynValidationCode::TopologyCycle, dtDynObjectType::Joint,
-                        jointId, "compiled DOF[" + std::to_string(dofId) +
-                                     "] parent is not an earlier DOF");
+                        jointId, "compiled DOF[" + std::to_string(dofId) + "] parent is not an earlier DOF");
         }
     }
     dtArray<dtDynIndex> bodyLastDof;

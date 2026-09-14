@@ -10,8 +10,8 @@
 #ifndef ALGORITHM_DTDYNAMICS_DTDYNTYPES_H_
 #define ALGORITHM_DTDYNAMICS_DTDYNTYPES_H_
 
-#include "dtDynamics/dtArray.h"
 #include "config.h"
+#include "dtDynamics/dtArray.h"
 
 #include <cassert>
 #include <cstddef>
@@ -32,7 +32,10 @@ static constexpr dtDynIndex DTDYN_INVALID_INDEX = -1; //!< Invalid model/data in
 /*! \brief Clamp a signed dtDynIndex to a non-negative std::size_t.
     \details Values less than or equal to zero map to 0. This helper is for sizes/counts,
              not for validating model indices where DTDYN_INVALID_INDEX must stay invalid. */
-std::size_t ToSize(dtDynIndex value);
+constexpr std::size_t ToSize(const dtDynIndex value)
+{
+    return value > 0 ? static_cast<std::size_t>(value) : static_cast<std::size_t>(0);
+}
 
 using dtDynDenseVector = dt::Math::VectorX<dtDynReal>; //!< Dynamic dense vector storage from dtMath.
 using dtDynDenseMatrix = dt::Math::MatrixX<dtDynReal>; //!< Dynamic dense matrix storage from dtMath.

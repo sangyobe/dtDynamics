@@ -31,11 +31,20 @@ dtDynIndex EffectiveRootCount(const dtDynModel &model);
 dtDynIndex RootIndex(const dtDynModel &model, dtDynIndex bodyId);
 
 /*! \brief Return the first linear centroidal row: 6 * rootIdx. */
-dtDynIndex RootCentroidalLinearRow(dtDynIndex rootIdx);
+constexpr dtDynIndex RootCentroidalLinearRow(const dtDynIndex rootIdx)
+{
+    return 6 * rootIdx;
+}
 /*! \brief Return the first angular centroidal row: 6 * rootIdx + 3. */
-dtDynIndex RootCentroidalAngularRow(dtDynIndex rootIdx);
+constexpr dtDynIndex RootCentroidalAngularRow(const dtDynIndex rootIdx)
+{
+    return RootCentroidalLinearRow(rootIdx) + 3;
+}
 /*! \brief Return the first center-of-mass row: 3 * rootIdx. */
-dtDynIndex RootComRow(dtDynIndex rootIdx);
+constexpr dtDynIndex RootComRow(const dtDynIndex rootIdx)
+{
+    return 3 * rootIdx;
+}
 
 /*! \brief Return the world-frame subtree center of mass [m] for bodyId's root.
     \details bodyId must be a valid body index. If the body has no positive root body,

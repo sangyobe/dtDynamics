@@ -29,10 +29,7 @@ void AssignDenseVector(dtDynDenseVector &dst, const dtDynDenseVector &src)
 
 } // namespace
 
-dtDynModel::dtDynModel(const dtDynModel &other)
-{
-    *this = other;
-}
+dtDynModel::dtDynModel(const dtDynModel &) = default;
 
 dtDynModel &dtDynModel::operator=(const dtDynModel &other)
 {
@@ -127,11 +124,6 @@ dtDynIndex dtDynModel::ActuatorId(const std::string &name) const
 {
     const auto it = m_actuatorNameToId.find(name);
     return it == m_actuatorNameToId.end() ? DTDYN_INVALID_INDEX : it->second;
-}
-
-bool dtDynModel::IsWorldBody(const dtDynIndex body) const
-{
-    return body == 0;
 }
 
 bool dtDynModel::IsFixedBody(const dtDynIndex body) const

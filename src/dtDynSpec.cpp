@@ -11,6 +11,7 @@
 
 #include "dtDynamics/dtDynValidation.h"
 
+#include <array>
 #include <cctype>
 #include <cmath>
 #include <fstream>
@@ -43,8 +44,7 @@ std::string FormatXmlErrorMessage(const std::string &sourcePath,
                                   const std::size_t offset,
                                   const std::string &message)
 {
-    const std::string source = sourcePath.empty() ? "dtDynSpec::DecodeXml" :
-                                                   "dtDynSpec::LoadXmlFile '" + sourcePath + "'";
+    const std::string source = sourcePath.empty() ? "dtDynSpec::DecodeXml" : "dtDynSpec::LoadXmlFile '" + sourcePath + "'";
     return source + " at offset " + std::to_string(offset) + ": " + message;
 }
 
@@ -367,9 +367,7 @@ dtDynReal ParseReal(const AttributeValue &attribute, const std::string &sourcePa
     {
         --last;
     }
-    const std::size_t tokenOffset = first == attribute.text.size() ?
-                                        attribute.offset :
-                                        attribute.offset + first;
+    const std::size_t tokenOffset = first == attribute.text.size() ? attribute.offset : attribute.offset + first;
     const AttributeValue token = {attribute.text.substr(first, last - first), tokenOffset};
     std::size_t consumed = 0;
     try
@@ -405,7 +403,7 @@ dtDynReal ParseReal(const AttributeValue &attribute, const std::string &sourcePa
 }
 
 dtDynReal RealAttributeOr(const AttributeMap &attrs, const std::string &key,
-                             const dtDynReal fallback, const std::string &sourcePath)
+                          const dtDynReal fallback, const std::string &sourcePath)
 {
     const auto it = attrs.find(key);
     return it == attrs.end() ? fallback : ParseReal(it->second, sourcePath);
@@ -421,15 +419,14 @@ void RequireUniqueName(const std::string &name,
     if (!names.insert(name).second)
     {
         const auto attribute = attrs.find("name");
-        const std::size_t offset = attribute == attrs.end() ? tagOffset :
-                                                             attribute->second.offset;
+        const std::size_t offset = attribute == attrs.end() ? tagOffset : attribute->second.offset;
         throw dtDynXmlError(dtDynXmlErrorCode::DuplicateName, sourcePath, offset,
                             "duplicate " + objectType + " name '" + name + "'");
     }
 }
 
 dtArray<dtDynReal> ParseVectorValues(const AttributeValue &attribute, const std::size_t expectedCount,
-                                        const std::string &sourcePath)
+                                     const std::string &sourcePath)
 {
     dtArray<AttributeValue> tokens;
     std::size_t pos = 0;
@@ -456,9 +453,7 @@ dtArray<dtDynReal> ParseVectorValues(const AttributeValue &attribute, const std:
 
     if (tokens.size() != expectedCount)
     {
-        const std::size_t offset = tokens.size() > expectedCount ?
-                                       tokens[expectedCount].offset :
-                                       attribute.offset;
+        const std::size_t offset = tokens.size() > expectedCount ? tokens[expectedCount].offset : attribute.offset;
         throw dtDynXmlError(dtDynXmlErrorCode::InvalidVectorArity, sourcePath, offset,
                             "expected " + std::to_string(expectedCount) +
                                 " vector values but found " + std::to_string(tokens.size()));
@@ -472,10 +467,29 @@ dtArray<dtDynReal> ParseVectorValues(const AttributeValue &attribute, const std:
     return values;
 }
 
-dt::Math::Vector3<dtDynReal> ParseVector3(const AttributeValue &attribute,
-                                              const std::string &sourcePath)
+template <std::size_t ExpectedCount>
+std::array<dtDynReal, ExpectedCount> ParseFixedVector(const AttributeValue &attribute,
+                                                      const std::string &sourcePath)
 {
-    const dtArray<dtDynReal> values = ParseVectorValues(attribute, 3, sourcePath);
+    const dtArray<dtDynReal> parsed = ParseVectorValues(attribute, ExpectedCount, sourcePath);
+    if (parsed.size() != ExpectedCount)
+    {
+        throw dtDynXmlError(dtDynXmlErrorCode::InvalidVectorArity, sourcePath, attribute.offset,
+                            "parsed vector has an unexpected number of values");
+    }
+
+    std::array<dtDynReal, ExpectedCount> values{};
+    for (std::size_t index = 0; index < ExpectedCount; ++index)
+    {
+        values[index] = parsed[index];
+    }
+    return values;
+}
+
+dt::Math::Vector3<dtDynReal> ParseVector3(const AttributeValue &attribute,
+                                          const std::string &sourcePath)
+{
+    const std::array<dtDynReal, 3> values = ParseFixedVector<3>(attribute, sourcePath);
     dt::Math::Vector3<dtDynReal> value;
     value(0) = values[0];
     value(1) = values[1];
@@ -484,9 +498,9 @@ dt::Math::Vector3<dtDynReal> ParseVector3(const AttributeValue &attribute,
 }
 
 dt::Math::Vector4<dtDynReal> ParseVector4(const AttributeValue &attribute,
-                                              const std::string &sourcePath)
+                                          const std::string &sourcePath)
 {
-    const dtArray<dtDynReal> values = ParseVectorValues(attribute, 4, sourcePath);
+    const std::array<dtDynReal, 4> values = ParseFixedVector<4>(attribute, sourcePath);
     dt::Math::Vector4<dtDynReal> value;
     value(0) = values[0];
     value(1) = values[1];
@@ -522,7 +536,7 @@ void SetIdentityQuat(dt::Math::Vector4<dtDynReal> &quat)
 }
 
 dtDynJointType JointTypeFromXml(const AttributeValue &attribute,
-                                   const std::string &sourcePath)
+                                const std::string &sourcePath)
 {
     if (attribute.text == "free")
     {
@@ -562,7 +576,7 @@ std::string JointTypeToXml(const dtDynJointType type)
 }
 
 dtDynReal AngleScaleFromCompilerAttribute(const AttributeMap &attrs,
-                                              const std::string &sourcePath)
+                                          const std::string &sourcePath)
 {
     const std::string angle = AttributeOr(attrs, "angle", "degree");
     if (angle == "radian")
@@ -1080,9 +1094,7 @@ dtDynSpec DecodeXmlImpl(const std::string &xml, const std::string &sourcePath)
             const std::string jointName = AttributeOr(attrs, "name", "joint");
             RequireUniqueName(jointName, attrs, jointNames, begin, "joint", sourcePath);
             const auto typeAttribute = attrs.find("type");
-            const dtDynJointType jointType = typeAttribute == attrs.end() ?
-                                                 dtDynJointType::Hinge :
-                                                 JointTypeFromXml(typeAttribute->second, sourcePath);
+            const dtDynJointType jointType = typeAttribute == attrs.end() ? dtDynJointType::Hinge : JointTypeFromXml(typeAttribute->second, sourcePath);
             const dtDynIndex jointId = spec.AddJoint(bodyId, jointName, jointType);
             jointOrigins.push_back(begin);
             dtDynJointSpec &joint = spec.Joints()[jointId];
@@ -1116,7 +1128,7 @@ dtDynSpec DecodeXmlImpl(const std::string &xml, const std::string &sourcePath)
             }
             if (HasAttribute(attrs, "range"))
             {
-                const dtArray<dtDynReal> range = ParseVectorValues(attrs.at("range"), 2, sourcePath);
+                const std::array<dtDynReal, 2> range = ParseFixedVector<2>(attrs.at("range"), sourcePath);
                 joint.rangeMin = range[0] * angleScale;
                 joint.rangeMax = range[1] * angleScale;
                 if (!hasLimitedAttribute)
@@ -1164,8 +1176,7 @@ dtDynSpec DecodeXmlImpl(const std::string &xml, const std::string &sourcePath)
             if (jointIt == jointNameToId.end())
             {
                 const auto jointAttribute = attrs.find("joint");
-                const std::size_t offset = jointAttribute == attrs.end() ? begin :
-                                                                          jointAttribute->second.offset;
+                const std::size_t offset = jointAttribute == attrs.end() ? begin : jointAttribute->second.offset;
                 throw dtDynXmlError(dtDynXmlErrorCode::InvalidReference, sourcePath, offset,
                                     "actuator references unknown joint '" + jointName + "'");
             }
@@ -1286,22 +1297,22 @@ const dtArray<dtDynActuatorSpec> &dtDynSpec::Actuators() const
 
 dtArray<dtDynBodySpec> &dtDynSpec::Bodies()
 {
-    return m_bodies;
+    return m_bodies; // polyspace DEFECT:BREAKING_DATA_ENCAPSULATION [Justified:Medium] "Editable setup-time container; callers preserve referential integrity before compile or encode."
 }
 
 dtArray<dtDynJointSpec> &dtDynSpec::Joints()
 {
-    return m_joints;
+    return m_joints; // polyspace DEFECT:BREAKING_DATA_ENCAPSULATION [Justified:Medium] "Editable setup-time container; callers preserve referential integrity before compile or encode."
 }
 
 dtArray<dtDynSiteSpec> &dtDynSpec::Sites()
 {
-    return m_sites;
+    return m_sites; // polyspace DEFECT:BREAKING_DATA_ENCAPSULATION [Justified:Medium] "Editable setup-time container; callers preserve referential integrity before compile or encode."
 }
 
 dtArray<dtDynActuatorSpec> &dtDynSpec::Actuators()
 {
-    return m_actuators;
+    return m_actuators; // polyspace DEFECT:BREAKING_DATA_ENCAPSULATION [Justified:Medium] "Editable setup-time container; callers preserve referential integrity before compile or encode."
 }
 
 } // namespace dt::Dynamics

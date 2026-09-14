@@ -1,18 +1,99 @@
+workflow:
+  rules:
+    # Static analysis runs only when explicitly requested from GitLab or CI automation.
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+    - if: '$CI_PIPELINE_SOURCE == "api"'
+    - when: never
+
 stages:
+  - lint
+  - build
+  - test
+  - analyse
   - docs
 
 default:
   interruptible: true
-  image: registry.hmc.co.kr/rlab/ardg/arct/project/arch/06-cicd/art-cicd/artf-build:v1.2
+  image: registry.hmc.co.kr/rlab/ardg/arct/project/arch/06-cicd/art-cicd/artf-build:v1.5
   tags:
-    - artplot-server
+    - art-server
+
+variables:
+  POLYSPACE_ACCESS_PARENT: "art_ws/dtdynamics"
+  POLYSPACE_PROJECT_NAME: "dtdynamics"
+  POLYSPACE_BIN: "/usr/local/Polyspace_Server/R2025b/polyspace/bin"
+  POLYSPACE_TEMPLATES: "/usr/local/Polyspace_Server/R2025b/toolbox/polyspace/psrptgen/templates"
+  POLYSPACE_ACCESS_HOST: "10.20.92.67"
+  POLYSPACE_ACCESS_PORT: "9444"
+
+lint-job:
+  stage: lint
+  script:
+    - bash ci/lint.sh
+  artifacts:
+    when: always
+    paths:
+      - reports/clang-format.txt
+    expire_in: 1 week
+
+build-job:
+  stage: build
+  script:
+    - bash ci/build.sh
+  artifacts:
+    paths:
+      - build/
+    expire_in: 1 week
+
+test-job:
+  stage: test
+  script:
+    - >-
+      cmake -S . -B build-test
+      -DCMAKE_BUILD_TYPE=Debug
+      -DDTDYNAMICS_BUILD_TEST=ON
+      -DDTDYNAMICS_BUILD_BENCHMARK=OFF
+      -DDTDYNAMICS_BUILD_REFERENCE_BENCHMARK=OFF
+      -DBUILD_DTDYNAMICS_MUJOCO_TEST=OFF
+      -DBUILD_DTDYNAMICS_PINOCCHIO_TEST=OFF
+    - cmake --build build-test -j"$(nproc)"
+    - ctest --test-dir build-test --output-on-failure
+    - python3 tools/test_ci_lint.py
+    - python3 tools/test_polyspace_checker_profile.py
+    - python3 tools/test_polyspace_export_contract.py
+    - python3 tools/test_polyspace_result_gate.py
+    - python3 tools/test_polyspace_transport.py
+
+polyspace-job:
+  stage: analyse
+  timeout: 3h
+  needs:
+    - job: build-job
+      artifacts: true
+    - job: test-job
+      artifacts: false
+  cache:
+    key: "polyspace-baseline-${CI_COMMIT_REF_SLUG}"
+    paths:
+      - reports/polyspace/results/
+    policy: pull-push
+  script:
+    - bash ci/polyspace.sh
+  artifacts:
+    when: always
+    paths:
+      - reports/polyspace/
+    expire_in: 1 month
 
 markdown-docs:
   stage: docs
+  before_script:
+    - |
+      if ! command -v pdftotext >/dev/null 2>&1 || ! command -v pdfinfo >/dev/null 2>&1 || ! command -v pdffonts >/dev/null 2>&1; then
+        apt-get update
+        DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends poppler-utils
+      fi
   script:
     - command -v python3
     - python3 tools/validate_documentation_content.py
     - python3 tools/validate_docs.py
-  rules:
-    - if: '$CI_COMMIT_BRANCH'
-    - if: '$CI_COMMIT_TAG'

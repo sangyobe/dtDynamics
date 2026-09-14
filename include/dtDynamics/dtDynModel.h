@@ -82,14 +82,14 @@ public:
     dtArray<dtDynIndex> dof_jntid;    //!< Joint id owning each scalar DOF (nv).
     dtDynDenseVector dof_armature;    //!< Armature inertia per scalar DOF (nv).
 
-    dtArray<dtDynIndex> site_bodyid;       //!< Owning body id for each site (nsite).
-    dtArray<dtDynIndex> actuator_jointid;  //!< Driven joint id, or DTDYN_INVALID_INDEX (nu).
-    dtArray<dtDynIndex> root_bodyid;       //!< Body id for each compact root slot (nroot).
-    dtDynDenseVector actuator_gear;        //!< Scalar transmission gear per actuator (nu).
-    dtDynDenseVector root_mass;            //!< Total subtree mass [kg] per compact root slot (nroot).
+    dtArray<dtDynIndex> site_bodyid;      //!< Owning body id for each site (nsite).
+    dtArray<dtDynIndex> actuator_jointid; //!< Driven joint id, or DTDYN_INVALID_INDEX (nu).
+    dtArray<dtDynIndex> root_bodyid;      //!< Body id for each compact root slot (nroot).
+    dtDynDenseVector actuator_gear;       //!< Scalar transmission gear per actuator (nu).
+    dtDynDenseVector root_mass;           //!< Total subtree mass [kg] per compact root slot (nroot).
 
-    dtDynDenseVector body_mass;        //!< Body mass [kg] (nbody).
-    dtDynDenseVector body_subtreemass; //!< Body-plus-descendant mass [kg] (nbody).
+    dtDynDenseVector body_mass;                         //!< Body mass [kg] (nbody).
+    dtDynDenseVector body_subtreemass;                  //!< Body-plus-descendant mass [kg] (nbody).
     dtArray<dt::Math::Vector3<dtDynReal>> body_pos;     //!< Body-frame origin position in parent frame [m] (nbody x 3).
     dtArray<dt::Math::Vector4<dtDynReal>> body_quat;    //!< Body-to-parent unit quaternion in wxyz order (nbody x 4).
     dtArray<dt::Math::Matrix3<dtDynReal>> body_mat;     //!< Body-to-parent rotation matrix (nbody x 3 x 3).
@@ -113,7 +113,10 @@ public:
     dtDynIndex ActuatorId(const std::string &name) const;
 
     /*! \brief True when \p body is the global world body id. */
-    bool IsWorldBody(dtDynIndex body) const;
+    constexpr bool IsWorldBody(const dtDynIndex body) const
+    {
+        return body == 0;
+    }
     /*! \brief True when \p body has no joint and contributes no generalized velocity columns. */
     bool IsFixedBody(dtDynIndex body) const;
 

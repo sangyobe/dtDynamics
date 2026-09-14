@@ -316,9 +316,9 @@ void ComputeDiffMotion(const dtDynModel &model, dtDynData &data)
 }
 
 void FillBodySpatialInertiaAtRootCom(const dtDynModel &model,
-                                      const dtDynData &data,
-                                      const dtDynIndex bodyId,
-                                      dt::Math::Matrix<6, 6, dtDynReal> &out)
+                                     const dtDynData &data,
+                                     const dtDynIndex bodyId,
+                                     dt::Math::Matrix<6, 6, dtDynReal> &out)
 {
     // Spatial inertia about the root CoM reference:
     //   I = [ R Ic R^T + m(||c||^2 E - c c^T),  m cx
@@ -809,12 +809,12 @@ void ComputeMassMatrixFromCompositeInertias(const dtDynModel &model, dtDynData &
     }
 }
 
-bool HasRNEATerm(const dtDynRneaTermFlags flags, const dtDynRneaTermFlags term)
+constexpr bool HasRNEATerm(const dtDynRneaTermFlags flags, const dtDynRneaTermFlags term)
 {
     return (flags & term) != 0u;
 }
 
-bool HasCCRBATerm(const dtDynCcrbaTermFlags flags, const dtDynCcrbaTermFlags term)
+constexpr bool HasCCRBATerm(const dtDynCcrbaTermFlags flags, const dtDynCcrbaTermFlags term)
 {
     return (flags & term) != 0u;
 }
