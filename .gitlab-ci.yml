@@ -87,6 +87,12 @@ polyspace-job:
 
 markdown-docs:
   stage: docs
+  before_script:
+    - |
+      if ! command -v pdftotext >/dev/null 2>&1 || ! command -v pdfinfo >/dev/null 2>&1 || ! command -v pdffonts >/dev/null 2>&1; then
+        apt-get update
+        DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends poppler-utils
+      fi
   script:
     - command -v python3
     - python3 tools/validate_documentation_content.py
