@@ -3,7 +3,7 @@
  \brief     Native dtDynamics spec-to-model compiler declaration.
  \author    Joonhee Jo, joonhee.jo@hyundai.com
  \date      2026. 07. 16
- \version   0.1.0
+ \version   0.1.1
  \copyright RoboticsLab ART All rights reserved.
 */
 
@@ -25,6 +25,14 @@ namespace dt::Dynamics
  \return A model ready to pair with dtDynData::Resize().
 */
 dtDynModel CompileSpec(const dtDynSpec &spec);
+
+/*!
+ \brief Validate and compile an editable specification.
+ \details This setup-time convenience rejects invalid references and topology before
+  delegating to CompileSpec(). Trusted callers may continue to use CompileSpec().
+ \throws std::runtime_error with object/index context when validation fails.
+*/
+dtDynModel CompileSpecChecked(const dtDynSpec &spec);
 
 /*!
  \brief Compile editable dtDynSpec into an existing fixed-index dtDynModel.

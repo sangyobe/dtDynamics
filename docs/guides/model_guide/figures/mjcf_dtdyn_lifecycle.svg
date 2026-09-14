@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="820" viewBox="0 0 1600 820" role="img" aria-labelledby="title desc">
+  <title id="title">MJCF to dtDynamics lifecycle</title>
+  <desc id="desc">Pipeline from MJCF-like XML through dtDynSpec, CompileSpec, dtDynModel, dtDynData, runtime state update, dynamics, Jacobians, and controller outputs.</desc>
+  <defs>
+    <style>
+      .bg { fill: #f8fafc; }
+      .box { fill: #ffffff; stroke: #334155; stroke-width: 2.5; rx: 14; }
+      .blue { fill: #dbeafe; stroke: #2563eb; }
+      .teal { fill: #ccfbf1; stroke: #0f766e; }
+      .amber { fill: #fef3c7; stroke: #b45309; }
+      .green { fill: #dcfce7; stroke: #15803d; }
+      .gray { fill: #e2e8f0; stroke: #475569; }
+      .title { font: 700 34px Arial, sans-serif; fill: #0f172a; }
+      .label { font: 700 24px Arial, sans-serif; fill: #0f172a; }
+      .body { font: 400 18px Arial, sans-serif; fill: #334155; }
+      .small { font: 400 15px Arial, sans-serif; fill: #475569; }
+      .arrow { stroke: #334155; stroke-width: 3; fill: none; marker-end: url(#arrowhead); }
+      .dash { stroke: #64748b; stroke-width: 2; stroke-dasharray: 8 8; fill: none; marker-end: url(#arrowhead); }
+    </style>
+    <marker id="arrowhead" markerWidth="12" markerHeight="8" refX="11" refY="4" orient="auto">
+      <path d="M0,0 L12,4 L0,8 Z" fill="#334155"/>
+    </marker>
+  </defs>
+  <rect class="bg" x="0" y="0" width="1600" height="820"/>
+  <text class="title" x="70" y="70">MJCF-like XML to dtDynamics runtime data</text>
+  <text class="body" x="70" y="104">Editable spec, compiled model, resized runtime data, and repeated control-loop recomputation.</text>
+
+  <rect class="box blue" x="70" y="180" width="210" height="130"/>
+  <text class="label" x="100" y="225">XML file</text>
+  <text class="body" x="100" y="262">body / inertial</text>
+  <text class="body" x="100" y="288">joint / site</text>
+
+  <rect class="box teal" x="365" y="180" width="230" height="130"/>
+  <text class="label" x="395" y="225">DecodeXml</text>
+  <text class="body" x="395" y="262">parse subset</text>
+  <text class="body" x="395" y="288">reject loops</text>
+
+  <rect class="box teal" x="680" y="180" width="240" height="130"/>
+  <text class="label" x="710" y="225">dtDynSpec</text>
+  <text class="body" x="710" y="262">editable tree</text>
+  <text class="body" x="710" y="288">encode/decode</text>
+
+  <rect class="box amber" x="1005" y="180" width="230" height="130"/>
+  <text class="label" x="1035" y="225">CompileSpec</text>
+  <text class="body" x="1035" y="262">assign qpos/qvel</text>
+  <text class="body" x="1035" y="288">build indices</text>
+
+  <rect class="box amber" x="1320" y="180" width="230" height="130"/>
+  <text class="label" x="1350" y="225">dtDynModel</text>
+  <text class="body" x="1350" y="262">immutable arrays</text>
+  <text class="body" x="1350" y="288">name lookup</text>
+
+  <path class="arrow" d="M280 245 L365 245"/>
+  <path class="arrow" d="M595 245 L680 245"/>
+  <path class="arrow" d="M920 245 L1005 245"/>
+  <path class="arrow" d="M1235 245 L1320 245"/>
+
+  <rect class="box gray" x="1320" y="420" width="230" height="130"/>
+  <text class="label" x="1350" y="465">Resize data</text>
+  <text class="body" x="1350" y="502">allocate buffers</text>
+  <text class="body" x="1350" y="528">match model</text>
+
+  <rect class="box green" x="1005" y="420" width="230" height="130"/>
+  <text class="label" x="1035" y="465">dtDynData</text>
+  <text class="body" x="1035" y="502">qpos / qvel</text>
+  <text class="body" x="1035" y="528">outputs / scratch</text>
+
+  <rect class="box green" x="680" y="420" width="240" height="130"/>
+  <text class="label" x="710" y="465">Control tick</text>
+  <text class="body" x="710" y="502">write state</text>
+  <text class="body" x="710" y="528">no XML parse</text>
+
+  <rect class="box green" x="365" y="420" width="230" height="130"/>
+  <text class="label" x="395" y="465">Dynamics</text>
+  <text class="body" x="395" y="502">CCRBA / RNEA</text>
+  <text class="body" x="395" y="528">Jacobians</text>
+
+  <rect class="box blue" x="70" y="420" width="210" height="130"/>
+  <text class="label" x="100" y="465">Controller</text>
+  <text class="body" x="100" y="502">WBC fields</text>
+  <text class="body" x="100" y="528">task outputs</text>
+
+  <path class="arrow" d="M1435 310 L1435 420"/>
+  <path class="arrow" d="M1320 485 L1235 485"/>
+  <path class="arrow" d="M1005 485 L920 485"/>
+  <path class="arrow" d="M680 485 L595 485"/>
+  <path class="arrow" d="M365 485 L280 485"/>
+
+  <path class="dash" d="M785 420 C760 365 760 350 800 312"/>
+  <text class="small" x="820" y="365">Spec changes recompile</text>
+  <path class="dash" d="M1115 420 C1160 365 1185 345 1340 312"/>
+  <text class="small" x="1090" y="365">Model changes resize data</text>
+  <path class="dash" d="M800 550 C790 610 840 650 1005 550"/>
+  <text class="small" x="790" y="640">State changes reuse model/data</text>
+</svg>

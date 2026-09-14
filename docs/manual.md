@@ -1,580 +1,454 @@
 # dtDynamics Manual
 
-> Canonical generated manual: the maintained Doxygen/Graphviz manual source now lives under [`docs/manual/`](manual/index.md). Build it with:
+Author: Joonhee Jo
+
+> 이 문서: **실행 절차(how-to) 전용** 진입점 — 개념/API contract/equation은 `docs/manual/` 하위 chapter가 canonical source
 >
-> ```bash
-> tools/validate_docs.sh
-> ```
+> GitLab Markdown viewer에서 직접 열람. 수식은 GitLab math block/inline math 문법으로 직접 렌더링.
+
+## 목차
+
+1. [Package boundary와 최소 사용법](#1-package-boundary와-최소-사용법)
+2. [모델 준비 절차](#2-모델-준비-절차)
+3. [최소 end-to-end 예제](#3-최소-end-to-end-예제)
+4. [Controller/WBC 통합 절차](#4-controllerwbc-통합-절차)
+5. [Realtime 적용 checklist](#5-realtime-적용-checklist)
+6. [검증 실행 방법](#6-검증-실행-방법)
+7. [Benchmark 재현 방법](#7-benchmark-재현-방법)
+8. [문서 생성·Release 절차](#8-문서-생성release-절차)
+9. [Troubleshooting](#9-troubleshooting)
+10. [상세 설명 chapter와 관련 문서](#10-상세-설명-chapter와-관련-문서)
+
+## 1. Package boundary와 최소 사용법
+
+- `dtDynamics 0.1.1`: `dtMath` 기반 dynamics ingredient engine
+
+> **주의 — production dependency vs validation dependency**
 >
-> Generated HTML entry point: `build/docs/doxygen/html/index.html`.
->
-> The legacy Markdown manual content is preserved below for continuity while detailed chapters are migrated into the generated manual.
-
----
-
-## Overview
-
-`dtDynamics` is a lightweight rigid-body dynamics ingredient engine for realtime legged-robot control. It computes the kinematic, dynamic, centroidal, and derivative quantities needed by whole-body control, state estimation, and model-based planning. It does not compute the final controller torque command.
-
-The package is designed around general robot-control requirements:
-
-- deterministic memory ownership after initialization
-- fixed, explicit coordinate conventions
-- `dtMath` as the only math dependency
-- MuJoCo-compatible indexing, XML-oriented model semantics, and smooth-dynamics algorithm structure
-- controller-ready quantities that are not all exposed by general simulators
-
-## Redesign Overview Figures
-
-The following figures summarize the package-level migration from the legacy integration path to the standalone native `dt::Dynamics` boundary.
-
-![As-Is dtDynamics architecture](figures/dtdynamics_as_is.svg)
-
-![To-Be dtDynamics architecture](figures/dtdynamics_to_be.svg)
-
-## Relationship To MuJoCo And Pinocchio
-
-`dtDynamics` is not a simulator and is not a MuJoCo wrapper. Its baseline algorithms should follow MuJoCo 3.8.0's smooth-dynamics implementation structure, but they are reimplemented with `dtMath` and native `dtDyn*` types. MuJoCo 3.8.0 is used as an external reference for XML semantics, indexing, transforms, and common dynamics terms. It is not included or linked by the `dtDynamics` package.
-
-Pinocchio is used as an external validation reference for rigid-body dynamics and centroidal quantities that MuJoCo does not directly expose. Pinocchio is also not included or linked by the `dtDynamics` package.
-
-Implementation status: this manual describes the native `dtDyn*` API in namespace `dt::Dynamics`; that native API is the active package boundary.
-
-## CMake Package Boundary
-
-Production consumers should link the installed package through the canonical exported target:
+> `MuJoCo 3.8.0`, `Pinocchio 3.9.0`: validation/benchmark reference (production target `dt::Dynamics`에 link되지 않음).
 
 ```cmake
-find_package(dtDynamics CONFIG REQUIRED)
+find_package(dtDynamics 0.1.1 EXACT CONFIG REQUIRED)
 target_link_libraries(my_controller PRIVATE dt::Dynamics)
 ```
 
-The production `dtDynamics` target is dtMath-only. MuJoCo and Pinocchio are validation dependencies and are linked only by dedicated test or benchmark executables.
-
-If a downstream project also includes a shared ART Framework include directory, make sure the selected `dtDynamics` package include directory is searched before any older `ART_Framework/include/dtDynamics` copy. Mixing a new `libdtDynamics.a` with stale `dtDynModel` headers changes object layout and can corrupt `dtDynModel`/`dtDynData` arrays at runtime. LeoQuad now defaults to the installed package path and handles this by adding `${DTDYNAMICS_INCLUDE_DIR}` before `${ARTF_INSTALL_DIR}/include` in `dtcontrol`, `simRobot`, and `realRobot` targets.
-
-## Model Layers
-
-`dtDynamics` separates model description, compiled model data, and realtime state.
+- Canonical lifecycle (아래 2~5장이 각 단계를 실행 절차로 확장):
 
 ```text
-dtDynSpec
-  -> editable XML/native specification
-  -> dynamic allocation and deallocation
-  -> encode/decode
-
-dtDynModel
-  -> compiled immutable topology and inertial constants
-  -> MuJoCo-compatible indices and addresses
-  -> name lookup tables
-
-dtDynData
-  -> mutable qpos/qvel and computed quantities
-  -> preallocated scratch buffers
-  -> no realtime allocation after construction
+LoadXmlFile / DecodeXml
+  -> ValidateSpec / CompileSpecChecked
+  -> dtDynModel
+  -> dtDynData::Resize
+  -> BodyId / JointId / SiteId / ActuatorId cache
+  -> qpos/qvel staging
+  -> selected ComputeDynamics* / Jacobian calls
 ```
 
-This separation mirrors the practical model/data split used in high-performance rigid-body engines while keeping the actual package independent and dtMath-only.
+- 외부·editable input: checked path 사용
+- raw `CompileSpec()`: trusted setup path를 위한 호환 API
+- lookup 실패: `DTDYN_INVALID_INDEX` (확인하지 않은 ID로 indexing 금지)
 
-## Coordinate Convention
+![To-Be dtDynamics architecture](figures/dtdynamics_to_be.svg)
 
-The redesigned engine supports one generalized velocity convention:
+## 2. 모델 준비 절차
 
-```text
-qpos = [base position_G, base quaternion_GB, joint position]
-qvel = [base linear velocity_G, base angular velocity_B, joint velocity]
+### 2-1. XML 로드
+
+```cpp
+const dtDynSpec spec = dtDynSpec::LoadXmlFile("model/robot.xml");
+spec.SaveXmlFile("model/robot-native.xml");
 ```
 
-The redesigned API does not expose a coordinate-type selector or a `DTDYN_COORDINATE_TYPE` constant. No other coordinate type is part of the new public API.
+### 2-2. 에러 처리 (`dtDynXmlError`)
 
-Every exposed quantity uses this basis:
-
-- mass matrix `Mmat`
-- Coriolis/centrifugal matrix `Cmat`
-- gravity vector `gravityTorq`
-- body and site Jacobians
-- `Jdot`, `Jdot*qdot`
-- CoM Jacobian and derivative
-- centroidal momentum matrix and derivative
-
-## Kinematic Tree
-
-The body tree follows MuJoCo-compatible semantics:
-
-- body index `0` is the global/world body
-- a body without a joint is fixed to its parent
-- free, ball, slide, and hinge joints use MuJoCo-compatible type values
-- `qpos` and `qvel` addresses follow MuJoCo-compatible sizes
-- fixed bodies preserve names, frames, inertials, sites, and children
-
-Fixed bodies may be optimized internally, but public lookup and task/site indexing must remain stable.
-
-## World Body And Fixed Body Dynamics
-
-Body index `0` is the global/world body. It is an inertial reference frame and a topology root. It is not a physical rigid body in the CCRBA recursion.
-
-The dynamics passes treat body `0` specially:
-
-- world-body scratch buffers are initialized to zero.
-- physical body loops start at body index `1`.
-- backward composite inertia accumulation stops before body index `0`.
-- ancestor traversal stops when the current body is `0`.
-- no joint, DOF, qpos address, qvel address, mass, or spatial inertia is assigned to the world body.
-
-Fixed bodies are different from the world body. A fixed body is physical: it can have mass, inertia, names, sites, and children. It has no joint and no generalized coordinates. Match MuJoCo by representing this as no joint, not as a fixed joint type: `body_jntnum = 0`, `body_jntadr = -1`, `body_dofnum = 0`, and `body_dofadr = -1`. Its inertia contributes to its parent/root composite inertia, and its frames can be used for task Jacobians, but it does not create Jacobian, mass-matrix, CMM, or bias columns.
-
-For multi-root models, centroidal quantities are first computed per physical root body. A single-root floating-base robot can read the standard 6-row centroidal matrix directly from `dtDynData`, while a multi-root aggregate should be requested explicitly.
-
-## Closed-Chain And Parallel Mechanisms
-
-The core model is a tree. Serial manipulators, branched fixed-base manipulators, and floating-base quadrupeds fit this model directly. Parallel robots and four-bar linkages do not, because their generalized coordinates are constrained by loop closure.
-
-The MuJoCo-compatible way to represent these mechanisms is tree plus equality constraints:
-
-- cut the loop in the body tree.
-- add equality constraints to close it.
-- compute normal tree dynamics ingredients.
-- compute constraint residuals and constraint Jacobians.
-- let the controller or constrained solver enforce the loop.
-
-For closed-chain control, `dtDynamics` should expose:
-
-- `phi(q)`
-- `Jc`
-- `Jc*qvel`
-- `JcDot*qvel`
-- KKT matrix ingredients using `M` and `Jc`
-
-It should still not compute final torque. Until the equality layer is implemented, `dtDynSpec` should reject closed-chain/equality XML with an explicit diagnostic instead of loading an incorrect tree-only model.
-
-## Computed Quantities
-
-`dtDynamics` computes ingredients for control:
-
-- body and site pose
-- body and site velocity
-- linear and angular Jacobians
-- Jacobian time variation
-- `Jdot*qdot`
-- subtree CoM
-- total CoM position and velocity
-- mass matrix
-- controller-compatible Coriolis/centrifugal matrix convention
-- Coriolis/centrifugal vector
-- gravity vector
-- nonlinear vector
-- centroidal momentum matrix
-- centroidal momentum matrix time derivative
-- centroidal momentum
-- inertia matrix derivative when needed
-
-The controller consumes these values and computes the final torque.
-
-## Core Algorithm
-
-The main baseline kernel is a native `dtMath` reimplementation of the relevant MuJoCo 3.8.0 smooth-dynamics stages. The algorithm performs:
-
-1. forward body kinematic propagation equivalent to `mj_kinematics`
-2. inertial-frame and subtree-CoM mapping equivalent to `mj_comPos`
-3. mass matrix construction equivalent to MuJoCo 3.8.0 `mj_makeM`, with CRBA equivalent to `mj_crb` as its first stage
-4. optional sparse mass-matrix factorization equivalent to `mj_factorM` if needed by WBC solves
-5. CoM-frame velocity and motion-subspace derivative propagation equivalent to `mj_comVel`
-6. recursive Newton-Euler bias-force propagation equivalent in purpose to MuJoCo `mj_rne` for `gravityTorq`, `coriolisTorq`, and `nonlinTorq`
-7. body/site Jacobian construction equivalent to `mj_jac`, `mj_jacBody`, and `mj_jacSite`
-8. Jacobian time-variation construction equivalent to `mj_jacDot`
-
-The dtDynamics-specific layer is the Control-oriented Composite Rigid Body Algorithm, or CCRBA. CCRBA adds quantities MuJoCo does not expose directly in the required control form: controller-compatible `Cmat`, CMM, CMMdot, `comJmatDot`, centroidal momentum derivative ingredients, `MmatDot`, and floating-base/task exports. `ComputeDynamicsRNEA` runs the lighter RNEA path for controllers that need only the MuJoCo-step1-like base ingredients: `Mmat`, `gravityTorq`, `nonlinTorq`, and `coriolisTorq`; its optional `dtDynRneaTermFlags` currently expose only `DTDYN_RNEA_TERM_COM_POS`. `ComputeDynamicsCCRBA` computes the same base ingredients plus `Cmat`, with gravity, Coriolis, and nonlinear torque outputs computed from the CCRBA pass instead of calling RNEA. In the public CCRBA path, `coriolisTorq` is accumulated while `Cmat` is filled, avoiding a second dense `Cmat*qvel` pass. Additional CCRBA outputs are selected with `dtDynCcrbaTermFlags`, such as `DTDYN_CCRBA_TERM_CMAMAT`, `DTDYN_CCRBA_TERM_CMAMAT_DOT`, `DTDYN_CCRBA_TERM_COM_JMAT`, `DTDYN_CCRBA_TERM_COM_JMAT_DOT`, `DTDYN_CCRBA_TERM_CENT_MOM`, `DTDYN_CCRBA_TERM_COM_VEL`, and `DTDYN_CCRBA_TERM_MMAT_DOT`. There is no generic public `ComputeDynamics` alias; callers must choose `ComputeDynamicsRNEA` or `ComputeDynamicsCCRBA` and pass the optional-term mask they need.
-
-The implementation must keep body-indexed and DOF-indexed workspaces separate. Body-indexed arrays include world body `0`; DOF-indexed arrays are sized by `nv` and never include the world body. This distinction is part of the numerical contract because centroidal and CCRBA terms are sensitive to an accidental world-body column.
-
-## Validation
-
-Validation has two external references plus runtime integration checks:
-
-- MuJoCo 3.8.0: validates XML, indexing, transforms, `mj_makeM` mass matrix output, Jacobians, `Jdot`, and common dynamics terms
-- Pinocchio: validates CRBA, centroidal mapping, centroidal time variation, Jacobian time variation, and derivative terms
-
-Frame convention and spatial-vector ordering must be transformed explicitly before comparing values.
-
-Validation fixtures should include the world body, fixed sensor/task bodies, and at least one multi-root model if multi-root output is enabled. The world body should never contribute mass, inertia, or DOF columns; fixed bodies should contribute mass and frames without adding DOFs.
-
-External validation libraries are local to the `dtDynamics` package. They must not be installed into `~/.local/ART_Framework`, because that prefix is shared by ART packages and other projects. In a standalone package checkout, the default private validation cache is:
-
-```bash
-.validation_deps/
+```cpp
+try
+{
+    const dtDynSpec spec = dtDynSpec::LoadXmlFile("model/robot.xml");
+    const dtDynModel model = CompileSpecChecked(spec);
+}
+catch (const dtDynXmlError &error)
+{
+    ReportXmlFailure(error.Code(), error.SourcePath(), error.Offset());
+}
 ```
 
-The pinned validation versions are MuJoCo `3.8.0` and Pinocchio `3.9.0`. To populate the private cache, run:
+### 2-3. Checked compile
 
-```bash
-# Run from the standalone dtDynamics package root.
-tools/install_validation_deps.sh --all
+```cpp
+dtDynValidationError error;
+if (!ValidateSpec(spec, &error))
+{
+    ReportSpecFailure(error.code, error.object, error.index, error.message);
+}
+const dtDynModel model = CompileSpecChecked(spec);
 ```
 
-The helper installs MuJoCo under `.validation_deps/mujoco-3.8.0` and Pinocchio under `.validation_deps/pinocchio-3.9.0`. CMake uses these paths by default for validation executables only. Override paths with `DTDYNAMICS_MUJOCO_ROOT`, `DTDYNAMICS_PINOCCHIO_ROOT`, or `DTDYNAMICS_VALIDATION_DEPS_DIR` when needed. LeoQuad's external package validator uses the external package cache by default; set `DTDYNAMICS_VALIDATION_DEPS_DIR` explicitly only when intentionally validating against another private cache.
+### 2-4. ID lookup과 cache
 
-Pinocchio is installed through a private conda-style prefix. If `micromamba`, `mamba`, or `conda` is not available on the system, the helper bootstraps a private `micromamba` binary under `.validation_deps/micromamba` and uses it only for the validation cache.
+```cpp
+const dtDynIndex body = spec.BodyId("base");
+const dtDynIndex joint = spec.JointId("hip");
+const dtDynIndex site = spec.SiteId("foot");
+const dtDynIndex actuator = spec.ActuatorId("hip_motor");
 
-The core topology fixtures are:
-
-- single fixed-base manipulator for serial-chain fixed-base behavior.
-- dual fixed-base manipulator for branched fixed-base behavior and cross-branch mass coupling.
-- fixed-base multi-robot model for independent world-root bodies, root masses, root-index mapping, and actuator metadata across separate model parts.
-- floating-base multi-robot model for multiple free-joint roots and per-root centroidal/CoM output validation.
-- floating-base quadruped for free-joint, centroidal, and WBC-facing behavior.
-- minimal world/fixed-body fixture for early regression coverage of body index `0` and no-joint fixed bodies.
-- four-bar/closed-chain fixture for equality-constraint diagnostics first, then loop-constraint ingredients after equality support is implemented.
-
-LeoQuad runtime validation is also required after native package or controller-integration changes. The minimum runtime gate is:
-
-```bash
-cmake --build build --target simRobot
-tools/validate_simrobot_trot.sh --smoke
-tools/validate_simrobot_trot.sh --headless-trot
-tools/validate_simrobot_trot.sh --trot
+if (body == DTDYN_INVALID_INDEX ||
+    joint == DTDYN_INVALID_INDEX ||
+    site == DTDYN_INVALID_INDEX ||
+    actuator == DTDYN_INVALID_INDEX)
+{
+    throw std::runtime_error("required body/joint/site/actuator is missing");
+}
 ```
 
-The `--smoke` mode catches startup regressions such as unallocated dtMath dynamic vectors. The `--headless-trot` mode runs `simRobot --headless-validate-trot`, bypasses GLFW, steps MuJoCo directly, sends the LeoQuad command sequence `i`, waits three seconds, then sends `f` followed by `i`, and checks that the controller reaches `CTRL_GAIT + GAIT_TROT` with finite state and sane base height. The `--trot` mode exercises the same transition through the visual simulator. Passing the scripted headless run is the automated CI-style gate; final acceptance should still include visual confirmation when simulator rendering or gait quality changed.
+### 2-5. Setup checklist
 
-For opt-in runtime timing of the migrated dynamics path, run:
+1. `LoadXmlFile()` 또는 `DecodeXml()`로 `dtDynSpec` 생성
+2. `ValidateSpec()`/`CompileSpecChecked()`로 외부 입력을 fail-closed 검증
+3. expected dimensions와 body/joint/site/actuator name 확인
+4. `DTDYN_INVALID_INDEX` 확인 후 numeric ID와 state-address mapping cache
+5. 동시 평가 instance마다 하나의 `dtDynData` 생성, `Resize(model)` 실행
+6. 이후 realtime state update와 compute 시작
 
-```bash
-SIMROBOT_PROFILE_DYNAMICS=1 tools/validate_simrobot_trot.sh --headless-trot
-```
+- 개념(lifecycle, address 규칙, `dtDynSpec`/`dtDynModel` 설계 근거): [modeling.md](manual/modeling.md)
 
-This prints `Robot::UpdateDynamics` sample count, mean, min, max, and last runtime in microseconds. The profiling flag is off by default so normal simulator/control runs do not pay the clock-measurement cost.
-When enabled, the output also splits the mean and last sample into `input`, `native`, and `export` sections. `input` covers qpos/qvel staging and gravity setup, `native` covers the reduced CCRBA plus indexed body/site Jacobians, and `export` covers copying `dtDynData` results into the existing LeoQuad controller-facing fields. A second native split reports reduced CCRBA and indexed Jacobian timing separately.
+## 3. 최소 end-to-end 예제
 
-## Benchmarking
+- 이 예제가 보여주는 순서: **load → validate → compile → resize → ID cache → state 입력 → compute**
+- 성격: simulator나 torque controller 예제가 아닌 dynamics ingredient 사용 예제
 
-Benchmarks should report:
-
-- update time in microseconds
-- maximum and mean errors for each quantity
-- dynamic allocation count in the realtime path
-- scaling with body count, fixed-body count, branch count, and task/site count
-
-Benchmark states should include nominal stance, asymmetric stance, nonzero base velocity, nonzero joint velocity, and XML models with fixed sensor/task bodies.
-
-The current benchmark targets are:
-
-- `benchmark_dtDynamics`: native `ComputeDynamicsCCRBA(..., DTDYN_CCRBA_TERM_ALL)` timing, internal consistency checks, and setup/off-loop resource rows for `CompileSpec(spec)` and fresh `dtDynData::Resize(model)`.
-- `benchmark_dtDynamicsStages`: native per-stage timing for forward kinematics, mass matrix, RNEA, CCRBA and its internal term substages, full Jacobians, indexed task Jacobians, gravity, and explicit RNEA/CCRBA dynamics entry points.
-- `benchmark_dtDynamicsReferences`: MuJoCo 3.8.0 and Pinocchio 3.9.0 reference-path timing plus native-vs-reference max/RMS error rows using the private validation cache.
-
-Build and run them with:
-
-```bash
-# Run from the standalone dtDynamics package root.
-cmake --preset validation
-cmake --build --preset validation -- -j2
-ctest --preset validation
-build/validation/bin/benchmark_dtDynamics
-build/validation/bin/benchmark_dtDynamicsStages
-build/validation/bin/benchmark_dtDynamicsReferences
-```
-
-Reference benchmarks link MuJoCo and Pinocchio only in the benchmark executable. They do not change the production `dtDynamics` package boundary.
-
-Before installing dtDynamics for downstream projects, run the release-readiness audit:
-
-```bash
-tools/audit_release_readiness.sh
-```
-
-The audit checks package artifacts and release invariants before running the package validator. It verifies that production `include/` and `src/` files have no MuJoCo or Pinocchio API dependency, no legacy facade/API names, no production `std::vector` use in native `dtDyn*` files, and that the `release` preset keeps tests, benchmarks, and reference targets off. It then runs `tools/validate_package.sh` unless `--skip-package-validation` is passed.
-
-After the audit passes and the source tree is committed, create a source
-handoff archive:
-
-```bash
-tools/package_release.sh --output-dir dist
-```
-
-The packaging helper refuses a dirty working tree, runs
-`tools/audit_release_readiness.sh` by default, archives git `HEAD`, and writes a
-matching `.sha256` checksum. The archive intentionally contains only committed
-source files, not `.validation_deps`, build directories, generated benchmark
-CSV/log files, or local install scratch directories.
-
-The package validator scans production include/source files for forbidden MuJoCo or Pinocchio API dependencies, builds native and reference tests, builds benchmark executables, runs `ctest`, and then runs the installed-package export check:
-
-```bash
-tools/validate_package.sh
-```
-
-For a narrower installed-package target and documentation check:
-
-```bash
-tools/validate_install_export.sh
-```
-
-The helper installs into a temporary prefix, verifies that the package exports `dt::Dynamics` without a legacy `dtDynamics::` target, checks that the installed production config does not contain MuJoCo or Pinocchio references, checks that package docs are installed, and builds a minimal downstream `find_package(dtDynamics CONFIG REQUIRED)` consumer.
-
-Downstream ART Framework integrations should maintain their own installed-package gate. The gate should run this package's release-readiness audit, install directly into `${ARTF_INSTALL_DIR:-~/.local/ART_Framework}`, configure the consumer with `find_package(dtDynamics CONFIG REQUIRED)`, reject stale isolated-prefix selection, and run the consumer's headless validation sequence. The standalone dtDynamics archive intentionally does not ship repository-specific downstream validation scripts.
-
-LeoQuad consumes the installed standalone dtDynamics package. The default installed prefix is `${ARTF_INSTALL_DIR:-~/.local/ART_Framework}`, and it can be overridden with `DTDYNAMICS_INSTALL_PREFIX`:
-
-```bash
-cmake -S . -B build-installed-dtdynamics \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DDTDYNAMICS_INSTALL_PREFIX=/path/to/ART_Framework/install
-cmake --build build-installed-dtdynamics --target dtcontrol simRobot -- -j2
-```
-
-The top-level LeoQuad build prepends `${DTDYNAMICS_INSTALL_PREFIX}` to `CMAKE_PREFIX_PATH` and sets `DTDYNAMICS_DTMATH_INCLUDE_DIR` to `${ARTF_INSTALL_DIR}/include` before `find_package(dtDynamics)`, matching the ART Framework dtMath install layout. dtDynamics package development is handled in this standalone package checkout, not through a LeoQuad local build override.
-
-`benchmark_dtDynamicsStages` can optionally load one external MJCF-like XML fixture for project-specific timing without adding that robot model to the standalone package:
-
-```bash
-DTDYNAMICS_BENCHMARK_ONLY_EXTERNAL=1 \
-DTDYNAMICS_BENCHMARK_XML=/path/to/LeoQuad_QD1.xml \
-DTDYNAMICS_BENCHMARK_XML_NAME=leoquad_qd1 \
-  build/validation/bin/benchmark_dtDynamicsStages
-```
-
-Leave `DTDYNAMICS_BENCHMARK_ONLY_EXTERNAL` unset to keep the built-in package fixtures and append the external fixture to the CSV output.
-
-Benchmarks append a final metadata CSV section beginning with `benchmark_metadata,key,value`. It records the benchmark executable name, CMake build type, compiler, C++ standard, platform, CPU model, hardware concurrency, clock source, clock steadiness, warmup iterations, measured iterations, batch count, and `NDEBUG` status.
-
-Set `DTDYNAMICS_BENCHMARK_BATCHES=N` to run each timing row across repeated batches. When `N > 1`, benchmarks append a `benchmark_batch_summary` CSV section with min/median/max of the per-batch mean, median, and p99 runtimes plus the maximum allocation count observed across batches. Leave the variable unset for the default single-batch output.
-
-The reference benchmark prints timing, optional `benchmark_sample`, numerical-error, optional batch-summary, and metadata sections. The numerical-error section begins with `comparison_reference,fixture,state,quantity,count,max_error,max_relative_error,rms_error,abs_tolerance,rel_tolerance,status,diagnostic`. Comparable rows use the documented absolute and relative tolerances; any `status=fail` row makes the executable exit nonzero after emitting the complete CSV. If a reference model is not semantically comparable for a quantity, the benchmark emits `status=skipped` with a diagnostic instead of reporting misleading errors.
-
-The stage benchmark prints one CSV section with `fixture,state,stage,nq,nv,nbody,nsite,iterations,mean_us,median_us,p99_us,allocation_mean,allocation_max`. Generated documentation tables may omit `allocation_mean` and `allocation_max` when every displayed row is zero; the CSV schema keeps them for regression checking. Use it to separate MuJoCo-overlap RNEA costs, dtDynamics-only CCRBA matrix costs, local CCRBA bias-force substages, and explicit Jacobian costs before drawing conclusions about performance. `ComputeDynamicsRNEA` computes the base mass and bias-force ingredients. `ComputeDynamicsCCRBA` computes the base mass, bias-force, and `Cmat` ingredients; optional flags add heavier centroidal outputs only when requested. The stage `compute_dynamics_ccrba_wbc_terms` times the common WBC mask `COM_POS | CMAMAT | CENT_MOM`; `leoquad_wbc_update` times that same reduced CCRBA call followed by indexed body/site `ComputeJacobians`. Neither dynamics call computes body/site Jacobians by itself; call `ComputeJacobians` separately for the full model or with body/site ID arrays for indexed task Jacobians. Plain one-off `ComputeBodyJacobian`, `ComputeSiteJacobian`, and `ComputePointJacobian` calls require current forward kinematics only. Jacobian-derivative, `Jdot*qvel`, combined derivative-term, and bulk/indexed Jacobian writers require a current RNEA or CCRBA pass because they consume dynamics-prepared spatial work arrays. LeoQuad uses the indexed body/site overload rather than `ComputeSiteJacobians`, because the controller still consumes the root/base body Jacobian together with task-site Jacobians. When a controller needs `J`, `Jdot`, and `Jdot*qvel` for a single point/body/site, use `ComputePointJacobianTerms`, `ComputeBodyJacobianTerms`, or `ComputeSiteJacobianTerms` so the shared column terms are computed once.
-
-Use Release builds for benchmark reporting. With single-config Unix Makefiles, an empty `CMAKE_BUILD_TYPE` compiles native `dtDynamics` without optimization, while MuJoCo and Pinocchio are optimized external libraries.
-
-## XML And Native Spec Examples
-
-The XML reader accepts a small MJCF-like subset. The root tag remains `<mujoco>` for file compatibility, but this is syntax only; it does not link the MuJoCo library.
-
-Minimal fixed-base arm:
+### 3-1. 입력 XML
 
 ```xml
-<mujoco model="single_arm">
+<mujoco>
   <worldbody>
-    <body name="base" pos="0 0 0">
-      <body name="link" pos="1 0 0">
-        <inertial pos="0.5 0 0" mass="2.5" diaginertia="0.1 0.2 0.3"/>
-        <joint name="hinge_z" type="hinge" axis="0 0 1" armature="0.05"/>
-        <site name="tool" pos="1 0 0"/>
+    <body name="base">
+      <body name="link1" pos="0.3 0 0">
+        <inertial pos="0.15 0 0" mass="1" diaginertia="0.01 0.02 0.02"/>
+        <joint name="shoulder" type="hinge" axis="0 0 1"/>
+        <body name="link2" pos="0.25 0 0">
+          <inertial pos="0.125 0 0" mass="0.8" diaginertia="0.008 0.012 0.012"/>
+          <joint name="elbow" type="hinge" axis="0 0 1"/>
+          <site name="tool" pos="0.2 0 0"/>
+        </body>
       </body>
     </body>
   </worldbody>
-  <actuator>
-    <motor name="hinge_motor" joint="hinge_z" gear="80"/>
-  </actuator>
+  <actuator><motor name="shoulder_motor" joint="shoulder"/></actuator>
 </mujoco>
 ```
 
-Floating-base root with a no-joint fixed sensor body:
-
-```xml
-<mujoco model="floating_sensor_body">
-  <worldbody>
-    <body name="base" pos="0 0 0">
-      <freejoint name="floating_base"/>
-      <body name="fixed_sensor_mount" pos="0.1 0 0">
-        <site name="imu_site" pos="0 0 0"/>
-      </body>
-    </body>
-  </worldbody>
-</mujoco>
-```
-
-The same model can be built programmatically through `dtDynSpec`:
+### 3-2. Program
 
 ```cpp
 #include <dtDynamics/dtDynCompile.h>
+#include <dtDynamics/dtDynData.h>
 #include <dtDynamics/dtDynDynamics.h>
-#include <dtDynamics/dtDynKinematics.h>
 #include <dtDynamics/dtDynSpec.h>
+#include <dtDynamics/dtDynValidation.h>
+
+#include <stdexcept>
+#include <string>
 
 using namespace dt::Dynamics;
 
-dtDynSpec spec;
-const dtDynIndex base = spec.AddBody("base", 0);
-spec.AddJoint(base, "floating_base", dtDynJointType::Free);
+int main(int argc, char **argv)
+{
+    if (argc != 2)
+    {
+        throw std::runtime_error("usage: example <model.xml>");
+    }
 
-const dtDynIndex link = spec.AddBody("link", base);
-spec.Bodies()[link].pos(0) = 0.35;
-spec.Bodies()[link].inertial.mass = 1.0;
-spec.Bodies()[link].inertial.inertia(0) = 0.02;
-spec.Bodies()[link].inertial.inertia(1) = 0.02;
-spec.Bodies()[link].inertial.inertia(2) = 0.01;
+    // Filesystem XML. XML text가 memory에 있으면 DecodeXml(xml)을 사용한다.
+    const dtDynSpec spec = dtDynSpec::LoadXmlFile(argv[1]);
 
-const dtDynIndex hip = spec.AddJoint(link, "hip_pitch", dtDynJointType::Hinge);
-spec.Joints()[hip].axis(1) = 1.0;
-const dtDynIndex foot = spec.AddSite(link, "foot");
-spec.Sites()[foot].pos(2) = -0.25;
+    dtDynValidationError validation;
+    if (!ValidateSpec(spec, &validation))
+    {
+        throw std::runtime_error(validation.message);
+    }
+    const dtDynModel model = CompileSpecChecked(spec);
 
-const dtDynModel model = CompileSpec(spec);
+    dtDynData data;
+    data.Resize(model); // setup-time allocation
+    if (!data.IsCompatible(model))
+    {
+        throw std::runtime_error("storage dimensions do not match model");
+    }
+
+    // Spec와 Model 모두 같은 네 lookup family를 제공한다.
+    const dtDynIndex specBody = spec.BodyId("link2");
+    const dtDynIndex specJoint = spec.JointId("elbow");
+    const dtDynIndex tool = model.SiteId("tool");
+    const dtDynIndex shoulderMotor = model.ActuatorId("shoulder_motor");
+    if (specBody == DTDYN_INVALID_INDEX ||
+        specJoint == DTDYN_INVALID_INDEX ||
+        tool == DTDYN_INVALID_INDEX ||
+        shoulderMotor == DTDYN_INVALID_INDEX)
+    {
+        throw std::runtime_error("required model name is missing");
+    }
+
+    // 이 fixture는 scalar hinge 두 개다. 실제 controller는 compiled address mapping을 사용한다.
+    data.qpos(0) = 0.20;
+    data.qpos(1) = -0.30;
+    data.qvel(0) = 0.10;
+    data.qvel(1) = 0.05;
+
+    dt::Math::Vector3<dtDynReal> gravity;
+    gravity(0) = 0.0;
+    gravity(1) = 0.0;
+    gravity(2) = -9.81;
+
+    const dtDynCcrbaTermFlags terms =
+        DTDYN_CCRBA_TERM_COM_POS |
+        DTDYN_CCRBA_TERM_COM_JMAT |
+        DTDYN_CCRBA_TERM_CENT_MOM;
+    ComputeDynamicsCCRBA(model, data, gravity, terms);
+
+    // 결과는 data.Mmat, data.gravityTorq, data.coriolisTorq,
+    // data.nonlinTorq와 요청한 CoM/centroidal field에 있다.
+    (void)tool;
+    (void)shoulderMotor;
+    return 0;
+}
+```
+
+### 3-3. 실패 진단
+
+- 파일 XML semantic error 보존 정보: exact source path와 zero-based byte offset
+
+```cpp
+catch (const dtDynXmlError &error)
+{
+    Log(error.Code(), error.SourcePath(), error.Offset(), error.what());
+}
+```
+
+- programmatic mutation으로 topology 오류 발생 시: `ValidateSpec(spec, &error)`가 `error.code`, `error.object`, `error.index`, `error.message` 채움
+- 금지 사항: `what()`이나 process exit code만으로 machine category 추론
+- 개념(예제 설계 의도, `CompileSpec`/neutral-state 주의): [example.md](manual/example.md)
+
+## 4. Controller/WBC 통합 절차
+
+### 4-1. Setup에서 한 번 수행할 일
+
+1. XML file이면 `dtDynSpec::LoadXmlFile()`, memory text이면 `DecodeXml()` 호출
+2. 외부·편집 입력은 `ValidateSpec()` 또는 `CompileSpecChecked()`로 검증
+3. `dtDynData::Resize(model)`로 storage 준비
+4. `BodyId`, `JointId`, `SiteId`, `ActuatorId` 조회 후 `DTDYN_INVALID_INDEX` 검사
+5. estimator의 state mapping과 active task ID를 controller 쪽에 cache
+
+```cpp
+const dtDynSpec spec = dtDynSpec::LoadXmlFile(modelPath);
+const dtDynModel model = CompileSpecChecked(spec);
+
 dtDynData data;
 data.Resize(model);
+
+const dtDynIndex foot = model.SiteId("front_left_foot");
+const dtDynIndex hipMotor = model.ActuatorId("front_left_hip_motor");
+if (foot == DTDYN_INVALID_INDEX || hipMotor == DTDYN_INVALID_INDEX)
+{
+    throw std::runtime_error("required controller mapping is missing");
+}
 ```
 
-Set state, run kinematics, dynamics, and task Jacobian terms:
+### 4-2. Control tick
 
-```cpp
-data.qpos(0) = 0.0;
-data.qpos(1) = 0.0;
-data.qpos(2) = 0.5;
-data.qpos(3) = 1.0;  // free-joint quaternion w
-data.qpos(4) = 0.0;  // x
-data.qpos(5) = 0.0;  // y
-data.qpos(6) = 0.0;  // z
-data.qpos(7) = 0.2;  // first hinge after the free joint
+- 아래는 controller-owned symbol을 포함한 **pseudocode**
+- `Jp`, `Jr`, `JdvP`, `JdvR`: setup에서 `3 x model.nv`로 미리 sizing
 
-data.qvel.SetZero();
-data.qvel(0) = 0.1;  // base linear velocity in world frame
-data.qvel(4) = 0.2;  // base angular velocity in body frame, y row
-data.qvel(6) = 0.3;  // hinge velocity
-
-dt::Math::Vector3<dtDynReal> gravity;
-gravity(0) = 0.0;
-gravity(1) = 0.0;
-gravity(2) = -9.81;
-
-ForwardKinematics(model, data);
-
-constexpr dtDynCcrbaTermFlags wbcTerms =
-    DTDYN_CCRBA_TERM_COM_POS |
-    DTDYN_CCRBA_TERM_CMAMAT |
-    DTDYN_CCRBA_TERM_CENT_MOM;
-ComputeDynamicsCCRBA(model, data, gravity, wbcTerms);
-
-dtDynDenseMatrix jacp;
-dtDynDenseMatrix jacr;
-dtDynDenseMatrix jacpDot;
-dtDynDenseMatrix jacrDot;
-dt::Math::Vector3<dtDynReal> linearJdotQvel;
-dt::Math::Vector3<dtDynReal> angularJdotQvel;
-
-ComputeSiteJacobianTerms(model,
-                         data,
-                         model.SiteId("foot"),
-                         &jacp,
-                         &jacr,
-                         &jacpDot,
-                         &jacrDot,
-                         &linearJdotQvel,
-                         &angularJdotQvel);
+```text
+WriteEstimatorStateInto(data.qpos, data.qvel); // controller-owned mapping
+ComputeDynamicsCCRBA(model, data, gravity, wbcTermMask);
+ComputeSiteJacobianTerms(model, data, foot,
+                         &Jp, &Jr, nullptr, nullptr, &JdvP, &JdvR);
+SolveControllerProblem(data.Mmat, data.nonlinTorq,
+                       Jp, Jr, JdvP, JdvR); // controller-owned solver
 ```
 
-For model-wide cached Jacobians, use `ComputeJacobians(model, data)` after the dynamics call. For realtime controllers, prefer the indexed overload:
+> **주의 — setup-time vs realtime 경계**
+>
+> tick 안에서 금지: name lookup, XML, validation, compilation, `Resize()`.
+>
+> caller-owned Jacobian matrix 처리: strict zero-allocation path 필요 시 loop 진입 전에 미리 sizing.
 
-```cpp
-dtDynArray<dtDynIndex> bodyIds;
-dtDynArray<dtDynIndex> siteIds;
-bodyIds.push_back(model.root_bodyid[0]);
-siteIds.push_back(model.SiteId("foot"));
+- 개념(WBC handoff 식, 여러 instance/model update 원칙, LeoQuad 경계): [integration.md](manual/integration.md)
 
-ComputeJacobians(model, data, bodyIds, siteIds);
+## 5. Realtime 적용 checklist
+
+### 5-1. Setup phase (loop 밖에서 수행)
+
+1. `LoadXmlFile()`/`DecodeXml()` 또는 programmatic API로 `dtDynSpec` 생성
+2. `ValidateSpec()`/`CompileSpecChecked()` 실행
+3. `dtDynData::Resize(model)` 실행
+4. body/joint/site/actuator ID와 state address cache
+5. caller-owned Jacobian/output matrix pre-size
+6. controller/estimator convention에 따른 explicit state initialization
+
+### 5-2. Realtime phase
+
+1. estimator state를 기존 `qpos`/`qvel` storage에 기록
+2. 필요한 최소 `ComputeDynamicsRNEA()` 또는 reduced-mask `ComputeDynamicsCCRBA()` 호출
+3. active task에 필요한 Jacobian만 계산
+4. 결과를 controller task structure에 전달
+
+> **주의 — setup-time vs realtime 경계**
+>
+> loop 배제 대상: XML I/O, validation, compile, resize, name lookup, model hot-swap.
+
+- 개념(allocation evidence, 여러 evaluation instance, timing 해석): [realtime.md](manual/realtime.md)
+
+## 6. 검증 실행 방법
+
+### 6-1. Reference/artifact 검증
+
+```bash
+python3 tools/validate_reference_benchmark.py \
+  --references /path/to/accepted-reference.csv \
+  --runtime-csv docs/figures/runtime_by_fixture.csv
+
+python3 tools/validate_benchmark_results.py \
+  --native /path/to/native.csv \
+  --stages /path/to/stages.csv \
+  --references /path/to/reference.csv \
+  --generated docs/figures
 ```
 
-## Output Quantity Reference
+### 6-2. Package validation gate
 
-Let `nr = max(model.nroot, 1)` for storage sizing. Centroidal and CoM outputs are stacked by actual model root for multi-root models; when `model.nroot == 0`, the fallback block is reserved storage and is not an implied populated aggregate result. In each 6-row centroidal block, rows `0..2` are linear rows and rows `3..5` are angular rows. `qvel` columns always use the MuJoCo-compatible velocity order described earlier.
-
-| Field | Shape | Frame/order | Prerequisite call | Controller use |
-|---|---:|---|---|---|
-| `qpos` | `nq` | base position in world, free quaternion `w x y z`, then joints | user writes before computation | generalized position input |
-| `qvel` | `nv` | base linear velocity in world, base angular velocity in body, then joints | user writes before computation | generalized velocity input |
-| `xpos` | `nbody x 3` | body origin position in world | `ForwardKinematics` or dynamics call | body pose/state export |
-| `xmat` | `nbody x 3 x 3` | body orientation in world | `ForwardKinematics` or dynamics call | body frame transforms |
-| `xipos` | `nbody x 3` | body inertial-frame CoM position in world | `ForwardKinematics` or dynamics call | CoM and inertia exports |
-| `ximat` | `nbody x 3 x 3` | inertial frame orientation in world | `ForwardKinematics` or dynamics call | inertia-frame transforms |
-| `subtree_com` | `nbody x 3` | subtree CoM position in world | every `ComputeDynamicsRNEA` or `ComputeDynamicsCCRBA` pass | subtree/root CoM checks |
-| `site_xpos` | `nsite x 3` | site position in world | `ForwardKinematics` or dynamics call | task pose export |
-| `site_xmat` | `nsite x 3 x 3` | site orientation in world | `ForwardKinematics` or dynamics call | task orientation export |
-| `body_jacp`, `site_jacp` | each `3 x nv` | linear velocity rows in world | `ComputeBodyJacobians`, `ComputeSiteJacobians`, or `ComputeJacobians` | task linear acceleration constraints |
-| `body_jacr`, `site_jacr` | each `3 x nv` | angular velocity rows | same Jacobian call | task angular acceleration constraints |
-| `body_jacp_dot`, `site_jacp_dot` | each `3 x nv` | time derivative of linear Jacobian | same Jacobian call or `Compute*JacobianTerms` | `Jdot*qvel` and feedforward acceleration |
-| `body_jacr_dot`, `site_jacr_dot` | each `3 x nv` | time derivative of angular Jacobian | same Jacobian call or `Compute*JacobianTerms` | angular `Jdot*qvel` |
-| `Mmat` | `nv x nv` | generalized velocity order | `ComputeDynamicsRNEA` or `ComputeDynamicsCCRBA` | WBC inertia matrix |
-| `MmatDot` | `nv x nv` | generalized velocity order | `ComputeDynamicsCCRBA(..., MMAT_DOT)` | derivative-aware controllers and diagnostics |
-| `Cmat` | `nv x nv` | controller convention where `coriolisTorq = Cmat * qvel` | `ComputeDynamicsCCRBA` | controllers that need an explicit Coriolis matrix |
-| `gravityTorq` | `nv` | generalized force order | `ComputeDynamicsRNEA` or `ComputeDynamicsCCRBA` | gravity compensation ingredient |
-| `coriolisTorq` | `nv` | generalized force order | `ComputeDynamicsRNEA` or `ComputeDynamicsCCRBA` | bias-force split and diagnostics |
-| `nonlinTorq` | `nv` | `gravityTorq + coriolisTorq` | `ComputeDynamicsRNEA` or `ComputeDynamicsCCRBA` | standard nonlinear/bias torque vector |
-| `comJmat` | `3*nr x nv` | per-root CoM linear Jacobian in world | `ComputeDynamicsCCRBA(..., COM_JMAT)` | CoM task constraints |
-| `comJmatDot` | `3*nr x nv` | per-root CoM Jacobian derivative in world | `ComputeDynamicsCCRBA(..., COM_JMAT_DOT)` | CoM `Jdot*qvel` |
-| `cmAmat` | `6*nr x nv` | per-root centroidal momentum matrix, linear then angular | `ComputeDynamicsCCRBA(..., CMAMAT)` | centroidal momentum control |
-| `cmAmatDot` | `6*nr x nv` | time derivative of `cmAmat` | `ComputeDynamicsCCRBA(..., CMAMAT_DOT)` | derivative-aware momentum control |
-| `centMom` | `6*nr` | per-root centroidal momentum, linear then angular | `ComputeDynamicsCCRBA(..., CENT_MOM)` | momentum feedback |
-| `comPos` | `3*nr` | per-root CoM position in world | `ComputeDynamicsRNEA(..., COM_POS)` or `ComputeDynamicsCCRBA(..., COM_POS)` | CoM tracking |
-| `comVel` | `3*nr` | per-root CoM velocity in world | `ComputeDynamicsCCRBA(..., COM_VEL)` | CoM velocity feedback |
-
-Scratch arrays such as `cdof`, `cdof_dot`, `cvel`, `cinert`, `crb`, `BmatComp`, `f1`, `f2`, and `f3` are exposed in `dtDynData` for validation and advanced diagnostics. Controllers should treat them as implementation details unless they are intentionally validating the spatial algorithm.
-
-## Controller Integration
-
-Controllers should consume `dtDynModel` and `dtDynData` directly. For LeoQuad migration, the control stack should stop copying dynamics outputs into a separate shadow data structure and should read these fields directly from `dtDynData`:
-
-- `Mmat`
-- `Cmat`
-- `gravityTorq`
-- `nonlinTorq`
-- `linTaskJmat`
-- `angTaskJmat`
-- `linJmatDotqVel`
-- `angJmatDotqVel`
-- `comJmat`
-- `comJmatDot`
-- `cmAmat`
-- `cmAmatDot`
-- `centMom`
-
-Legacy LeoQuad body numbering should be migrated to MuJoCo-compatible `dtDynModel` IDs. Controllers can cache named body/site/joint IDs during initialization as controller configuration.
-
-The expected LeoQuad realtime sequence is:
-
-```cpp
-constexpr dtDynCcrbaTermFlags dynamicsTerms =
-    DTDYN_CCRBA_TERM_COM_POS |
-    DTDYN_CCRBA_TERM_CMAMAT |
-    DTDYN_CCRBA_TERM_CENT_MOM;
-
-ComputeDynamicsCCRBA(model, data, gravity, dynamicsTerms);
-ComputeJacobians(model, data, cachedBodyIds, cachedSiteIds);
+```bash
+cmake --preset validation
+cmake --build --preset validation -- -j2
+ctest --preset validation --output-on-failure
+tools/validate_package.sh --skip-benchmarks
+python3 tools/validate_docs.py
 ```
 
-`cachedBodyIds` should include the root/base body when the controller needs a base Jacobian. `cachedSiteIds` should include only the task sites required by the current control stack. This keeps Jacobian computation outside the dynamics pass while avoiding the incorrect site-only shortcut for controllers that depend on base-body quantities.
+- 개념(setup/native/external validation 의미, artifact 판정 기준): [validation.md](manual/validation.md)
 
-For one-off task points, request the exact Jacobian terms needed in one call:
+## 7. Benchmark 재현 방법
 
-```cpp
-dtDynDenseMatrix footJacp;
-dtDynDenseMatrix footJacr;
-dtDynDenseMatrix footJacpDot;
-dtDynDenseMatrix footJacrDot;
-dt::Math::Vector3<dtDynReal> footLinJdotQvel;
-dt::Math::Vector3<dtDynReal> footAngJdotQvel;
+### 7-1. CSV 생성
 
-ComputeSiteJacobianTerms(model,
-                         data,
-                         footSiteId,
-                         &footJacp,
-                         &footJacr,
-                         &footJacpDot,
-                         &footJacrDot,
-                         &footLinJdotQvel,
-                         &footAngJdotQvel);
+```bash
+cd /path/to/dtDynamics
+cmake --preset validation
+cmake --build --preset validation -- -j2
+export DTDYNAMICS_BENCHMARK_CPU=0
+export DTDYNAMICS_BENCHMARK_BATCHES=7
+taskset -c "$DTDYNAMICS_BENCHMARK_CPU" build/validation/bin/benchmark_dtDynamics > /tmp/native.csv
+taskset -c "$DTDYNAMICS_BENCHMARK_CPU" build/validation/bin/benchmark_dtDynamicsStages > /tmp/stages.csv
+taskset -c "$DTDYNAMICS_BENCHMARK_CPU" build/validation/bin/benchmark_dtDynamicsReferences > /tmp/references.csv
 ```
 
-Pass `nullptr` for outputs that are not needed. This API keeps task-specific `J`, `Jdot`, and `Jdot*qvel` requests separate from the model-wide cached Jacobian arrays in `dtDynData`.
+### 7-2. Table/figure 생성 및 검증
 
-## Scope Limits
+```bash
+python3 tools/plot_benchmark_results.py \
+  --native /tmp/native.csv \
+  --stages /tmp/stages.csv \
+  --references /tmp/references.csv \
+  --out /tmp/dtdyn_figures \
+  --tables-out /tmp/dtdyn_tables
 
-The first redesign does not include:
+python3 tools/validate_benchmark_results.py \
+  --native /tmp/native.csv \
+  --stages /tmp/stages.csv \
+  --generated /tmp/dtdyn_figures
 
-- contact solving
-- forward simulation integrators
-- final torque command generation
-- dual-quaternion generalized coordinates
-- multiple coordinate-type modes
-- full MJCF feature parity
-- closed-chain dynamics before the equality-constraint layer is implemented
+python3 tools/validate_reference_benchmark.py \
+  --references /tmp/references.csv \
+  --runtime-csv /tmp/dtdyn_figures/runtime_by_fixture.csv
+```
 
-Current native XML support covers a small MJCF-like subset for bodies, inertials, joints, sites, and motor actuators. Unsupported loop-closure features such as `<equality>` and tendon elements fail with explicit diagnostics until the equality-constraint layer is implemented.
+- 산출물: `runtime_by_fixture.{csv,png}`, `scaling_by_dof.{csv,png}`, `stage_breakdown.{csv,png}` (CSV는 mean/median/p95/p99 보존, figure는 median 사용)
+
+### 7-3. GitLab Markdown 문서 확인
+
+- 원칙: Markdown source를 GitLab 저장소에서 직접 열람, generated HTML/PDF artifact와 GitLab Pages 미사용
+- CI `markdown-docs` job: `python3 tools/validate_documentation_content.py`, `python3 tools/validate_docs.py` 실행
+- GitLab renderer는 fenced `math` block과 `$` backtick-delimited inline math를 직접 렌더링
+- Markdown viewer 렌더링은 GitLab 웹 화면에서 확인; CI는 source/link/math-marker/SVG diagram 정합성만 fail-closed 검증
+- 개념(측정 scope, 해석 경계, evidence snapshot): [benchmarks.md](manual/benchmarks.md)
+
+## 8. Markdown 문서·Release 절차
+
+### 8-1. Markdown 문서 검증
+
+```bash
+cd /path/to/dtDynamics
+python3 tools/validate_documentation_content.py
+python3 tools/validate_docs.py
+```
+
+- Markdown source, relative link, GitLab math marker, SVG diagram, current narrative invariant 검증
+- HTML/PDF 생성·generated HTML·LaTeX·GitLab Pages 불필요
+
+### 8-2. Release gate
+
+```bash
+cmake --preset validation
+cmake --build --preset validation -- -j2
+ctest --preset validation --output-on-failure
+
+tools/validate_package.sh --skip-benchmarks
+tools/validate_install_export.sh
+python3 tools/validate_docs.py
+tools/audit_release_readiness.sh
+```
+
+> **주의 — Publication 경계**
+>
+> 검증 PASS ≠ 자동 publication consent. commit/push/tag/release 또는 외부 게시 전 필수 절차: 변경 범위와 evidence 제시, 명시적 승인 획득.
+>
+> source archive 생성 조건: clean committed tree와 exact tag 승인 이후만.
+
+- 개념(package surface 체크리스트, publication 경계 rationale): [release.md](manual/release.md)
+
+## 9. Troubleshooting
+
+| 증상                                            | 원인/확인                                                                             | 참고                                                                              |
+| --------------------------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `dtDynXmlError` 발생                            | malformed/duplicate/unresolved XML, invalid number, wrong arity, 잘못된 vector arity | `error.Code()`/`SourcePath()`/`Offset()` 확인 — [modeling.md](manual/modeling.md) |
+| lookup이 `DTDYN_INVALID_INDEX` 반환              | 이름 오타, 아직 compile 안 된 spec에서 조회, 모델에 실제로 없는 body/joint/site/actuator              | 예외 대신 반환값이므로 반드시 확인 후 indexing — [modeling.md](manual/modeling.md)              |
+| `IsCompatible(model)`이 `true`인데 결과가 이상함       | `IsCompatible()`은 storage dimension만 확인, model identity/topology/inertia 동일성 미보장  | model 교체 시 ID/address cache 재생성 — [modeling.md](manual/modeling.md)             |
+| model 재compile 후 이상 동작                        | 차원이 같아도 cached ID/address가 stale할 수 있음                                            | `Resize()` 재검토 및 lookup 재수행 — [modeling.md](manual/modeling.md)                 |
+| `find_package(dtDynamics 0.1.1 EXACT ...)` 실패 | installed package identity가 0.1.1이 아니거나 EXACT 불일치                                 | `tools/validate_install_export.sh` 재실행 — [release.md](manual/release.md)        |
+| 검증에서 external row가 `skipped`                  | 해당 quantity에 대응하는 Pinocchio/MuJoCo contract가 없음 (equivalent contract 없음)          | 정상 동작 (실패 아님) — [validation.md](manual/validation.md)                           |
+| `qpos`를 0으로 초기화했더니 이상함                        | free/ball joint quaternion이 invalid할 수 있음 (package-level neutral initializer 없음)  | 명시적 초기화 필요 — [modeling.md](manual/modeling.md), [example.md](manual/example.md) |
+
+## 10. 상세 설명 chapter와 관련 문서
+
+- 1장 [개요](manual/overview.md)
+- 2장 [모델과 데이터 수명주기](manual/modeling.md)
+- 3장 [계산 pipeline](manual/computation.md)
+- 4장 [최소 예제](manual/example.md)
+- 5장 [Realtime resource model](manual/realtime.md)
+- 6장 [검증](manual/validation.md)
+- 7장 [Benchmark](manual/benchmarks.md)
+- 8장 [Controller 통합](manual/integration.md)
+- 9장 [API 지도](manual/api.md)
+- 10장 [제한](manual/limitations.md)
+- 11장 [Release 경계](manual/release.md)
+
+| 독자                          | 우선 읽을 곳                                                                |
+| --------------------------- | ---------------------------------------------------------------------- |
+| library/controller consumer | 이 문서 2~4장 → chapter 8 Controller 통합 → chapter 9 API 지도                 |
+| model author (XML 작성자)      | 이 문서 2장 → chapter 2 모델과 데이터 수명주기 → `docs/guides/model_guide/`          |
+| package/release maintainer  | 이 문서 6~8장 → chapter 6 검증 → chapter 7 Benchmark → chapter 11 Release 경계 |
+
+- 이 문서: how-to/실행 절차 전용 — 중복된 상세 contract 미유지
+- API, coordinate, benchmark 설명: 위 canonical chapter가 소유
+- 과거 release evidence: `docs/release-notes/`에 별도 보존
+
+## 관련 문서
+
+- 상세 설명 chapter 목차: `docs/manual/index.md`
+- model guide: `docs/guides/model_guide/`
+- usage/migration guide: `docs/guides/usage_guide/`
+- benchmark evidence: [docs/benchmark-results.md](benchmark-results.md)
+- release note: `docs/release-notes/v0.1.1.md`
+- Markdown 문서 gate: Python 3. Diagram source 변경 시 `tools/render_diagrams.sh`와 Graphviz `dot` 사용
+- `v0.1.0-rc1`~`rc3` release note: 과거 기준 보존 (현재 `0.1.1`의 근거로 소급 해석 금지)

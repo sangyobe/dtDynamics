@@ -103,5 +103,5 @@
 <text x="1390" y="764" class="note-body">lib/cmake/dtDynamics.</text>
 <rect x="72" y="902" width="1656" height="96" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
 <text x="104" y="942" class="note-title">Release target</text>
-<text x="104" y="975" class="note-body">Release candidate: package version 0.1.0.</text>
+<text x="104" y="975" class="note-body">Release candidate: package version 0.1.1.</text>
 </svg>

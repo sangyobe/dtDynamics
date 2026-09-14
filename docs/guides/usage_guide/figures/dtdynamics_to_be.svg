@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1120" viewBox="0 0 1800 1120" role="img" aria-labelledby="title desc">
+<title id="title">To-Be: standalone dt::Dynamics package</title>
+<desc id="desc">Updated To-Be: standalone dt::Dynamics package diagram with smaller arrows and clearer package/data-flow structure.</desc>
+
+  <defs>
+    <filter id="shadow" x="-8%" y="-8%" width="116%" height="122%">
+      <feDropShadow dx="0" dy="7" stdDeviation="8" flood-color="#0f172a" flood-opacity="0.10"/>
+    </filter>
+    <marker id="arrow-red" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="strokeWidth">
+      <path d="M1,1 L7,4 L1,7 Z" fill="#b91c1c"/>
+    </marker>
+    <marker id="arrow-teal" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="strokeWidth">
+      <path d="M1,1 L7,4 L1,7 Z" fill="#0f766e"/>
+    </marker>
+    <style>
+      .title { font-family: Arial, Helvetica, sans-serif; font-size: 48px; font-weight: 800; fill: #0f172a; letter-spacing: 0; }
+      .subtitle { font-family: Arial, Helvetica, sans-serif; font-size: 22px; fill: #475569; letter-spacing: 0; }
+      .section { font-family: Arial, Helvetica, sans-serif; font-size: 17px; font-weight: 800; letter-spacing: 0.06em; }
+      .box-title { font-family: Arial, Helvetica, sans-serif; font-size: 23px; font-weight: 800; fill: #0f172a; letter-spacing: 0; }
+      .box-body { font-family: Arial, Helvetica, sans-serif; font-size: 17px; fill: #334155; letter-spacing: 0; }
+      .note-title { font-family: Arial, Helvetica, sans-serif; font-size: 20px; font-weight: 800; fill: #0f172a; letter-spacing: 0; }
+      .note-body { font-family: Arial, Helvetica, sans-serif; font-size: 16px; fill: #334155; letter-spacing: 0; }
+      .chip { font-family: Arial, Helvetica, sans-serif; font-size: 15px; font-weight: 800; letter-spacing: 0; }
+    </style>
+  </defs>
+
+<rect width="1800" height="1120" fill="#ecfeff"/>
+<rect x="0" y="0" width="1800" height="16" fill="#0f766e"/>
+<text x="76" y="88" class="title">To-Be: standalone dt::Dynamics package</text>
+<text x="78" y="128" class="subtitle">Native dtDyn* API, dtMath-first storage, MuJoCo-style indexing, direct WBC data access, and isolated reference validation.</text>
+<text x="78" y="186" class="section" fill="#0f766e">MAIN DATA FLOW</text>
+<g filter="url(#shadow)">
+<rect x="72" y="220" width="300" height="290" rx="8" fill="#fff" stroke="#99f6e4" stroke-width="2"/>
+<rect x="72" y="220" width="300" height="54" rx="8" fill="#ccfbf1"/>
+<text x="96" y="255" class="box-title">dtDynSpec</text>
+<text x="96" y="311" class="box-body">MJCF-like XML syntax</text>
+<text x="96" y="346" class="box-body">global body and fixed</text>
+<text x="96" y="375" class="box-body">bodies before compile</text>
+</g>
+<path d="M379,365 C405,365 373,365 399,365" fill="none" stroke="#0f766e" stroke-width="2.4" stroke-linecap="round" marker-end="url(#arrow-teal)"/>
+<g filter="url(#shadow)">
+<rect x="406" y="220" width="300" height="290" rx="8" fill="#fff" stroke="#bfdbfe" stroke-width="2"/>
+<rect x="406" y="220" width="300" height="54" rx="8" fill="#dbeafe"/>
+<text x="430" y="255" class="box-title">dtDynCompile</text>
+<text x="430" y="311" class="box-body">builds deterministic</text>
+<text x="430" y="340" class="box-body">arrays</text>
+<text x="430" y="375" class="box-body">resolves names, parents,</text>
+<text x="430" y="404" class="box-body">inertias, and dof</text>
+<text x="430" y="433" class="box-body">addresses</text>
+</g>
+<path d="M713,365 C739,365 707,365 733,365" fill="none" stroke="#0f766e" stroke-width="2.4" stroke-linecap="round" marker-end="url(#arrow-teal)"/>
+<g filter="url(#shadow)">
+<rect x="740" y="220" width="300" height="290" rx="8" fill="#fff" stroke="#99f6e4" stroke-width="2"/>
+<rect x="740" y="220" width="300" height="54" rx="8" fill="#ccfbf1"/>
+<text x="764" y="255" class="box-title">dtDynModel</text>
+<text x="764" y="311" class="box-body">MuJoCo-style signed ids</text>
+<text x="764" y="346" class="box-body">qpos/qvel/body/site</text>
+<text x="764" y="375" class="box-body">layouts match native</text>
+<text x="764" y="404" class="box-body">conventions</text>
+</g>
+<path d="M1047,365 C1073,365 1041,365 1067,365" fill="none" stroke="#0f766e" stroke-width="2.4" stroke-linecap="round" marker-end="url(#arrow-teal)"/>
+<g filter="url(#shadow)">
+<rect x="1074" y="220" width="300" height="290" rx="8" fill="#fff" stroke="#bfdbfe" stroke-width="2"/>
+<rect x="1074" y="220" width="300" height="54" rx="8" fill="#dbeafe"/>
+<text x="1098" y="255" class="box-title">dtDynData</text>
+<text x="1098" y="311" class="box-body">single runtime output</text>
+<text x="1098" y="340" class="box-body">store</text>
+<text x="1098" y="375" class="box-body">M, C, g, bias, Jacobians,</text>
+<text x="1098" y="404" class="box-body">CoM, centroidal terms</text>
+</g>
+<path d="M1381,365 C1407,365 1375,365 1401,365" fill="none" stroke="#0f766e" stroke-width="2.4" stroke-linecap="round" marker-end="url(#arrow-teal)"/>
+<g filter="url(#shadow)">
+<rect x="1408" y="220" width="300" height="290" rx="8" fill="#fff" stroke="#bbf7d0" stroke-width="2"/>
+<rect x="1408" y="220" width="300" height="54" rx="8" fill="#dcfce7"/>
+<text x="1432" y="255" class="box-title">LeoQuad / WBC</text>
+<text x="1432" y="311" class="box-body">consumes dtDynData</text>
+<text x="1432" y="340" class="box-body">directly</text>
+<text x="1432" y="375" class="box-body">controller computes tau</text>
+<text x="1432" y="404" class="box-body">from selected ingredients</text>
+</g>
+<text x="78" y="590" class="section" fill="#0f766e">KEY INTERPRETATION</text>
+<rect x="72" y="622" width="394" height="226" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+<text x="94" y="656" class="note-title">Production boundary</text>
+<text x="94" y="689" class="note-body">dtDynamics links as dt::Dynamics</text>
+<text x="94" y="714" class="note-body">and depends on dtMath only. No</text>
+<text x="94" y="739" class="note-body">MuJoCo or Pinocchio in production.</text>
+<rect x="504" y="622" width="394" height="226" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+<text x="526" y="656" class="note-title">Dynamics pipeline</text>
+<text x="526" y="689" class="note-body">ForwardKinematics,</text>
+<text x="526" y="714" class="note-body">ComputeDynamicsCCRBA/RNEA,</text>
+<text x="526" y="739" class="note-body">ComputeJacobians, and term helpers</text>
+<text x="526" y="764" class="note-body">are explicit.</text>
+<rect x="936" y="622" width="394" height="226" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+<text x="958" y="656" class="note-title">Validation sandbox</text>
+<text x="958" y="689" class="note-body">MuJoCo 3.8.0 and Pinocchio 3.9.0</text>
+<text x="958" y="714" class="note-body">stay under package validation</text>
+<text x="958" y="739" class="note-body">paths and benchmarks.</text>
+<rect x="1368" y="622" width="394" height="226" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+<text x="1390" y="656" class="note-title">Install layout</text>
+<text x="1390" y="689" class="note-body">Installed directly to ARTF:</text>
+<text x="1390" y="714" class="note-body">include/dtDynamics,</text>
+<text x="1390" y="739" class="note-body">lib/libdtDynamics.a,</text>
+<text x="1390" y="764" class="note-body">lib/cmake/dtDynamics.</text>
+<rect x="72" y="902" width="1656" height="96" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+<text x="104" y="942" class="note-title">Release target</text>
+<text x="104" y="975" class="note-body">Release candidate: package version 0.1.1.</text>
+</svg>

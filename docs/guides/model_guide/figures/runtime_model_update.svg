@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
+  <title id="title">Runtime model update double buffer</title>
+  <desc id="desc">Safe runtime model update pattern where a candidate model and data pair is decoded, compiled, resized, validated, optionally state-migrated, then swapped at a control boundary.</desc>
+  <defs>
+    <style>
+      .bg { fill: #f8fafc; }
+      .lane { fill: #ffffff; stroke: #cbd5e1; stroke-width: 2; rx: 18; }
+      .live { fill: #dcfce7; stroke: #15803d; stroke-width: 2.5; rx: 14; }
+      .candidate { fill: #dbeafe; stroke: #2563eb; stroke-width: 2.5; rx: 14; }
+      .gate { fill: #fef3c7; stroke: #b45309; stroke-width: 2.5; rx: 14; }
+      .danger { fill: #fee2e2; stroke: #b91c1c; stroke-width: 2.5; rx: 14; }
+      .title { font: 700 34px Arial, sans-serif; fill: #0f172a; }
+      .laneTitle { font: 700 25px Arial, sans-serif; fill: #0f172a; }
+      .label { font: 700 22px Arial, sans-serif; fill: #0f172a; }
+      .body { font: 400 17px Arial, sans-serif; fill: #334155; }
+      .small { font: 400 15px Arial, sans-serif; fill: #475569; }
+      .arrow { stroke: #334155; stroke-width: 3; fill: none; marker-end: url(#arrowhead); }
+      .dash { stroke: #64748b; stroke-width: 2.5; stroke-dasharray: 8 8; fill: none; marker-end: url(#arrowhead); }
+    </style>
+    <marker id="arrowhead" markerWidth="12" markerHeight="8" refX="11" refY="4" orient="auto">
+      <path d="M0,0 L12,4 L0,8 Z" fill="#334155"/>
+    </marker>
+  </defs>
+  <rect class="bg" x="0" y="0" width="1600" height="900"/>
+  <text class="title" x="70" y="70">Runtime model update: build off-loop, swap at a safe boundary</text>
+
+  <rect class="lane" x="70" y="120" width="1460" height="260"/>
+  <text class="laneTitle" x="100" y="165">Live real-time side</text>
+
+  <rect class="live" x="120" y="210" width="260" height="115"/>
+  <text class="label" x="150" y="252">model A + data A</text>
+  <text class="body" x="150" y="284">current stable buffers</text>
+  <text class="body" x="150" y="310">controller owns IDs</text>
+
+  <rect class="live" x="500" y="210" width="260" height="115"/>
+  <text class="label" x="530" y="252">UpdateDynamics</text>
+  <text class="body" x="530" y="284">write qpos/qvel</text>
+  <text class="body" x="530" y="310">compute outputs</text>
+
+  <rect class="danger" x="880" y="210" width="300" height="115"/>
+  <text class="label" x="910" y="252">Do not mutate live</text>
+  <text class="body" x="910" y="284">no XML parse in tick</text>
+  <text class="body" x="910" y="310">no resize in tick</text>
+
+  <rect class="live" x="1260" y="210" width="220" height="115"/>
+  <text class="label" x="1290" y="252">controller</text>
+  <text class="body" x="1290" y="284">WBC fields</text>
+  <text class="body" x="1290" y="310">task commands</text>
+
+  <path class="arrow" d="M380 268 L500 268"/>
+  <path class="arrow" d="M760 268 L880 268"/>
+  <path class="arrow" d="M1180 268 L1260 268"/>
+
+  <rect class="lane" x="70" y="450" width="1460" height="330"/>
+  <text class="laneTitle" x="100" y="495">Candidate update side</text>
+
+  <rect class="candidate" x="120" y="545" width="210" height="115"/>
+  <text class="label" x="150" y="587">new XML</text>
+  <text class="body" x="150" y="619">or edited spec</text>
+  <text class="body" x="150" y="645">not live yet</text>
+
+  <rect class="candidate" x="405" y="545" width="230" height="115"/>
+  <text class="label" x="435" y="587">Decode/Edit</text>
+  <text class="body" x="435" y="619">dtDynSpec</text>
+  <text class="body" x="435" y="645">dynamic model</text>
+
+  <rect class="candidate" x="710" y="545" width="230" height="115"/>
+  <text class="label" x="740" y="587">Compile/Resize</text>
+  <text class="body" x="740" y="619">model B</text>
+  <text class="body" x="740" y="645">data B buffers</text>
+
+  <rect class="gate" x="1015" y="545" width="230" height="115"/>
+  <text class="label" x="1045" y="587">Validate</text>
+  <text class="body" x="1045" y="619">dims and names</text>
+  <text class="body" x="1045" y="645">cache IDs</text>
+
+  <rect class="gate" x="1320" y="545" width="160" height="115"/>
+  <text class="label" x="1345" y="587">Swap</text>
+  <text class="body" x="1345" y="619">safe boundary</text>
+  <text class="body" x="1345" y="645">atomic handoff</text>
+
+  <path class="arrow" d="M330 603 L405 603"/>
+  <path class="arrow" d="M635 603 L710 603"/>
+  <path class="arrow" d="M940 603 L1015 603"/>
+  <path class="arrow" d="M1245 603 L1320 603"/>
+  <path class="dash" d="M1400 545 C1390 440 1330 370 1160 325"/>
+  <text class="small" x="1160" y="430">state migration by name, then handoff</text>
+</svg>

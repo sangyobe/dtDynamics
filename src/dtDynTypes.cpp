@@ -3,7 +3,7 @@
  \brief     Native dtDynamics type utility definitions.
  \author    Joonhee Jo, joonhee.jo@hyundai.com
  \date      2026. 07. 16
- \version   0.1.0
+ \version   0.1.1
  \copyright RoboticsLab ART All rights reserved.
 */
 
@@ -13,11 +13,6 @@
 
 namespace dt::Dynamics
 {
-
-std::size_t ToSize(const dtDynIndex value)
-{
-    return value > 0 ? static_cast<std::size_t>(value) : static_cast<std::size_t>(0);
-}
 
 uint16_t ToDtMathDim(const dtDynIndex value)
 {

@@ -18,7 +18,7 @@ Usage: tools/audit_release_readiness.sh [options]
 
 Options:
   --skip-package-validation  Skip package build/test/install validation.
-  --skip-docs-validation     Skip Doxygen/Graphviz documentation validation.
+  --skip-docs-validation     Skip Markdown documentation validation.
   --keep-work-root           Keep the temporary audit build root.
   -h, --help                 Show this help text.
 
@@ -141,8 +141,7 @@ require_file include/dtDynamics/dtDynKinematics.h
 require_file include/dtDynamics/dtDynDynamics.h
 require_file docs/manual.md
 require_file docs/benchmark-results.md
-require_file Doxyfile
-require_file tools/validate_docs.sh
+require_file tools/validate_docs.py
 require_dir docs/manual
 require_dir test/test_dtDynTypes
 require_dir test/test_dtDynamicsMujocoRef
@@ -173,12 +172,11 @@ cache_file="${WORK_ROOT}/release-preset/CMakeCache.txt"
 cache_bool_must_be_off DTDYNAMICS_BUILD_TEST "${cache_file}"
 cache_bool_must_be_off DTDYNAMICS_BUILD_BENCHMARK "${cache_file}"
 cache_bool_must_be_off DTDYNAMICS_BUILD_REFERENCE_BENCHMARK "${cache_file}"
-cache_bool_must_be_off DTDYNAMICS_BUILD_DOCS "${cache_file}"
 cache_bool_must_be_off BUILD_DTDYNAMICS_MUJOCO_TEST "${cache_file}"
 cache_bool_must_be_off BUILD_DTDYNAMICS_PINOCCHIO_TEST "${cache_file}"
 
 if [[ "${RUN_DOCS_VALIDATION}" == "ON" ]]; then
-    "${SCRIPT_DIR}/validate_docs.sh"
+    python3 "${SCRIPT_DIR}/validate_docs.py"
 fi
 
 if [[ "${RUN_PACKAGE_VALIDATION}" == "ON" ]]; then

@@ -3,13 +3,16 @@
  \brief     Native dtDynamics spec-to-model compiler definitions.
  \author    Joonhee Jo, joonhee.jo@hyundai.com
  \date      2026. 07. 16
- \version   0.1.0
+ \version   0.1.1
  \copyright RoboticsLab ART All rights reserved.
 */
 
 #include "dtDynamics/dtDynCompile.h"
 
 #include "dtDynamics/dtDynMath.h"
+#include "dtDynamics/dtDynValidation.h"
+
+#include <stdexcept>
 
 namespace dt::Dynamics
 {
@@ -240,23 +243,20 @@ void CompileSpec(const dtDynSpec &spec, dtDynModel &model)
     model.nroot = static_cast<dtDynIndex>(model.root_bodyid.size());
     ResizeDenseVector(model.root_mass, model.nroot);
 
+    dtArray<dtDynIndex> rootSlotByBody;
+    rootSlotByBody.assign(model.nbody, DTDYN_INVALID_INDEX);
     for (dtDynIndex rootIdx = 0; rootIdx < model.nroot; ++rootIdx)
     {
         const dtDynIndex rootBody = model.root_bodyid[static_cast<std::size_t>(rootIdx)];
+        rootSlotByBody[static_cast<std::size_t>(rootBody)] = rootIdx;
         model.root_mass(rootIdx) = model.body_subtreemass(rootBody);
     }
 
     for (dtDynIndex bodyId = 1; bodyId < model.nbody; ++bodyId)
     {
         const dtDynIndex rootBody = model.body_rootid[static_cast<std::size_t>(bodyId)];
-        for (dtDynIndex rootIdx = 0; rootIdx < model.nroot; ++rootIdx)
-        {
-            if (model.root_bodyid[static_cast<std::size_t>(rootIdx)] == rootBody)
-            {
-                model.body_rootidx[static_cast<std::size_t>(bodyId)] = rootIdx;
-                break;
-            }
-        }
+        model.body_rootidx[static_cast<std::size_t>(bodyId)] =
+            rootSlotByBody[static_cast<std::size_t>(rootBody)];
     }
 
     model.RebuildNameMaps();
@@ -266,6 +266,22 @@ dtDynModel CompileSpec(const dtDynSpec &spec)
 {
     dtDynModel model;
     CompileSpec(spec, model);
+    return model;
+}
+
+dtDynModel CompileSpecChecked(const dtDynSpec &spec)
+{
+    dtDynValidationError error;
+    if (!ValidateSpec(spec, &error))
+    {
+        throw std::runtime_error("CompileSpecChecked: " + error.message);
+    }
+    dtDynModel model = CompileSpec(spec);
+    if (!ValidateModel(model, &error))
+    {
+        throw std::runtime_error("CompileSpecChecked: compiled model validation failed: " +
+                                 error.message);
+    }
     return model;
 }
 

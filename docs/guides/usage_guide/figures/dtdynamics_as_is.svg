@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1120" viewBox="0 0 1800 1120" role="img" aria-labelledby="title desc">
+<title id="title">As-Is: coupled legacy dynamics stack</title>
+<desc id="desc">Updated As-Is: coupled legacy dynamics stack diagram with smaller arrows and clearer package/data-flow structure.</desc>
+
+  <defs>
+    <filter id="shadow" x="-8%" y="-8%" width="116%" height="122%">
+      <feDropShadow dx="0" dy="7" stdDeviation="8" flood-color="#0f172a" flood-opacity="0.10"/>
+    </filter>
+    <marker id="arrow-red" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="strokeWidth">
+      <path d="M1,1 L7,4 L1,7 Z" fill="#b91c1c"/>
+    </marker>
+    <marker id="arrow-teal" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="strokeWidth">
+      <path d="M1,1 L7,4 L1,7 Z" fill="#0f766e"/>
+    </marker>
+    <style>
+      .title { font-family: Arial, Helvetica, sans-serif; font-size: 48px; font-weight: 800; fill: #0f172a; letter-spacing: 0; }
+      .subtitle { font-family: Arial, Helvetica, sans-serif; font-size: 22px; fill: #475569; letter-spacing: 0; }
+      .section { font-family: Arial, Helvetica, sans-serif; font-size: 17px; font-weight: 800; letter-spacing: 0.06em; }
+      .box-title { font-family: Arial, Helvetica, sans-serif; font-size: 23px; font-weight: 800; fill: #0f172a; letter-spacing: 0; }
+      .box-body { font-family: Arial, Helvetica, sans-serif; font-size: 17px; fill: #334155; letter-spacing: 0; }
+      .note-title { font-family: Arial, Helvetica, sans-serif; font-size: 20px; font-weight: 800; fill: #0f172a; letter-spacing: 0; }
+      .note-body { font-family: Arial, Helvetica, sans-serif; font-size: 16px; fill: #334155; letter-spacing: 0; }
+      .chip { font-family: Arial, Helvetica, sans-serif; font-size: 15px; font-weight: 800; letter-spacing: 0; }
+    </style>
+  </defs>
+
+<rect width="1800" height="1120" fill="#fff7ed"/>
+<rect x="0" y="0" width="1800" height="16" fill="#b91c1c"/>
+<text x="76" y="88" class="title">As-Is: coupled legacy dynamics stack</text>
+<text x="78" y="128" class="subtitle">Controller data, shadow model structures, legacy kernels, and validation concerns were mixed across package boundaries.</text>
+<text x="78" y="186" class="section" fill="#b91c1c">MAIN DATA FLOW</text>
+<g filter="url(#shadow)">
+<rect x="72" y="220" width="300" height="290" rx="8" fill="#fff" stroke="#fecaca" stroke-width="2"/>
+<rect x="72" y="220" width="300" height="54" rx="8" fill="#fee2e2"/>
+<text x="96" y="255" class="box-title">LeoQuad / WBC</text>
+<text x="96" y="311" class="box-body">Controller asks for WBC</text>
+<text x="96" y="340" class="box-body">ingredients</text>
+<text x="96" y="375" class="box-body">Torque policy lives</text>
+<text x="96" y="404" class="box-body">outside dynamics</text>
+</g>
+<path d="M379,365 C405,365 373,365 399,365" fill="none" stroke="#b91c1c" stroke-width="2.4" stroke-linecap="round" marker-end="url(#arrow-red)"/>
+<g filter="url(#shadow)">
+<rect x="406" y="220" width="300" height="290" rx="8" fill="#fff" stroke="#fed7aa" stroke-width="2"/>
+<rect x="406" y="220" width="300" height="54" rx="8" fill="#ffedd5"/>
+<text x="430" y="255" class="box-title">Adapter layer</text>
+<text x="430" y="311" class="box-body">robotModel and robotData</text>
+<text x="430" y="340" class="box-body">shadows</text>
+<text x="430" y="375" class="box-body">name/id mapping and field</text>
+<text x="430" y="404" class="box-body">copies</text>
+</g>
+<path d="M713,365 C739,365 707,365 733,365" fill="none" stroke="#b91c1c" stroke-width="2.4" stroke-linecap="round" marker-end="url(#arrow-red)"/>
+<g filter="url(#shadow)">
+<rect x="740" y="220" width="300" height="290" rx="8" fill="#fff" stroke="#fecaca" stroke-width="2"/>
+<rect x="740" y="220" width="300" height="54" rx="8" fill="#fee2e2"/>
+<text x="764" y="255" class="box-title">Legacy facade</text>
+<text x="764" y="311" class="box-body">RobotEngineBase and</text>
+<text x="764" y="340" class="box-body">dtDynamics.h</text>
+<text x="764" y="375" class="box-body">migration API mixed with</text>
+<text x="764" y="404" class="box-body">package API</text>
+</g>
+<path d="M1047,365 C1073,365 1041,365 1067,365" fill="none" stroke="#b91c1c" stroke-width="2.4" stroke-linecap="round" marker-end="url(#arrow-red)"/>
+<g filter="url(#shadow)">
+<rect x="1074" y="220" width="300" height="290" rx="8" fill="#fff" stroke="#fde68a" stroke-width="2"/>
+<rect x="1074" y="220" width="300" height="54" rx="8" fill="#fef3c7"/>
+<text x="1098" y="255" class="box-title">Custom kernels</text>
+<text x="1098" y="311" class="box-body">custom math and coordinate</text>
+<text x="1098" y="340" class="box-body">branches</text>
+<text x="1098" y="375" class="box-body">CRBA/RNEA/centroidal paths</text>
+<text x="1098" y="404" class="box-body">tied together</text>
+</g>
+<path d="M1381,365 C1407,365 1375,365 1401,365" fill="none" stroke="#b91c1c" stroke-width="2.4" stroke-linecap="round" marker-end="url(#arrow-red)"/>
+<g filter="url(#shadow)">
+<rect x="1408" y="220" width="300" height="290" rx="8" fill="#fff" stroke="#cbd5e1" stroke-width="2"/>
+<rect x="1408" y="220" width="300" height="54" rx="8" fill="#f1f5f9"/>
+<text x="1432" y="255" class="box-title">Validation path</text>
+<text x="1432" y="311" class="box-body">benchmarks existed but</text>
+<text x="1432" y="340" class="box-body">package boundary was</text>
+<text x="1432" y="369" class="box-body">fragile</text>
+<text x="1432" y="404" class="box-body">external references were</text>
+<text x="1432" y="433" class="box-body">not isolated enough</text>
+</g>
+<text x="78" y="590" class="section" fill="#b91c1c">KEY INTERPRETATION</text>
+<rect x="72" y="622" width="394" height="226" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+<text x="94" y="656" class="note-title">Package boundary risk</text>
+<text x="94" y="689" class="note-body">Dynamics, adapters, simulator-</text>
+<text x="94" y="714" class="note-body">facing assumptions, and controller</text>
+<text x="94" y="739" class="note-body">migration lived too close</text>
+<text x="94" y="764" class="note-body">together.</text>
+<rect x="504" y="622" width="394" height="226" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+<text x="526" y="656" class="note-title">Convention drift</text>
+<text x="526" y="689" class="note-body">Unsigned/sentinel id mismatch and</text>
+<text x="526" y="714" class="note-body">multiple coordinate modes made</text>
+<text x="526" y="739" class="note-body">MuJoCo-style indexing hard to</text>
+<text x="526" y="764" class="note-body">guarantee.</text>
+<rect x="936" y="622" width="394" height="226" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+<text x="958" y="656" class="note-title">Runtime friction</text>
+<text x="958" y="689" class="note-body">Copied data structures and broad</text>
+<text x="958" y="714" class="note-body">recomputation made the control</text>
+<text x="958" y="739" class="note-body">loop harder to reason about and</text>
+<text x="958" y="764" class="note-body">profile.</text>
+<rect x="1368" y="622" width="394" height="226" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+<text x="1390" y="656" class="note-title">Release fragility</text>
+<text x="1390" y="689" class="note-body">Install-prefix and dependency</text>
+<text x="1390" y="714" class="note-body">layout were easy to misconfigure</text>
+<text x="1390" y="739" class="note-body">for downstream projects.</text>
+<rect x="72" y="902" width="1656" height="128" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+<text x="104" y="942" class="note-title">Redesign target</text>
+<text x="104" y="975" class="note-body">Keep and add the useful physical quantities, but move to a standalone native package with MuJoCo-style model/data</text>
+<text x="104" y="1000" class="note-body">conventions, dtMath storage, direct controller access, and separate validation tools.</text>
+</svg>

@@ -1,102 +1,128 @@
-# Computation Pipeline {#dtdynamics_computation}
+# 3. 계산 파이프라인
 
-@dotfile diagrams/compute_pipeline.dot
+Author: Joonhee Jo
 
-## State staging
+![compute pipeline diagram](diagrams/compute_pipeline.svg)
 
-A typical control tick writes `qpos`, `qvel`, and gravity into an already resized `dtDynData`. State staging must match the compiled model dimensions and address conventions.
+## 3-1. State staging
 
-## Forward kinematics
+- 일반적인 control tick 동작: 이미 resize된 `dtDynData`에 `qpos`, `qvel`, gravity 기록
+- 필수 조건: state staging이 compiled model dimensions와 address convention에 일치
 
-Forward kinematics computes body/site poses and motion quantities used by dynamics and Jacobian functions. Call it explicitly when only kinematics are required, or rely on dynamics entry points that perform their prerequisite kinematic updates.
+## 3-2. Forward kinematics
 
-## RNEA path
+- Forward kinematics 계산 항목: dynamics와 Jacobian 함수가 사용하는 body/site pose와 motion quantity
+- 명시적 호출 시점: kinematics만 필요할 때
+- 대안: prerequisite kinematic update를 자체 수행하는 dynamics entry point에 의존
 
-The manipulator equation used by the controller-facing API is
+## 3-3. RNEA path
 
-\f[
+- controller-facing API가 사용하는 manipulator equation:
+
+```math
 M(q)\dot{v} + h(q, v) = \tau + J(q)^\mathsf{T} f,
-\f]
+```
 
-where `M` is the generalized mass matrix, `h` collects bias terms such as Coriolis, centrifugal, and gravity effects, `J` is a task/contact Jacobian, and `f` is an external wrench or constraint force vector supplied by higher-level software.
+- `M`: generalized mass matrix
+- `h`: Coriolis, centrifugal, gravity effect 등 bias term 모음
+- `J`: task/contact Jacobian
+- `f`: 상위 software가 공급하는 external wrench 또는 constraint force vector
 
-`ComputeDynamicsRNEA` is the lighter recursive Newton-Euler path for mass/bias/gravity/Coriolis-style ingredients available through the RNEA contract. Use it when the controller does not need CCRBA-specific centroidal/composite outputs.
+- `ComputeDynamicsRNEA` 성격: RNEA contract로 제공되는 mass/bias/gravity/Coriolis-style ingredient용 경량 recursive Newton-Euler path
+- 사용 시점: controller가 CCRBA 전용 centroidal/composite output이 불필요할 때
 
-## CCRBA path
+## 3-4. CCRBA path
 
-The composite/centroidal path exposes quantities used in WBC objectives, including the centroidal momentum relation
+- composite/centroidal path 제공 항목: WBC objective가 사용하는 quantity (centroidal momentum relation 포함)
 
-\f[
+```math
 h_G = A_G(q) v,
-\f]
+```
 
-and its first-order variation
+- 1차 변화량:
 
-\f[
+```math
 \dot{h}_G = A_G(q)\dot{v} + \dot{A}_G(q, v)v.
-\f]
+```
 
-`ComputeDynamicsCCRBA` is the control-oriented composite rigid-body path. It computes the mass/bias basis and optional WBC terms such as `Cmat`, `MmatDot`, `cmAmat`, `cmAmatDot`, `comJmat`, `comJmatDot`, `centMom`, and CoM quantities according to term masks.
+- `ComputeDynamicsCCRBA` 성격: control-oriented composite rigid-body path
+- 계산 항목: mass/bias basis, term mask에 따른 선택적 WBC term (`Cmat`, `MmatDot`, `cmAmat`, `cmAmatDot`, `comJmat`, `comJmatDot`, `centMom`, CoM quantity)
 
-The term mask is a realtime design tool. Request only the outputs consumed by the controller tick. LeoQuad, for example, uses a reduced CCRBA mask and computes indexed body/site Jacobians separately.
+- term mask 용도: realtime design tool
+- 원칙: controller tick이 소비하는 output만 요청 (예: LeoQuad는 reduced CCRBA mask 사용, indexed body/site Jacobian은 별도 계산)
 
-## Output families and equations
+## 3-5. Output families and equations
 
-The base dynamics outputs are organized around the usual split
+- 기본 dynamics output 구성 방식: 일반적인 분리
 
-\f[
+```math
 h(q,v) = C(q,v)v + g(q),
-\f]
+```
 
-with fields for the mass matrix `Mmat`, matrix-style Coriolis representation `Cmat`, gravity torque `gravityTorq`, Coriolis torque `coriolisTorq`, and combined nonlinear torque `nonlinTorq`. Exact controller usage varies: some stacks consume `nonlinTorq` directly, while others keep gravity and velocity terms separate for feedforward or diagnostics.
+- 필드: mass matrix `Mmat`, matrix-style Coriolis representation `Cmat`, gravity torque `gravityTorq`, Coriolis torque `coriolisTorq`, combined nonlinear torque `nonlinTorq`
+- 실제 controller 사용 방식 차이: 일부는 `nonlinTorq` 직접 소비, 일부는 feedforward/diagnostics를 위해 gravity와 velocity term을 분리 유지
 
-The mass matrix should be treated as a generalized-coordinate inertia matrix,
+- mass matrix 취급 방식: generalized-coordinate inertia matrix
 
-\f[
+```math
 T = \frac{1}{2} v^\mathsf{T} M(q) v,
-\f]
+```
 
-and validation checks include symmetry residuals. A controller should still decide whether it needs the full dense matrix, selected rows, or only products supplied by a higher-level layer.
+- validation 검사 항목에 symmetry residual 포함
+- controller의 별도 결정 사항: full dense matrix, selected rows, 또는 상위 layer가 공급하는 product만 필요한지 여부
 
-Centroidal quantities are exposed per root. For a root system, the centroidal momentum matrix maps generalized velocity to centroidal momentum,
+- Centroidal quantity 노출 단위: root별
+- root system의 centroidal momentum matrix 역할: generalized velocity를 centroidal momentum으로 매핑
 
-\f[
+```math
 h_G = A_G(q)v,
-\f]
+```
 
-with rows documented as `[linear; angular]`. When derivative terms are requested, the controller can form
+- 행 순서 문서화: `[linear; angular]`
+- derivative term 요청 시 controller 구성 가능 식:
 
-\f[
+```math
 \dot{h}_G = A_G(q)\dot{v} + \dot{A}_G(q,v)v.
-\f]
+```
 
-CoM quantities are similarly optional. If the WBC objective only needs CoM position and Jacobian, request those flags and leave centroidal derivatives disabled.
+- CoM quantity 성격: 마찬가지로 선택적
+- WBC objective가 CoM position과 Jacobian만 필요할 때: 해당 flag만 요청, centroidal derivative는 비활성 유지
 
-## Dependency order
+## 3-6. Dependency order
 
-The safe mental model is:
+- 안전한 mental model:
 
-1. state is staged in `qpos`/`qvel`;
-2. forward kinematics establishes world transforms and motion subspaces;
-3. dynamics fills mass, bias, gravity/Coriolis, and optional composite quantities;
-4. task Jacobian calls use the current kinematic state and selected task IDs.
+1. state는 `qpos`/`qvel`에 staging
+2. forward kinematics가 world transform과 motion subspace 확립
+3. dynamics가 mass, bias, gravity/Coriolis, 선택적 composite quantity 채움
+4. task Jacobian 호출이 현재 kinematic state와 선택한 task ID 사용
 
-Dynamics entry points run their own prerequisite kinematic updates. Calling `ForwardKinematics()` explicitly is sufficient when a tick needs only transforms or a plain one-off body/site/point Jacobian. Jacobian-derivative, `Jdot*qvel`, combined-term derivative outputs, and bulk/indexed `dtDynData` Jacobian writers additionally require a current `ComputeDynamicsRNEA()` or `ComputeDynamicsCCRBA()` pass because they consume `subtree_com`, `cvel`, `cdof`, and `cdof_dot`.
+- Dynamics entry point 특성: 자체 prerequisite kinematic update 실행
+- `ForwardKinematics()` 명시적 호출로 충분한 경우: tick이 transform 또는 단발성 body/site/point Jacobian만 필요할 때
+- 추가로 현재 `ComputeDynamicsRNEA()` 또는 `ComputeDynamicsCCRBA()` pass가 필요한 경우: Jacobian-derivative, `Jdot*qvel`, combined-term derivative output, bulk/indexed `dtDynData` Jacobian writer (이들은 `subtree_com`, `cvel`, `cdof`, `cdof_dot` 소비)
 
-## Jacobian APIs
+## 3-7. Jacobian APIs
 
-Task velocities follow the standard differential relation
+- Task velocity가 따르는 표준 differential relation:
 
-\f[
+```math
 \dot{x} = J(q)v,
-\f]
+```
 
-and acceleration-level controllers commonly consume
+- acceleration-level controller가 일반적으로 소비하는 식:
 
-\f[
+```math
 \ddot{x} = J(q)\dot{v} + \dot{J}(q, v)v.
-\f]
+```
 
-Use indexed body/site Jacobian calls when the controller needs only a base body and selected task sites. Use all-body/all-site calls for diagnostics or tooling, not as the default realtime path.
+- indexed body/site Jacobian 호출 사용 시점: controller가 base body와 선택한 task site만 필요할 때
+- all-body/all-site 호출 용도: diagnostics나 tooling (default realtime path 아님)
 
-For realtime WBC, prefer the combined `Compute*JacobianTerms()` helpers when a task needs both \f$J\f$ and \f$\dot{J}v\f$. Passing `nullptr` for unused outputs documents the exact ingredients needed by the task and avoids duplicate traversal work for the same body, site, or point.
+- realtime WBC 권장 방식: task가 $`J`$와 $`\dot{J}v`$ 모두 필요할 때 combined `Compute*JacobianTerms()` helper 사용
+- 미사용 output에 `nullptr` 전달 효과: task가 필요로 하는 정확한 ingredient 문서화, 같은 body/site/point에 대한 중복 traversal 작업 방지
+
+## 관련 문서
+
+- 이전 chapter: [모델과 데이터 수명주기](modeling.md)
+- 다음 chapter: [최소 end-to-end 예제](example.md)
+- 전체 목차: [전체 목차](index.md)

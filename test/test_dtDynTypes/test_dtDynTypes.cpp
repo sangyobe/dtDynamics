@@ -6,16 +6,600 @@
 #include "dtDynamics/dtDynMath.h"
 #include "dtDynamics/dtDynSpec.h"
 #include "dtDynamics/dtDynUtils.h"
+#include "dtDynamics/dtDynValidation.h"
+
+#ifdef NDEBUG
+#error "test_dtDynTypes requires active assertions"
+#endif
 
 #include <cassert>
+#include <chrono>
 #include <cmath>
+#include <filesystem>
+#include <fstream>
+#include <limits>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 
 using namespace dt::Dynamics;
 
+static_assert(ToSize(-1) == 0U);
+static_assert(ToSize(0) == 0U);
+static_assert(ToSize(7) == 7U);
+static_assert(utils::RootCentroidalLinearRow(2) == 12);
+static_assert(utils::RootCentroidalAngularRow(2) == 15);
+static_assert(utils::RootComRow(2) == 6);
+
 namespace
 {
+
+std::filesystem::path UniqueTempPath(const std::string &stem)
+{
+    static unsigned long long sequence = 0;
+    const auto ticks = std::chrono::steady_clock::now().time_since_epoch().count();
+    return std::filesystem::temp_directory_path() /
+           (stem + "_" + std::to_string(ticks) + "_" + std::to_string(sequence++));
+}
+
+void TestCheckedCompileAcceptsValidSpec()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("base", 0);
+    spec.AddJoint(body, "hinge", dtDynJointType::Hinge);
+
+    dtDynValidationError error;
+    assert(ValidateSpec(spec, &error));
+    assert(error.code == dtDynValidationCode::None);
+
+    const dtDynModel trusted = CompileSpec(spec);
+    const dtDynModel checked = CompileSpecChecked(spec);
+    assert(checked.nbody == trusted.nbody);
+    assert(checked.njnt == trusted.njnt);
+    assert(checked.nq == trusted.nq);
+    assert(checked.nv == trusted.nv);
+}
+
+void TestCheckedCompileRejectsInvalidParent()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("base", 0);
+    spec.Bodies()[body].parent = 99;
+
+    dtDynValidationError error;
+    assert(!ValidateSpec(spec, &error));
+    assert(error.code == dtDynValidationCode::InvalidParent);
+    assert(error.object == dtDynObjectType::Body);
+    assert(error.index == body);
+    assert(error.message.find("body[1]") != std::string::npos);
+
+    bool rejected = false;
+    try
+    {
+        (void)CompileSpecChecked(spec);
+    }
+    catch (const std::runtime_error &exception)
+    {
+        rejected = std::string(exception.what()).find("body[1]") != std::string::npos;
+    }
+    assert(rejected);
+}
+
+void TestSpecValidationRejectsDetachedJoint()
+{
+    dtDynSpec spec;
+    const dtDynIndex joint = spec.AddJoint(99, "detached", dtDynJointType::Hinge);
+
+    dtDynValidationError error;
+    assert(!ValidateSpec(spec, &error));
+    assert(error.code == dtDynValidationCode::DetachedObject);
+    assert(error.object == dtDynObjectType::Joint);
+    assert(error.index == joint);
+    assert(error.message.find("joint[0]") != std::string::npos);
+}
+
+void TestSpecValidationRejectsSiblingCycle()
+{
+    dtDynSpec spec;
+    const dtDynIndex first = spec.AddBody("first", 0);
+    const dtDynIndex second = spec.AddBody("second", 0);
+    spec.Bodies()[second].nextSibling = second;
+
+    dtDynValidationError error;
+    assert(!ValidateSpec(spec, &error));
+    assert(error.code == dtDynValidationCode::TopologyCycle);
+    assert(error.object == dtDynObjectType::Body);
+    assert(error.index == second);
+    (void)first;
+}
+
+void TestSpecValidationRejectsDetachedSite()
+{
+    dtDynSpec spec;
+    const dtDynIndex site = spec.AddSite(99, "detached_site");
+
+    dtDynValidationError error;
+    assert(!ValidateSpec(spec, &error));
+    assert(error.code == dtDynValidationCode::DetachedObject);
+    assert(error.object == dtDynObjectType::Site);
+    assert(error.index == site);
+}
+
+void TestSpecValidationRejectsInvalidActuatorReference()
+{
+    dtDynSpec spec;
+    const dtDynIndex actuator = spec.AddActuator(99, "invalid_motor");
+
+    dtDynValidationError error;
+    assert(!ValidateSpec(spec, &error));
+    assert(error.code == dtDynValidationCode::InvalidReference);
+    assert(error.object == dtDynObjectType::Actuator);
+    assert(error.index == actuator);
+}
+
+void TestSpecValidationRejectsInvalidBodyJointReference()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("base", 0);
+    spec.AddJoint(body, "hinge", dtDynJointType::Hinge);
+    spec.Bodies()[body].joints[0] = 99;
+
+    dtDynValidationError error;
+    assert(!ValidateSpec(spec, &error));
+    assert(error.code == dtDynValidationCode::InvalidReference);
+    assert(error.object == dtDynObjectType::Body);
+    assert(error.index == body);
+}
+
+void TestSpecValidationRejectsDuplicateNames()
+{
+    dtDynSpec spec;
+    spec.AddBody("duplicate", 0);
+    const dtDynIndex duplicate = spec.AddBody("duplicate", 0);
+
+    dtDynValidationError error;
+    assert(!ValidateSpec(spec, &error));
+    assert(error.code == dtDynValidationCode::DuplicateName);
+    assert(error.object == dtDynObjectType::Body);
+    assert(error.index == duplicate);
+}
+
+void TestSpecValidationRejectsDuplicateEmptyNames()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("base", 0);
+    spec.AddJoint(body, "", dtDynJointType::Hinge);
+    const dtDynIndex duplicate = spec.AddJoint(body, "", dtDynJointType::Hinge);
+
+    dtDynValidationError error;
+    assert(!ValidateSpec(spec, &error));
+    assert(error.code == dtDynValidationCode::DuplicateName);
+    assert(error.object == dtDynObjectType::Joint);
+    assert(error.index == duplicate);
+}
+
+void TestSpecValidationRejectsNonFiniteValues()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("base", 0);
+    spec.Bodies()[body].inertial.mass = std::numeric_limits<dtDynReal>::infinity();
+
+    dtDynValidationError error;
+    assert(!ValidateSpec(spec, &error));
+    assert(error.code == dtDynValidationCode::NonFiniteValue);
+    assert(error.object == dtDynObjectType::Body);
+    assert(error.index == body);
+}
+
+void TestModelValidationRejectsDimensionOverflow()
+{
+    dtDynModel model;
+    model.nq = static_cast<dtDynIndex>(std::numeric_limits<uint16_t>::max()) + 1;
+
+    dtDynValidationError error;
+    assert(!ValidateModel(model, &error));
+    assert(error.code == dtDynValidationCode::DimensionOverflow);
+    assert(error.message.find("nq") != std::string::npos);
+}
+
+void TestSpecValidationRejectsDimensionOverflowBeforeCompile()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("base", 0);
+    for (dtDynIndex joint = 0; joint < 9400; ++joint)
+    {
+        spec.AddJoint(body, "", dtDynJointType::Free);
+    }
+
+    dtDynValidationError error;
+    assert(!ValidateSpec(spec, &error));
+    assert(error.code == dtDynValidationCode::DimensionOverflow);
+    assert(error.object == dtDynObjectType::Joint);
+}
+
+void TestModelValidationRejectsArrayShapeMismatch()
+{
+    dtDynSpec spec;
+    spec.AddBody("base", 0);
+    dtDynModel model = CompileSpec(spec);
+    model.body_parentid.clear();
+
+    dtDynValidationError error;
+    assert(!ValidateModel(model, &error));
+    assert(error.code == dtDynValidationCode::InvalidReference);
+    assert(error.message.find("body_parentid") != std::string::npos);
+}
+
+void TestModelValidationRejectsMissingWorld()
+{
+    dtDynModel model;
+    dtDynValidationError error;
+    assert(!ValidateModel(model, &error));
+    assert(error.code == dtDynValidationCode::InvalidWorld);
+}
+
+void TestModelValidationRejectsNonFiniteValues()
+{
+    dtDynSpec spec;
+    spec.AddBody("base", 0);
+    dtDynModel model = CompileSpec(spec);
+    model.body_mass(1) = std::numeric_limits<dtDynReal>::quiet_NaN();
+
+    dtDynValidationError error;
+    assert(!ValidateModel(model, &error));
+    assert(error.code == dtDynValidationCode::NonFiniteValue);
+    assert(error.object == dtDynObjectType::Body);
+    assert(error.index == 1);
+}
+
+void TestModelValidationRejectsInvalidDofReferences()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("base", 0);
+    spec.AddJoint(body, "hinge", dtDynJointType::Hinge);
+    const dtDynModel valid = CompileSpec(spec);
+    dtDynValidationError error;
+
+    dtDynModel badBody = valid;
+    badBody.dof_bodyid[0] = 99;
+    assert(!ValidateModel(badBody, &error));
+    assert(error.code == dtDynValidationCode::InvalidReference);
+
+    dtDynModel badJoint = valid;
+    badJoint.dof_jntid[0] = 99;
+    assert(!ValidateModel(badJoint, &error));
+    assert(error.code == dtDynValidationCode::InvalidReference);
+
+    dtDynModel parentCycle = valid;
+    parentCycle.dof_parentid[0] = 0;
+    assert(!ValidateModel(parentCycle, &error));
+    assert(error.code == dtDynValidationCode::TopologyCycle);
+}
+
+void TestModelValidationRejectsInvalidAddressSegments()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("base", 0);
+    spec.AddJoint(body, "hinge", dtDynJointType::Hinge);
+    const dtDynModel valid = CompileSpec(spec);
+    dtDynValidationError error;
+
+    dtDynModel badBodyJoint = valid;
+    badBodyJoint.body_jntadr[body] = 99;
+    assert(!ValidateModel(badBodyJoint, &error));
+
+    dtDynModel badBodyDof = valid;
+    badBodyDof.body_dofnum[body] = 2;
+    assert(!ValidateModel(badBodyDof, &error));
+
+    dtDynModel badQpos = valid;
+    badQpos.jnt_qposadr[0] = 1;
+    assert(!ValidateModel(badQpos, &error));
+
+    dtDynModel badDof = valid;
+    badDof.jnt_dofadr[0] = 1;
+    assert(!ValidateModel(badDof, &error));
+
+    dtDynModel badType = valid;
+    badType.jnt_type[0] = 99;
+    assert(!ValidateModel(badType, &error));
+}
+
+void TestModelValidationRejectsInvalidRootMetadata()
+{
+    dtDynSpec spec;
+    spec.AddBody("base", 0);
+    const dtDynModel valid = CompileSpec(spec);
+    dtDynValidationError error;
+
+    dtDynModel badRootBody = valid;
+    badRootBody.root_bodyid[0] = 99;
+    assert(!ValidateModel(badRootBody, &error));
+
+    dtDynModel badBodyRoot = valid;
+    badBodyRoot.body_rootid[1] = 99;
+    assert(!ValidateModel(badBodyRoot, &error));
+
+    dtDynModel badRootSlot = valid;
+    badRootSlot.body_rootidx[1] = 99;
+    assert(!ValidateModel(badRootSlot, &error));
+}
+
+void TestModelValidationRejectsDuplicateNames()
+{
+    dtDynSpec spec;
+    spec.AddBody("base", 0);
+    dtDynModel model = CompileSpec(spec);
+    model.body_names[1] = model.body_names[0];
+
+    dtDynValidationError error;
+    assert(!ValidateModel(model, &error));
+    assert(error.code == dtDynValidationCode::DuplicateName);
+    assert(error.object == dtDynObjectType::Body);
+    assert(error.index == 1);
+}
+
+void TestModelValidationRejectsOverlappingJointSpans()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("base", 0);
+    spec.AddJoint(body, "joint_a", dtDynJointType::Hinge);
+    spec.AddJoint(body, "joint_b", dtDynJointType::Hinge);
+    const dtDynModel valid = CompileSpec(spec);
+    dtDynValidationError error;
+
+    dtDynModel qposOverlap = valid;
+    qposOverlap.jnt_qposadr[1] = 0;
+    assert(!ValidateModel(qposOverlap, &error));
+
+    dtDynModel dofOverlap = valid;
+    dofOverlap.jnt_dofadr[1] = 0;
+    assert(!ValidateModel(dofOverlap, &error));
+}
+
+void TestModelValidationRejectsOrphanBodySegments()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("base", 0);
+    spec.AddJoint(body, "joint_a", dtDynJointType::Hinge);
+    spec.AddJoint(body, "joint_b", dtDynJointType::Hinge);
+    const dtDynModel valid = CompileSpec(spec);
+    dtDynValidationError error;
+
+    dtDynModel orphanJoint = valid;
+    orphanJoint.body_jntnum[body] = 1;
+    assert(!ValidateModel(orphanJoint, &error));
+
+    dtDynModel orphanDof = valid;
+    orphanDof.body_dofnum[body] = 1;
+    assert(!ValidateModel(orphanDof, &error));
+}
+
+void TestModelValidationRejectsDofOutsideDeclaredJointSpan()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("base", 0);
+    spec.AddJoint(body, "free", dtDynJointType::Free);
+    for (dtDynIndex index = 0; index < 10; ++index)
+    {
+        spec.AddJoint(body, "hinge_" + std::to_string(index), dtDynJointType::Hinge);
+    }
+    dtDynModel model = CompileSpec(spec);
+    assert(model.nv == 16);
+    model.jnt_dofadr[0] = 10;
+
+    dtDynValidationError error;
+    assert(!ValidateModel(model, &error));
+    assert(error.code == dtDynValidationCode::InvalidReference);
+}
+
+void TestModelValidationRejectsInvalidWeldId()
+{
+    dtDynSpec spec;
+    const dtDynIndex jointed = spec.AddBody("jointed", 0);
+    spec.AddJoint(jointed, "hinge", dtDynJointType::Hinge);
+    const dtDynIndex fixed = spec.AddBody("fixed", jointed);
+    dtDynModel model = CompileSpec(spec);
+    assert(model.body_weldid[fixed] == jointed);
+    model.body_weldid[fixed] = 99;
+
+    dtDynValidationError error;
+    assert(!ValidateModel(model, &error));
+    assert(error.code == dtDynValidationCode::InvalidReference);
+    assert(error.object == dtDynObjectType::Body);
+    assert(error.index == fixed);
+}
+
+void TestModelValidationRejectsIncorrectDofParentTopology()
+{
+    dtDynSpec multiRoot;
+    const dtDynIndex rootA = multiRoot.AddBody("root_a", 0);
+    multiRoot.AddJoint(rootA, "joint_a", dtDynJointType::Hinge);
+    const dtDynIndex rootB = multiRoot.AddBody("root_b", 0);
+    multiRoot.AddJoint(rootB, "joint_b", dtDynJointType::Hinge);
+    dtDynModel crossRoot = CompileSpec(multiRoot);
+    crossRoot.dof_parentid[1] = 0;
+    dtDynValidationError error;
+    assert(!ValidateModel(crossRoot, &error));
+    assert(error.code == dtDynValidationCode::InvalidReference);
+
+    dtDynSpec chain;
+    const dtDynIndex parent = chain.AddBody("parent", 0);
+    chain.AddJoint(parent, "parent_joint", dtDynJointType::Hinge);
+    const dtDynIndex child = chain.AddBody("child", parent);
+    chain.AddJoint(child, "child_joint", dtDynJointType::Hinge);
+    dtDynModel severed = CompileSpec(chain);
+    assert(severed.dof_parentid[1] == 0);
+    severed.dof_parentid[1] = DTDYN_INVALID_INDEX;
+    assert(!ValidateModel(severed, &error));
+    assert(error.code == dtDynValidationCode::InvalidReference);
+}
+
+void TestModelValidationRejectsInconsistentDerivedMasses()
+{
+    dtDynSpec spec;
+    const dtDynIndex root = spec.AddBody("root", 0);
+    spec.Bodies()[root].inertial.mass = 2.0;
+    const dtDynIndex child = spec.AddBody("child", root);
+    spec.Bodies()[child].inertial.mass = 3.0;
+    const dtDynModel valid = CompileSpec(spec);
+    dtDynValidationError error;
+
+    dtDynModel badSubtree = valid;
+    badSubtree.body_subtreemass(root) += 1.0;
+    assert(!ValidateModel(badSubtree, &error));
+    assert(error.code == dtDynValidationCode::InvalidReference);
+
+    dtDynModel badRoot = valid;
+    badRoot.root_mass(0) += 1.0;
+    assert(!ValidateModel(badRoot, &error));
+    assert(error.code == dtDynValidationCode::InvalidReference);
+}
+
+void TestSpecValidationRejectsInvalidPhysicalValues()
+{
+    dtDynValidationError error;
+
+    dtDynSpec negativeMass;
+    const dtDynIndex massBody = negativeMass.AddBody("mass_body", 0);
+    negativeMass.Bodies()[massBody].inertial.mass = -1.0;
+    assert(!ValidateSpec(negativeMass, &error));
+
+    dtDynSpec invalidInertia;
+    const dtDynIndex inertiaBody = invalidInertia.AddBody("inertia_body", 0);
+    invalidInertia.Bodies()[inertiaBody].inertial.mass = 1.0;
+    invalidInertia.Bodies()[inertiaBody].inertial.inertia(0) = 3.0;
+    invalidInertia.Bodies()[inertiaBody].inertial.inertia(1) = 1.0;
+    invalidInertia.Bodies()[inertiaBody].inertial.inertia(2) = 1.0;
+    assert(!ValidateSpec(invalidInertia, &error));
+
+    dtDynSpec invalidAxis;
+    const dtDynIndex axisBody = invalidAxis.AddBody("axis_body", 0);
+    const dtDynIndex axisJoint =
+        invalidAxis.AddJoint(axisBody, "hinge", dtDynJointType::Hinge);
+    invalidAxis.Joints()[axisJoint].axis(2) = 2.0;
+    assert(!ValidateSpec(invalidAxis, &error));
+
+    dtDynSpec negativeArmature;
+    const dtDynIndex armatureBody = negativeArmature.AddBody("armature_body", 0);
+    const dtDynIndex armatureJoint =
+        negativeArmature.AddJoint(armatureBody, "hinge", dtDynJointType::Hinge);
+    negativeArmature.Joints()[armatureJoint].armature = -1.0;
+    assert(!ValidateSpec(negativeArmature, &error));
+
+    dtDynSpec roundedAxis;
+    const dtDynIndex roundedBody = roundedAxis.AddBody("rounded_axis_body", 0);
+    const dtDynIndex roundedJoint =
+        roundedAxis.AddJoint(roundedBody, "rounded_axis", dtDynJointType::Hinge);
+    roundedAxis.Joints()[roundedJoint].axis(0) = 0.70710678;
+    roundedAxis.Joints()[roundedJoint].axis(1) = 0.70710678;
+    roundedAxis.Joints()[roundedJoint].axis(2) = 0.0;
+    assert(ValidateSpec(roundedAxis, &error));
+}
+
+void TestModelValidationRejectsInvalidPhysicalValues()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("base", 0);
+    spec.Bodies()[body].inertial.mass = 1.0;
+    spec.Bodies()[body].inertial.inertia(0) = 1.0;
+    spec.Bodies()[body].inertial.inertia(1) = 1.0;
+    spec.Bodies()[body].inertial.inertia(2) = 1.0;
+    const dtDynIndex joint = spec.AddJoint(body, "hinge", dtDynJointType::Hinge);
+    spec.Joints()[joint].armature = 1.0;
+    const dtDynIndex site = spec.AddSite(body, "site");
+    const dtDynModel valid = CompileSpec(spec);
+    dtDynValidationError error;
+
+    dtDynModel zeroAxis = valid;
+    zeroAxis.jnt_axis[0].SetZero();
+    assert(!ValidateModel(zeroAxis, &error));
+
+    dtDynModel negativeMass = valid;
+    negativeMass.body_mass(body) = -1.0;
+    negativeMass.body_subtreemass(body) = -1.0;
+    negativeMass.body_subtreemass(0) = -1.0;
+    negativeMass.root_mass(0) = -1.0;
+    assert(!ValidateModel(negativeMass, &error));
+
+    dtDynModel negativeInertia = valid;
+    negativeInertia.body_inertia[body](0) = -1.0;
+    assert(!ValidateModel(negativeInertia, &error));
+
+    dtDynModel negativeArmature = valid;
+    negativeArmature.dof_armature(0) = -1.0;
+    assert(!ValidateModel(negativeArmature, &error));
+
+    dtDynModel invalidBodyFrame = valid;
+    invalidBodyFrame.body_mat[body].SetZero();
+    assert(!ValidateModel(invalidBodyFrame, &error));
+
+    dtDynModel invalidInertialFrame = valid;
+    invalidInertialFrame.body_imat[body].SetZero();
+    assert(!ValidateModel(invalidInertialFrame, &error));
+
+    dtDynModel invalidSiteRotation = valid;
+    invalidSiteRotation.site_mat[site].SetZero();
+    assert(!ValidateModel(invalidSiteRotation, &error));
+}
+
+void TestModelValidationRejectsInvalidFramePairs()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("frame_body", 0);
+    const dtDynIndex site = spec.AddSite(body, "frame_site");
+    const dtDynModel valid = CompileSpec(spec);
+    dtDynValidationError error;
+
+    dtDynModel scaledBodyQuaternion = valid;
+    scaledBodyQuaternion.body_quat[body](0) *= 2.0;
+    assert(!ValidateModel(scaledBodyQuaternion, &error));
+
+    dtDynModel mismatchedBodyFrame = valid;
+    mismatchedBodyFrame.body_quat[body](0) = 0.0;
+    mismatchedBodyFrame.body_quat[body](3) = 1.0;
+    assert(!ValidateModel(mismatchedBodyFrame, &error));
+
+    dtDynModel scaledInertialQuaternion = valid;
+    scaledInertialQuaternion.body_iquat[body](0) *= 2.0;
+    assert(!ValidateModel(scaledInertialQuaternion, &error));
+
+    dtDynModel mismatchedInertialFrame = valid;
+    mismatchedInertialFrame.body_iquat[body](0) = 0.0;
+    mismatchedInertialFrame.body_iquat[body](3) = 1.0;
+    assert(!ValidateModel(mismatchedInertialFrame, &error));
+
+    dtDynModel scaledSiteQuaternion = valid;
+    scaledSiteQuaternion.site_quat[site](0) *= 2.0;
+    assert(!ValidateModel(scaledSiteQuaternion, &error));
+
+    dtDynModel mismatchedSiteFrame = valid;
+    mismatchedSiteFrame.site_quat[site](0) = 0.0;
+    mismatchedSiteFrame.site_quat[site](3) = 1.0;
+    assert(!ValidateModel(mismatchedSiteFrame, &error));
+}
+
+void TestCompileSpecSupportsMaximumRootMappingWithoutNestedLookup()
+{
+    constexpr dtDynIndex rootCount = 10922;
+    constexpr dtDynIndex bodyCount = 65535;
+    dtDynSpec spec;
+    dtDynIndex lastRoot = DTDYN_INVALID_INDEX;
+    for (dtDynIndex root = 0; root < rootCount; ++root)
+    {
+        lastRoot = spec.AddBody("root_" + std::to_string(root), 0);
+    }
+    dtDynIndex parent = lastRoot;
+    for (dtDynIndex body = 1 + rootCount; body < bodyCount; ++body)
+    {
+        parent = spec.AddBody("tail_" + std::to_string(body), parent);
+    }
+
+    const dtDynModel model = CompileSpecChecked(spec);
+    assert(model.nbody == bodyCount);
+    assert(model.nroot == rootCount);
+    assert(model.body_rootidx[static_cast<std::size_t>(bodyCount - 1)] == rootCount - 1);
+}
 
 void TestJointSizes()
 {
@@ -61,6 +645,479 @@ void TestSpecWorldAndFixedBody()
     assert(spec.Bodies()[fixed].joints.empty());
     assert(spec.Bodies()[knee].joints.size() == 1);
     assert(spec.Joints()[hinge].type == dtDynJointType::Hinge);
+}
+
+void TestSpecNameLookupReflectsMutableStorage()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("body", 0);
+    const dtDynIndex joint = spec.AddJoint(body, "joint", dtDynJointType::Hinge);
+    const dtDynIndex site = spec.AddSite(body, "site");
+    const dtDynIndex actuator = spec.AddActuator(joint, "actuator");
+
+    assert(spec.BodyId("body") == body);
+    assert(spec.JointId("joint") == joint);
+    assert(spec.SiteId("site") == site);
+    assert(spec.ActuatorId("actuator") == actuator);
+    assert(spec.BodyId("missing") == DTDYN_INVALID_INDEX);
+    assert(spec.JointId("missing") == DTDYN_INVALID_INDEX);
+    assert(spec.SiteId("missing") == DTDYN_INVALID_INDEX);
+    assert(spec.ActuatorId("missing") == DTDYN_INVALID_INDEX);
+
+    spec.Bodies()[body].name = "renamed_body";
+    spec.Joints()[joint].name = "renamed_joint";
+    spec.Sites()[site].name = "renamed_site";
+    spec.Actuators()[actuator].name = "renamed_actuator";
+    assert(spec.BodyId("body") == DTDYN_INVALID_INDEX);
+    assert(spec.JointId("joint") == DTDYN_INVALID_INDEX);
+    assert(spec.SiteId("site") == DTDYN_INVALID_INDEX);
+    assert(spec.ActuatorId("actuator") == DTDYN_INVALID_INDEX);
+    assert(spec.BodyId("renamed_body") == body);
+    assert(spec.JointId("renamed_joint") == joint);
+    assert(spec.SiteId("renamed_site") == site);
+    assert(spec.ActuatorId("renamed_actuator") == actuator);
+}
+
+void TestModelActuatorNameLookupUsesRebuiltCache()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("body", 0);
+    const dtDynIndex joint = spec.AddJoint(body, "joint", dtDynJointType::Hinge);
+    const dtDynIndex actuator = spec.AddActuator(joint, "actuator");
+    dtDynModel model = CompileSpecChecked(spec);
+
+    assert(model.ActuatorId("actuator") == actuator);
+    assert(model.ActuatorId("missing") == DTDYN_INVALID_INDEX);
+
+    const dtDynModel copied = model;
+    assert(copied.ActuatorId("actuator") == actuator);
+
+    model.actuator_names[actuator] = "renamed_actuator";
+    assert(model.ActuatorId("actuator") == actuator);
+    assert(model.ActuatorId("renamed_actuator") == DTDYN_INVALID_INDEX);
+    model.RebuildNameMaps();
+    assert(model.ActuatorId("actuator") == DTDYN_INVALID_INDEX);
+    assert(model.ActuatorId("renamed_actuator") == actuator);
+}
+
+void TestSpecXmlReportsTypedNumericErrors()
+{
+    const auto expectError = [](const std::string &value,
+                                const dtDynXmlErrorCode expectedCode,
+                                const std::string &anchor)
+    {
+        const std::string xml =
+            "<mujoco><worldbody><body name=\"base\">"
+            "<inertial mass=\"" + value + "\"/>"
+            "</body></worldbody></mujoco>";
+
+        bool rejected = false;
+        try
+        {
+            (void)dtDynSpec::DecodeXml(xml);
+        }
+        catch (const dtDynXmlError &error)
+        {
+            rejected = error.Code() == expectedCode &&
+                       error.SourcePath().empty() &&
+                       error.Offset() == xml.find(anchor);
+        }
+        assert(rejected);
+    };
+
+    expectError("not-a-number", dtDynXmlErrorCode::InvalidNumber, "not-a-number");
+    expectError("1e99999", dtDynXmlErrorCode::InvalidNumber, "1e99999");
+    expectError("1junk", dtDynXmlErrorCode::InvalidNumber, "junk");
+    expectError("NaN", dtDynXmlErrorCode::NonFiniteValue, "NaN");
+    expectError("Inf", dtDynXmlErrorCode::NonFiniteValue, "Inf");
+}
+
+void TestSpecXmlRejectsWrongVectorArity()
+{
+    const auto expectInvalidArity = [](const std::string &value, const std::string &anchor)
+    {
+        const std::string xml =
+            "<mujoco><worldbody><body name=\"base\" pos=\"" + value +
+            "\"/></worldbody></mujoco>";
+        bool rejected = false;
+        try
+        {
+            (void)dtDynSpec::DecodeXml(xml);
+        }
+        catch (const dtDynXmlError &error)
+        {
+            rejected = error.Code() == dtDynXmlErrorCode::InvalidVectorArity &&
+                       error.Offset() == xml.find(anchor);
+        }
+        assert(rejected);
+    };
+
+    expectInvalidArity("1 2", "1 2");
+    expectInvalidArity("1 2 3 4", "4");
+}
+
+void TestSpecXmlRejectsMalformedAttributes()
+{
+    const std::string xml =
+        "<mujoco><worldbody><body name=\"base\">"
+        "<inertial mass=1/>"
+        "</body></worldbody></mujoco>";
+    bool rejected = false;
+    try
+    {
+        (void)dtDynSpec::DecodeXml(xml);
+    }
+    catch (const dtDynXmlError &error)
+    {
+        rejected = error.Code() == dtDynXmlErrorCode::MalformedSyntax &&
+                   error.Offset() == xml.find("mass");
+    }
+    assert(rejected);
+}
+
+void TestSpecXmlRejectsMisnestedSupportedTags()
+{
+    const std::string xml =
+        "<mujoco><worldbody><body name=\"base\"></worldbody></body></mujoco>";
+    bool rejected = false;
+    try
+    {
+        (void)dtDynSpec::DecodeXml(xml);
+    }
+    catch (const dtDynXmlError &error)
+    {
+        rejected = error.Code() == dtDynXmlErrorCode::MalformedSyntax &&
+                   error.Offset() == xml.find("</worldbody>");
+    }
+    assert(rejected);
+}
+
+void TestSpecXmlRejectsDuplicateObjectNames()
+{
+    const auto expectDuplicate = [](const std::string &xml)
+    {
+        bool rejected = false;
+        try
+        {
+            (void)dtDynSpec::DecodeXml(xml);
+        }
+        catch (const dtDynXmlError &error)
+        {
+            rejected = error.Code() == dtDynXmlErrorCode::DuplicateName &&
+                       error.Offset() == xml.rfind("duplicate");
+        }
+        assert(rejected);
+    };
+
+    expectDuplicate(
+        "<mujoco><worldbody><body name=\"duplicate\"/><body name=\"duplicate\"/>"
+        "</worldbody></mujoco>");
+    expectDuplicate(
+        "<mujoco><worldbody><body name=\"base\"><joint name=\"duplicate\"/>"
+        "<joint name=\"duplicate\"/></body></worldbody></mujoco>");
+    expectDuplicate(
+        "<mujoco><worldbody><body name=\"base\"><site name=\"duplicate\"/>"
+        "<site name=\"duplicate\"/></body></worldbody></mujoco>");
+    expectDuplicate(
+        "<mujoco><worldbody><body name=\"base\"><joint name=\"j1\"/>"
+        "<joint name=\"j2\"/></body></worldbody><actuator>"
+        "<motor name=\"duplicate\" joint=\"j1\"/>"
+        "<motor name=\"duplicate\" joint=\"j2\"/></actuator></mujoco>");
+}
+
+void TestSpecXmlRejectsUnknownReferencesWithTypedError()
+{
+    const std::string xml =
+        "<mujoco><worldbody><body name=\"base\"/></worldbody>"
+        "<actuator><motor name=\"motor\" joint=\"missing_joint\"/></actuator>"
+        "</mujoco>";
+    bool rejected = false;
+    try
+    {
+        (void)dtDynSpec::DecodeXml(xml);
+    }
+    catch (const dtDynXmlError &error)
+    {
+        rejected = error.Code() == dtDynXmlErrorCode::InvalidReference &&
+                   error.Offset() == xml.find("missing_joint");
+    }
+    assert(rejected);
+}
+
+void TestSpecXmlRejectsInvalidJointRange()
+{
+    const std::string xml =
+        "<mujoco><worldbody><body name=\"base\">"
+        "<joint name=\"hinge\" range=\"bad 1\"/>"
+        "</body></worldbody></mujoco>";
+    bool rejected = false;
+    try
+    {
+        (void)dtDynSpec::DecodeXml(xml);
+    }
+    catch (const dtDynXmlError &error)
+    {
+        rejected = error.Code() == dtDynXmlErrorCode::InvalidNumber &&
+                   error.Offset() == xml.find("bad");
+    }
+    assert(rejected);
+}
+
+void TestSpecXmlRejectsUnsupportedSemanticValues()
+{
+    const auto expectUnsupported = [](const std::string &xml, const std::string &value)
+    {
+        bool rejected = false;
+        try
+        {
+            (void)dtDynSpec::DecodeXml(xml);
+        }
+        catch (const dtDynXmlError &error)
+        {
+            rejected = error.Code() == dtDynXmlErrorCode::UnsupportedElement &&
+                       error.Offset() == xml.find(value);
+        }
+        assert(rejected);
+    };
+
+    expectUnsupported(
+        "<mujoco><worldbody><body name=\"base\"><joint name=\"joint\" type=\"planar\"/>"
+        "</body></worldbody></mujoco>",
+        "planar");
+    expectUnsupported(
+        "<mujoco><compiler angle=\"gradian\"/><worldbody/></mujoco>",
+        "gradian");
+}
+
+void TestSpecXmlRejectsInvalidBooleanValue()
+{
+    const std::string xml =
+        "<mujoco><worldbody><body name=\"base\">"
+        "<joint name=\"joint\" limited=\"maybe\"/>"
+        "</body></worldbody></mujoco>";
+    bool rejected = false;
+    try
+    {
+        (void)dtDynSpec::DecodeXml(xml);
+    }
+    catch (const dtDynXmlError &error)
+    {
+        rejected = error.Code() == dtDynXmlErrorCode::MalformedSyntax &&
+                   error.Offset() == xml.find("maybe");
+    }
+    assert(rejected);
+}
+
+void TestSpecXmlRequiresSingleRootElement()
+{
+    const auto expectMalformed = [](const std::string &xml, const std::size_t expectedOffset)
+    {
+        bool rejected = false;
+        try
+        {
+            (void)dtDynSpec::DecodeXml(xml);
+        }
+        catch (const dtDynXmlError &error)
+        {
+            rejected = error.Code() == dtDynXmlErrorCode::MalformedSyntax &&
+                       error.Offset() == expectedOffset;
+        }
+        assert(rejected);
+    };
+
+    expectMalformed("", 0);
+    const std::string multipleRoots = "<mujoco/><mujoco/>";
+    expectMalformed(multipleRoots, multipleRoots.rfind("<mujoco"));
+    const std::string duplicateWorldbody = "<mujoco><worldbody/><worldbody/></mujoco>";
+    expectMalformed(duplicateWorldbody, duplicateWorldbody.rfind("<worldbody"));
+}
+
+void TestSpecXmlRejectsSupportedElementInWrongContext()
+{
+    const std::string xml =
+        "<mujoco><worldbody><body name=\"base\">"
+        "<motor name=\"motor\" joint=\"missing\"/>"
+        "</body></worldbody></mujoco>";
+    bool rejected = false;
+    try
+    {
+        (void)dtDynSpec::DecodeXml(xml);
+    }
+    catch (const dtDynXmlError &error)
+    {
+        rejected = error.Code() == dtDynXmlErrorCode::MalformedSyntax &&
+                   error.Offset() == xml.find("<motor");
+    }
+    assert(rejected);
+}
+
+void TestSpecXmlScannerIsQuoteAwareAndFailClosed()
+{
+    const std::string valid =
+        "<?xml version=\"1.0\"?><mujoco><!-- <equality> is comment text -->"
+        "<worldbody><body name=\"base>link\"/></worldbody></mujoco>";
+    const dtDynSpec decoded = dtDynSpec::DecodeXml(valid);
+    assert(decoded.Bodies().size() == 2);
+    assert(decoded.Bodies()[1].name == "base>link");
+
+    const auto expectError = [](const std::string &xml,
+                                const dtDynXmlErrorCode code,
+                                const std::size_t offset)
+    {
+        bool rejected = false;
+        try
+        {
+            (void)dtDynSpec::DecodeXml(xml);
+        }
+        catch (const dtDynXmlError &error)
+        {
+            rejected = error.Code() == code && error.Offset() == offset;
+        }
+        assert(rejected);
+    };
+
+    const std::string unknown = "<mujoco><unknown/></mujoco>";
+    expectError(unknown, dtDynXmlErrorCode::UnsupportedElement, unknown.find("<unknown"));
+
+    const std::string text = "<mujoco>unexpected</mujoco>";
+    expectError(text, dtDynXmlErrorCode::MalformedSyntax, text.find("unexpected"));
+
+    const std::string unclosed = "<mujoco><worldbody><body name=\"base\">";
+    expectError(unclosed, dtDynXmlErrorCode::MalformedSyntax, unclosed.find("<body"));
+}
+
+void TestSpecXmlRunsSetupValidationAfterParsing()
+{
+    const std::string invalid =
+        "<mujoco><worldbody><body name=\"base\">"
+        "<inertial mass=\"-1\"/>"
+        "</body></worldbody></mujoco>";
+    bool rejected = false;
+    try
+    {
+        (void)dtDynSpec::DecodeXml(invalid);
+    }
+    catch (const dtDynXmlError &error)
+    {
+        rejected = error.Code() == dtDynXmlErrorCode::InvalidReference &&
+                   error.Offset() == invalid.find("<body");
+    }
+    assert(rejected);
+
+    const std::string roundedAxis =
+        "<mujoco><worldbody><body name=\"base\">"
+        "<joint name=\"joint\" axis=\"0.70710678 0.70710678 0\"/>"
+        "</body></worldbody></mujoco>";
+    const dtDynSpec valid = dtDynSpec::DecodeXml(roundedAxis);
+    assert(valid.Joints().size() == 1);
+}
+
+void TestSpecXmlRejectsClosingTagAttributes()
+{
+    const std::string xml =
+        "<mujoco><worldbody><body name=\"base\"></body bogus=\"x\">"
+        "</worldbody></mujoco>";
+    bool rejected = false;
+    try
+    {
+        (void)dtDynSpec::DecodeXml(xml);
+    }
+    catch (const dtDynXmlError &error)
+    {
+        rejected = error.Code() == dtDynXmlErrorCode::MalformedSyntax &&
+                   error.Offset() == xml.find("bogus");
+    }
+    assert(rejected);
+}
+
+void TestSpecXmlRejectsMalformedSelfClosingSuffix()
+{
+    const std::string xml =
+        "<mujoco><worldbody><body / bogus=\"x\"></worldbody></mujoco>";
+    bool rejected = false;
+    try
+    {
+        (void)dtDynSpec::DecodeXml(xml);
+    }
+    catch (const dtDynXmlError &error)
+    {
+        rejected = error.Code() == dtDynXmlErrorCode::MalformedSyntax &&
+                   error.Offset() == xml.find("/");
+    }
+    assert(rejected);
+}
+
+void TestSpecXmlRejectsDuplicateDeclaration()
+{
+    const std::string xml = "<?xml version=\"1.0\"?><?xml version=\"1.0\"?><mujoco/>";
+    bool rejected = false;
+    try
+    {
+        (void)dtDynSpec::DecodeXml(xml);
+    }
+    catch (const dtDynXmlError &error)
+    {
+        rejected = error.Code() == dtDynXmlErrorCode::MalformedSyntax &&
+                   error.Offset() == xml.rfind("<?xml");
+    }
+    assert(rejected);
+}
+
+void TestSpecXmlRejectsRawLessThanInAttributeValue()
+{
+    const std::string xml =
+        "<mujoco><worldbody><body name=\"base<link\"/></worldbody></mujoco>";
+    bool rejected = false;
+    try
+    {
+        (void)dtDynSpec::DecodeXml(xml);
+    }
+    catch (const dtDynXmlError &error)
+    {
+        rejected = error.Code() == dtDynXmlErrorCode::MalformedSyntax &&
+                   error.Offset() == xml.find("<link");
+    }
+    assert(rejected);
+}
+
+void TestSpecXmlRejectsMalformedDeclarationGrammar()
+{
+    const auto expectMalformed = [](const std::string &declaration, const std::size_t offset)
+    {
+        const std::string xml = declaration + "<mujoco/>";
+        bool rejected = false;
+        try
+        {
+            (void)dtDynSpec::DecodeXml(xml);
+        }
+        catch (const dtDynXmlError &error)
+        {
+            rejected = error.Code() == dtDynXmlErrorCode::MalformedSyntax &&
+                       error.Offset() == offset;
+        }
+        assert(rejected);
+    };
+
+    expectMalformed("<?foo?>", 0);
+    expectMalformed("<?xml?>", 0);
+    const std::string unquoted = "<?xml version=1.0?>";
+    expectMalformed(unquoted, unquoted.find("version"));
+}
+
+void TestSpecXmlRejectsDeclarationAfterLeadingWhitespace()
+{
+    const std::string xml = "\n<?xml version=\"1.0\"?><mujoco/>";
+    bool rejected = false;
+    try
+    {
+        (void)dtDynSpec::DecodeXml(xml);
+    }
+    catch (const dtDynXmlError &error)
+    {
+        rejected = error.Code() == dtDynXmlErrorCode::MalformedSyntax &&
+                   error.Offset() == xml.find("<?xml");
+    }
+    assert(rejected);
 }
 
 void TestSpecXmlDecodeEncodeRoundTrip()
@@ -110,6 +1167,197 @@ void TestSpecXmlDecodeEncodeRoundTrip()
     assert(reparsed.Joints()[0].name == "hinge_z");
     assert(reparsed.Sites()[0].name == "tool");
     assert(reparsed.Actuators()[0].name == "hinge_motor");
+}
+
+void TestSpecXmlLoadsFromFile()
+{
+    const std::string xml =
+        "<mujoco><worldbody><body name=\"loaded_base\">"
+        "<joint name=\"loaded_joint\" type=\"hinge\"/>"
+        "</body></worldbody></mujoco>";
+    const std::filesystem::path path = UniqueTempPath("dtdynamics_test_load_spec.xml");
+    {
+        std::ofstream output(path, std::ios::binary);
+        assert(output);
+        output << xml;
+        assert(output.good());
+    }
+
+    const dtDynSpec spec = dtDynSpec::LoadXmlFile(path.string());
+    assert(spec.Bodies().size() == 2);
+    assert(spec.Bodies()[1].name == "loaded_base");
+    assert(spec.Joints().size() == 1);
+    assert(spec.Joints()[0].name == "loaded_joint");
+
+    std::filesystem::remove(path);
+}
+
+void TestSpecXmlLoadsAcrossBufferBoundaries()
+{
+    const auto xmlOfSize = [](const std::size_t size)
+    {
+        const std::string prefix = "<mujoco><!--";
+        const std::string suffix = "--><worldbody/></mujoco>";
+        assert(size >= prefix.size() + suffix.size());
+        return prefix + std::string(size - prefix.size() - suffix.size(), 'x') + suffix;
+    };
+
+    for (const std::size_t size : {std::size_t(4095), std::size_t(4096), std::size_t(4097)})
+    {
+        const std::filesystem::path path = UniqueTempPath("dtdynamics_buffer_boundary.xml");
+        const std::string xml = xmlOfSize(size);
+        {
+            std::ofstream output(path, std::ios::binary);
+            assert(output);
+            output.write(xml.data(), static_cast<std::streamsize>(xml.size()));
+            assert(output.good());
+        }
+        const dtDynSpec loaded = dtDynSpec::LoadXmlFile(path.string());
+        std::filesystem::remove(path);
+        assert(loaded.Bodies().size() == 1);
+        assert(loaded.Bodies()[0].name == "world");
+    }
+}
+
+void TestSpecXmlLoadReportsTypedErrorPath()
+{
+    const std::string xml =
+        "<mujoco><worldbody><body name=\"base\">"
+        "<inertial mass=\"bad\"/>"
+        "</body></worldbody></mujoco>";
+    const std::filesystem::path path = UniqueTempPath("dtdynamics_typed_error.xml");
+    {
+        std::ofstream output(path, std::ios::binary);
+        assert(output);
+        output << xml;
+        assert(output.good());
+    }
+
+    bool rejected = false;
+    try
+    {
+        (void)dtDynSpec::LoadXmlFile(path.string());
+    }
+    catch (const dtDynXmlError &error)
+    {
+        rejected = error.Code() == dtDynXmlErrorCode::InvalidNumber &&
+                   error.SourcePath() == path.string() &&
+                   error.Offset() == xml.find("bad");
+    }
+    std::filesystem::remove(path);
+    assert(rejected);
+}
+
+void TestSpecXmlLoadReportsMissingFile()
+{
+    const std::filesystem::path path = UniqueTempPath("dtdynamics_missing_spec.xml");
+
+    bool rejected = false;
+    try
+    {
+        (void)dtDynSpec::LoadXmlFile(path.string());
+    }
+    catch (const std::runtime_error &error)
+    {
+        const std::string message = error.what();
+        rejected = message.find("failed to open XML file") != std::string::npos &&
+                   message.find(path.string()) != std::string::npos;
+    }
+    assert(rejected);
+}
+
+void TestSpecXmlLoadReportsMalformedFilePath()
+{
+    const std::string xml = "<mujoco><worldbody";
+    const std::filesystem::path path = UniqueTempPath("dtdynamics_malformed_spec.xml");
+    {
+        std::ofstream output(path, std::ios::binary);
+        assert(output);
+        output << xml;
+        assert(output.good());
+    }
+
+    bool rejected = false;
+    try
+    {
+        (void)dtDynSpec::LoadXmlFile(path.string());
+    }
+    catch (const dtDynXmlError &error)
+    {
+        rejected = error.Code() == dtDynXmlErrorCode::MalformedSyntax &&
+                   error.SourcePath() == path.string() &&
+                   error.Offset() == xml.find("<worldbody");
+    }
+    std::filesystem::remove(path);
+    assert(rejected);
+}
+
+void TestSpecXmlLoadRejectsDirectoryPath()
+{
+    const std::filesystem::path path = UniqueTempPath("dtdynamics_xml_directory");
+    assert(std::filesystem::create_directory(path));
+
+    bool rejected = false;
+    try
+    {
+        (void)dtDynSpec::LoadXmlFile(path.string());
+    }
+    catch (const std::runtime_error &error)
+    {
+        const std::string message = error.what();
+        const bool ioFailure = message.find("failed to open XML file") != std::string::npos ||
+                               message.find("failed to read XML file") != std::string::npos;
+        rejected = ioFailure && message.find(path.string()) != std::string::npos;
+    }
+    assert(std::filesystem::remove(path));
+    assert(rejected);
+}
+
+void TestSpecXmlSavesToFile()
+{
+    const dtDynSpec spec = dtDynSpec::DecodeXml(
+        "<mujoco><worldbody><body name=\"saved_base\">"
+        "<joint name=\"saved_joint\" type=\"hinge\"/>"
+        "</body></worldbody></mujoco>");
+    const std::filesystem::path path = UniqueTempPath("dtdynamics_test_save_spec.xml");
+
+    spec.SaveXmlFile(path.string());
+
+    std::ifstream input(path, std::ios::binary);
+    assert(input);
+    std::ostringstream stream;
+    stream << input.rdbuf();
+    assert(!stream.fail());
+    assert(stream.str() == spec.EncodeXml());
+
+    const dtDynSpec loaded = dtDynSpec::LoadXmlFile(path.string());
+    assert(loaded.Bodies().size() == spec.Bodies().size());
+    assert(loaded.Joints().size() == spec.Joints().size());
+    assert(loaded.Bodies()[1].name == "saved_base");
+    assert(loaded.Joints()[0].name == "saved_joint");
+
+    std::filesystem::remove(path);
+}
+
+void TestSpecXmlSaveReportsOpenFailure()
+{
+    dtDynSpec spec;
+    const std::filesystem::path parent = UniqueTempPath("dtdynamics_missing_output_directory");
+    const std::filesystem::path path = parent / "saved_spec.xml";
+    assert(!std::filesystem::exists(parent));
+
+    bool rejected = false;
+    try
+    {
+        spec.SaveXmlFile(path.string());
+    }
+    catch (const std::runtime_error &error)
+    {
+        const std::string message = error.what();
+        rejected = message.find("failed to open XML file for writing") != std::string::npos &&
+                   message.find(path.string()) != std::string::npos;
+    }
+    assert(rejected);
 }
 
 void TestSpecXmlDecodesFreeJointAndFixedBody()
@@ -176,16 +1424,18 @@ void TestSpecXmlSkipsCommentsAndInfersRangeLimits()
 
 void TestSpecXmlRejectsEqualityUntilConstraintLayerExists()
 {
+    const std::string xml =
+        "<mujoco><worldbody><body name=\"a\"/></worldbody>"
+        "<equality><connect body1=\"a\" body2=\"world\"/></equality></mujoco>";
     bool rejected = false;
     try
     {
-        (void)dtDynSpec::DecodeXml(
-            "<mujoco><worldbody><body name=\"a\"/></worldbody>"
-            "<equality><connect body1=\"a\" body2=\"world\"/></equality></mujoco>");
+        (void)dtDynSpec::DecodeXml(xml);
     }
-    catch (const std::runtime_error &)
+    catch (const dtDynXmlError &error)
     {
-        rejected = true;
+        rejected = error.Code() == dtDynXmlErrorCode::UnsupportedElement &&
+                   error.Offset() == xml.find("<equality");
     }
     assert(rejected);
 }
@@ -361,6 +1611,36 @@ void TestDataResizeSeparatesBodyAndDofStorage()
     dtDynModel mismatchedModel = model;
     mismatchedModel.nv = 8;
     assert(!data.IsCompatible(mismatchedModel));
+}
+
+void TestDataResizeSupportsFullyFixedZeroDofModel()
+{
+    for (const dtDynIndex siteCount : {dtDynIndex(0), dtDynIndex(1), dtDynIndex(3)})
+    {
+        dtDynSpec spec;
+        const dtDynIndex fixedBody = spec.AddBody("fixed_body", 0);
+        for (dtDynIndex site = 0; site < siteCount; ++site)
+        {
+            spec.AddSite(fixedBody, "fixed_site_" + std::to_string(site));
+        }
+        const dtDynModel model = CompileSpecChecked(spec);
+        assert(model.nq == 0);
+        assert(model.nv == 0);
+
+        dtDynData data;
+        data.Resize(model);
+
+        assert(data.IsCompatible(model));
+        assert(data.body_jacp[fixedBody].GetRowSize() == 3);
+        assert(data.body_jacp[fixedBody].GetColSize() == 0);
+        for (dtDynIndex site = 0; site < siteCount; ++site)
+        {
+            assert(data.site_jacp[site].GetRowSize() == 3);
+            assert(data.site_jacp[site].GetColSize() == 0);
+        }
+        assert(data.Mmat.GetRowSize() == 0);
+        assert(data.Mmat.GetColSize() == 0);
+    }
 }
 
 void TestDtDynMathHelpersAreReusable()
@@ -728,6 +2008,7 @@ void TestForwardKinematicsAndPointJacobianForFixedChain()
     dt::Math::Vector3<dtDynReal> gravity;
     gravity.SetZero();
     ComputeDynamicsCCRBA(model, data, gravity, DTDYN_CCRBA_TERM_ALL);
+    ComputeSiteJacobians(model, data);
 
     assert(data.body_jacp.size() == static_cast<std::size_t>(model.nbody));
     assert(data.site_jacp.size() == static_cast<std::size_t>(model.nsite));
@@ -1524,10 +2805,68 @@ void TestDynamicsCCRBAAllTermsIsRepeatable()
 
 int main()
 {
+    TestCheckedCompileAcceptsValidSpec();
+    TestCheckedCompileRejectsInvalidParent();
+    TestSpecValidationRejectsDetachedJoint();
+    TestSpecValidationRejectsSiblingCycle();
+    TestSpecValidationRejectsDetachedSite();
+    TestSpecValidationRejectsInvalidActuatorReference();
+    TestSpecValidationRejectsInvalidBodyJointReference();
+    TestSpecValidationRejectsDuplicateNames();
+    TestSpecValidationRejectsDuplicateEmptyNames();
+    TestSpecValidationRejectsNonFiniteValues();
+    TestModelValidationRejectsDimensionOverflow();
+    TestSpecValidationRejectsDimensionOverflowBeforeCompile();
+    TestModelValidationRejectsArrayShapeMismatch();
+    TestModelValidationRejectsMissingWorld();
+    TestModelValidationRejectsNonFiniteValues();
+    TestModelValidationRejectsInvalidDofReferences();
+    TestModelValidationRejectsInvalidAddressSegments();
+    TestModelValidationRejectsInvalidRootMetadata();
+    TestModelValidationRejectsDuplicateNames();
+    TestModelValidationRejectsOverlappingJointSpans();
+    TestModelValidationRejectsOrphanBodySegments();
+    TestModelValidationRejectsDofOutsideDeclaredJointSpan();
+    TestModelValidationRejectsInvalidWeldId();
+    TestModelValidationRejectsIncorrectDofParentTopology();
+    TestModelValidationRejectsInconsistentDerivedMasses();
+    TestSpecValidationRejectsInvalidPhysicalValues();
+    TestModelValidationRejectsInvalidPhysicalValues();
+    TestModelValidationRejectsInvalidFramePairs();
+    TestCompileSpecSupportsMaximumRootMappingWithoutNestedLookup();
     TestJointSizes();
     TestDtArrayDirectHeader();
     TestSpecWorldAndFixedBody();
+    TestSpecNameLookupReflectsMutableStorage();
+    TestModelActuatorNameLookupUsesRebuiltCache();
+    TestSpecXmlReportsTypedNumericErrors();
+    TestSpecXmlRejectsWrongVectorArity();
+    TestSpecXmlRejectsMalformedAttributes();
+    TestSpecXmlRejectsMisnestedSupportedTags();
+    TestSpecXmlRejectsDuplicateObjectNames();
+    TestSpecXmlRejectsUnknownReferencesWithTypedError();
+    TestSpecXmlRejectsInvalidJointRange();
+    TestSpecXmlRejectsUnsupportedSemanticValues();
+    TestSpecXmlRejectsInvalidBooleanValue();
+    TestSpecXmlRequiresSingleRootElement();
+    TestSpecXmlRejectsSupportedElementInWrongContext();
+    TestSpecXmlScannerIsQuoteAwareAndFailClosed();
+    TestSpecXmlRunsSetupValidationAfterParsing();
+    TestSpecXmlRejectsClosingTagAttributes();
+    TestSpecXmlRejectsMalformedSelfClosingSuffix();
+    TestSpecXmlRejectsDuplicateDeclaration();
+    TestSpecXmlRejectsRawLessThanInAttributeValue();
+    TestSpecXmlRejectsMalformedDeclarationGrammar();
+    TestSpecXmlRejectsDeclarationAfterLeadingWhitespace();
     TestSpecXmlDecodeEncodeRoundTrip();
+    TestSpecXmlLoadsFromFile();
+    TestSpecXmlLoadsAcrossBufferBoundaries();
+    TestSpecXmlLoadReportsTypedErrorPath();
+    TestSpecXmlLoadReportsMissingFile();
+    TestSpecXmlLoadReportsMalformedFilePath();
+    TestSpecXmlLoadRejectsDirectoryPath();
+    TestSpecXmlSavesToFile();
+    TestSpecXmlSaveReportsOpenFailure();
     TestSpecXmlDecodesFreeJointAndFixedBody();
     TestSpecXmlSkipsCommentsAndInfersRangeLimits();
     TestSpecXmlRejectsEqualityUntilConstraintLayerExists();
@@ -1537,6 +2876,7 @@ int main()
     TestCompileSpecCanFillExistingModel();
     TestDtMathDynamicResizeHelpers();
     TestDataResizeSeparatesBodyAndDofStorage();
+    TestDataResizeSupportsFullyFixedZeroDofModel();
     TestDtDynMathHelpersAreReusable();
     TestCompileSpecUsesNativeIndexLayout();
     TestCompileSpecSupportsMultipleMovableRoots();

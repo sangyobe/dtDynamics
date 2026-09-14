@@ -39,39 +39,76 @@ echo "Access run label     : ${RUN_LABEL}"
 echo "=================================================="
 
 # 바이너리/라이선스 서버 연결을 초반에 확인
-polyspace-bug-finder-server -version
+if ! polyspace-bug-finder-server -version; then
+    echo "ERROR: Polyspace Bug Finder Server is unavailable"
+    exit 1
+fi
 
-mkdir -p "${REPORT_ROOT}" "${POLYSPACE_BUILD_DIR}"
+if ! mkdir -p "${REPORT_ROOT}" "${POLYSPACE_BUILD_DIR}"; then
+    echo "ERROR: cannot create Polyspace report directories"
+    exit 1
+fi
 
 # cache(policy: pull-push, key가 브랜치 단위)가 직전 실행의 -results-dir를 그대로 복원해오므로,
 # 여기서 비우지 않으면 "풀스캔"이어도 이전 실행 결과가 섞인 상태로 재검증되어 실행마다 결함 집합이 달라진다
-rm -rf "${RESULTS_DIR}"
-mkdir -p "${RESULTS_DIR}"
+if ! rm -rf "${RESULTS_DIR}"; then
+    echo "ERROR: cannot clear prior Polyspace results"
+    exit 1
+fi
+if ! mkdir -p "${RESULTS_DIR}"; then
+    echo "ERROR: cannot create fresh Polyspace results directory"
+    exit 1
+fi
 
 # compile_commands.json → Polyspace 분석 옵션 추출
-polyspace-configure \
+if ! rm -f "${CONFIG_OPTS}"; then
+    echo "ERROR: cannot clear prior Polyspace configuration"
+    exit 1
+fi
+if ! polyspace-configure \
     -compilation-database "${BUILD_DIR}/compile_commands.json" \
     -output-options-file "${CONFIG_OPTS}" \
     -allow-overwrite \
     -prog "${PROG}"
+then
+    echo "ERROR: Polyspace configuration failed"
+    exit 1
+fi
+test -s "${CONFIG_OPTS}" || {
+    echo "ERROR: Polyspace configuration output is missing or empty"
+    exit 1
+}
 
+ANALYSIS_EXIT=0
 polyspace-bug-finder-server \
     -options-file polyspace/polyspace.opts \
     -options-file "${CONFIG_OPTS}" \
     -checkers-activation-file polyspace/checkers.xml \
     -results-dir "${RESULTS_DIR}" \
-    -max-processes 4 || true
+    -max-processes 4 || ANALYSIS_EXIT=$?
 
-test -f "${RESULTS_DIR}/ps_results.psbf" || {
-    echo "ERROR: Polyspace 분석 실패 - ps_results.psbf 결과가 없습니다."
+test -s "${RESULTS_DIR}/ps_results.psbf" || {
+    echo "ERROR: Polyspace analysis failed: ps_results.psbf is missing or empty"
     exit 1
 }
+if [[ ${ANALYSIS_EXIT} -ne 0 ]]; then
+    echo "ERROR: Polyspace analysis command failed (exit ${ANALYSIS_EXIT})"
+    exit "${ANALYSIS_EXIT}"
+fi
 
 # CSV 결과 내보내기
-polyspace-results-export \
+if ! rm -f "${REPORT}"; then
+    echo "ERROR: cannot clear prior Polyspace result report"
+    exit 1
+fi
+if ! polyspace-results-export \
     -format csv \
     -output-name "${REPORT_ROOT}/polyspace" \
     -results-dir "${RESULTS_DIR}"
+then
+    echo "ERROR: Polyspace result export failed"
+    exit 1
+fi
 
 # PDF 리포트 생성
 polyspace-report-generator \
@@ -89,33 +126,24 @@ if [[ -n "${PSLOG}" ]] && grep -q "License error\|Licensing Error" "${PSLOG}"; t
     exit 1
 fi
 
-# 요약 출력 및 종료 코드 결정
+# CI passes only when every result is Green or carries a narrow Polyspace
+# justification. Compilation failures always block the static-analysis gate.
 POLYSPACE_EXIT=0
 if [[ -f "${REPORT}" ]]; then
-    NO_COMPILE="$(grep -c "File does not compile" "${REPORT}" || true)"
-    RED="$(grep $'\tRed\t' "${REPORT}" | grep -cv "File does not compile" || true)"
-
     echo "=============================="
     echo "Polyspace 결과 요약"
-    echo "  Red (실제 결함): ${RED}개  (컴파일 불가 ${NO_COMPILE}개 제외)"
+    python3 tools/polyspace_result_gate.py --input "${REPORT}" || POLYSPACE_EXIT=1
     echo "  PDF: ${REPORT_ROOT}/polyspace-report.pdf"
     echo "=============================="
-
-    if [[ "${RED}" -gt 0 ]]; then
-        grep $'\tRed\t' "${REPORT}" \
-            | grep -v "File does not compile" \
-            | awk -F'\t' '{printf "  %-50s | %s\n", $6, $9}'
-        POLYSPACE_EXIT=1
-    fi
 else
-    echo "결과 CSV를 찾을 수 없습니다"
+    echo "ERROR: exported Polyspace result is missing: ${REPORT}"
     POLYSPACE_EXIT=1
 fi
 
 # Polyspace Access 에 결과 업로드 (변수 미설정 시 건너뜀)
 if [[ -n "${POLYSPACE_ACCESS_LOGIN:-}" && -n "${POLYSPACE_ACCESS_ENCRYPTED_PASSWORD:-}" ]]; then
     if polyspace-access \
-        -protocol http \
+        -protocol https \
         -host "${POLYSPACE_ACCESS_HOST}" \
         -port "${POLYSPACE_ACCESS_PORT}" \
         -login "${POLYSPACE_ACCESS_LOGIN}" \
@@ -129,7 +157,7 @@ if [[ -n "${POLYSPACE_ACCESS_LOGIN:-}" && -n "${POLYSPACE_ACCESS_ENCRYPTED_PASSW
 
         if [[ -n "${RUN_ID}" ]]; then
             polyspace-access \
-                -protocol http \
+                -protocol https \
                 -host "${POLYSPACE_ACCESS_HOST}" \
                 -port "${POLYSPACE_ACCESS_PORT}" \
                 -login "${POLYSPACE_ACCESS_LOGIN}" \

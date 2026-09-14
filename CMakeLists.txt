@@ -9,7 +9,7 @@ cmake_minimum_required(VERSION 3.16)
 project(
     dtDynamics
     LANGUAGES CXX
-    VERSION 0.1.0
+    VERSION 0.1.1
     DESCRIPTION "Standalone dynamics ingredient package for control and WBC"
 )
 set(PROJECT_NAMESPACE ${PROJECT_NAME})
@@ -55,7 +55,6 @@ if(DTDYNAMICS_IS_TOP_LEVEL AND DEFINED BUILD_BENCHMARK)
 endif()
 option(DTDYNAMICS_BUILD_TEST "Build tests for ${PROJECT_NAME}" ${DTDYNAMICS_BUILD_TEST_DEFAULT})
 option(DTDYNAMICS_BUILD_BENCHMARK "Build benchmarks for ${PROJECT_NAME}" ${DTDYNAMICS_BUILD_BENCHMARK_DEFAULT})
-option(DTDYNAMICS_BUILD_DOCS "Build Doxygen/Graphviz documentation for ${PROJECT_NAME}" OFF)
 option(DTDYNAMICS_BUILD_REFERENCE_BENCHMARK "Build MuJoCo/Pinocchio reference benchmark executable" ON)
 option(BUILD_DTDYNAMICS_MUJOCO_TEST "Build MuJoCo reference validation tests" ON)
 option(BUILD_DTDYNAMICS_PINOCCHIO_TEST "Build Pinocchio reference validation tests" ON)
@@ -79,6 +78,7 @@ endif()
 set(DTDYNAMICS_SRC
     src/dtDynTypes.cpp
     src/dtDynSpec.cpp
+    src/dtDynValidation.cpp
     src/dtDynModel.cpp
     src/dtDynData.cpp
     src/dtDynCompile.cpp
@@ -118,25 +118,6 @@ if(DTDYNAMICS_BUILD_BENCHMARK)
     endif()
 endif()
 
-if(DTDYNAMICS_BUILD_DOCS)
-    find_program(DOXYGEN_EXECUTABLE doxygen REQUIRED)
-    find_program(GRAPHVIZ_DOT_EXECUTABLE dot REQUIRED)
-    set(DTDYNAMICS_DOCS_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/docs/doxygen")
-    add_custom_target(docs
-        COMMAND ${CMAKE_COMMAND} -E env
-            "PATH=$ENV{PATH}"
-            "DTDYNAMICS_DOCS_OUTPUT_DIR=${DTDYNAMICS_DOCS_OUTPUT_DIR}"
-            ${PROJECT_SOURCE_DIR}/tools/validate_docs.sh
-        BYPRODUCTS ${DTDYNAMICS_DOCS_OUTPUT_DIR}/html/index.html
-        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-        COMMENT "Generating dtDynamics Doxygen/Graphviz manual"
-        VERBATIM
-    )
-    install(DIRECTORY ${DTDYNAMICS_DOCS_OUTPUT_DIR}/html/
-        DESTINATION ${CMAKE_INSTALL_DOCDIR}/html
-        OPTIONAL
-    )
-endif()
 
 install(TARGETS ${PROJECT_NAME}
     EXPORT dtDynamicsTargets
@@ -152,6 +133,9 @@ install(DIRECTORY include/dtDynamics
 if(EXISTS "${PROJECT_SOURCE_DIR}/docs")
     install(DIRECTORY docs/
         DESTINATION ${CMAKE_INSTALL_DOCDIR}
+        REGEX "/guides/README\\.md$" EXCLUDE
+        REGEX "/guides/themes(/|$)" EXCLUDE
+        REGEX "/guides/(model_guide|usage_guide)/[^/]+\\.md$" EXCLUDE
     )
 endif()
 
@@ -188,7 +172,6 @@ install(FILES
 message(STATUS "DTDYNAMICS_IS_TOP_LEVEL             : ${DTDYNAMICS_IS_TOP_LEVEL}")
 message(STATUS "DTDYNAMICS_BUILD_TEST               : ${DTDYNAMICS_BUILD_TEST}")
 message(STATUS "DTDYNAMICS_BUILD_BENCHMARK          : ${DTDYNAMICS_BUILD_BENCHMARK}")
-message(STATUS "DTDYNAMICS_BUILD_DOCS               : ${DTDYNAMICS_BUILD_DOCS}")
 message(STATUS "DTDYNAMICS_BUILD_REFERENCE_BENCHMARK: ${DTDYNAMICS_BUILD_REFERENCE_BENCHMARK}")
 message(STATUS "BUILD_DTDYNAMICS_MUJOCO_TEST        : ${BUILD_DTDYNAMICS_MUJOCO_TEST}")
 message(STATUS "BUILD_DTDYNAMICS_PINOCCHIO_TEST     : ${BUILD_DTDYNAMICS_PINOCCHIO_TEST}")

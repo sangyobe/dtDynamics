@@ -13,11 +13,9 @@
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
-#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <new>
-#include <sstream>
 #include <stdexcept>
 #include <string>
 
@@ -153,6 +151,7 @@ struct Result
     int iterations = 0;
     double meanUs = 0.0;
     double medianUs = 0.0;
+    double p95Us = 0.0;
     double p99Us = 0.0;
     double allocationMean = 0.0;
     unsigned long long allocationMax = 0;
@@ -162,19 +161,6 @@ constexpr dtDynCcrbaTermFlags kLeoQuadWbcCcrbaTermFlags =
     DTDYN_CCRBA_TERM_COM_POS |
     DTDYN_CCRBA_TERM_CMAMAT |
     DTDYN_CCRBA_TERM_CENT_MOM;
-
-std::string ReadTextFile(const std::string &path)
-{
-    std::ifstream input(path);
-    if (!input)
-    {
-        throw std::runtime_error("benchmark_dtDynamicsStages: failed to open XML fixture: " + path);
-    }
-
-    std::ostringstream stream;
-    stream << input.rdbuf();
-    return stream.str();
-}
 
 bool EnvEnabled(const char *name)
 {
@@ -581,7 +567,7 @@ dtArray<Scenario> MakeScenarios()
     {
         const char *externalXmlName = std::getenv("DTDYNAMICS_BENCHMARK_XML_NAME");
         addFixture((externalXmlName != nullptr && externalXmlName[0] != '\0') ? externalXmlName : "external_xml",
-                   dtDynSpec::DecodeXml(ReadTextFile(externalXmlPath)));
+                   dtDynSpec::LoadXmlFile(externalXmlPath));
     }
     else if (onlyExternalFixture)
     {
@@ -1066,20 +1052,20 @@ void RunLeoQuadWbcUpdate(const dtDynModel &model,
     ComputeJacobians(model, data, bodyIds, siteIds);
 }
 
-void RunFullDynamicsRNEA(const dtDynModel &model,
-                         dtDynData &data,
-                         const dt::Math::Vector3<dtDynReal> &gravity,
-                         const dtArray<dtDynIndex> &,
-                         const dtArray<dtDynIndex> &)
+void RunFullDynamicsRNEAComPos(const dtDynModel &model,
+                               dtDynData &data,
+                               const dt::Math::Vector3<dtDynReal> &gravity,
+                               const dtArray<dtDynIndex> &,
+                               const dtArray<dtDynIndex> &)
 {
-    ComputeDynamicsRNEA(model, data, gravity);
+    ComputeDynamicsRNEA(model, data, gravity, DTDYN_RNEA_TERM_COM_POS);
 }
 
-void RunFullDynamicsCCRBA(const dtDynModel &model,
-                          dtDynData &data,
-                          const dt::Math::Vector3<dtDynReal> &gravity,
-                          const dtArray<dtDynIndex> &,
-                          const dtArray<dtDynIndex> &)
+void RunFullDynamicsCCRBABaseTerms(const dtDynModel &model,
+                                   dtDynData &data,
+                                   const dt::Math::Vector3<dtDynReal> &gravity,
+                                   const dtArray<dtDynIndex> &,
+                                   const dtArray<dtDynIndex> &)
 {
     ComputeDynamicsCCRBA(model, data, gravity);
 }
@@ -1115,9 +1101,9 @@ dtArray<Stage> MakeStages()
             {"all_jacobians_after_ccrba", PrepareCentroidal, RunAllJacobians},
             {"indexed_jacobians_after_ccrba", PrepareCentroidal, RunIndexedJacobians},
             {"gravity_after_ccrba", PrepareCentroidal, RunGravityForces},
-            {"compute_dynamics_rnea", PrepareNone, RunFullDynamicsRNEA},
-            {"compute_dynamics_ccrba", PrepareNone, RunFullDynamicsCCRBA},
-            {"compute_dynamics_ccrba_wbc_terms", PrepareNone, RunFullDynamicsCCRBAWbcTerms},
+            {"compute_dynamics_rnea_com_pos", PrepareNone, RunFullDynamicsRNEAComPos},
+            {"compute_dynamics_ccrba_base_terms", PrepareNone, RunFullDynamicsCCRBABaseTerms},
+            {"leoquad_reduced_ccrba", PrepareNone, RunFullDynamicsCCRBAWbcTerms},
             {"leoquad_wbc_update", PrepareNone, RunLeoQuadWbcUpdate},
             {"compute_dynamics_ccrba_all_terms", PrepareNone, RunFullDynamicsCCRBAAllTerms}};
 }
@@ -1220,6 +1206,9 @@ Result RunStage(const Scenario &scenario, const Stage &stage, const int warmup, 
     result.iterations = iterations;
     result.meanUs = sum / static_cast<double>(samples.size());
     result.medianUs = samples[samples.size() / 2];
+    const std::size_t p95Index = std::min(samples.size() - 1,
+                                          static_cast<std::size_t>(0.95 * static_cast<double>(samples.size() - 1)));
+    result.p95Us = samples[p95Index];
     const std::size_t p99Index = std::min(samples.size() - 1,
                                           static_cast<std::size_t>(0.99 * static_cast<double>(samples.size() - 1)));
     result.p99Us = samples[p99Index];
@@ -1240,6 +1229,7 @@ void PrintResult(const Result &result)
               << result.iterations << ','
               << result.meanUs << ','
               << result.medianUs << ','
+              << result.p95Us << ','
               << result.p99Us << ','
               << result.allocationMean << ','
               << result.allocationMax << '\n';
@@ -1257,7 +1247,7 @@ int main()
     const dtArray<Stage> stages = MakeStages();
     dtArray<std::string> batchSummaryRows;
 
-    std::cout << "fixture,state,stage,nq,nv,nbody,nsite,iterations,mean_us,median_us,p99_us,"
+    std::cout << "fixture,state,stage,nq,nv,nbody,nsite,iterations,mean_us,median_us,p95_us,p99_us,"
                  "allocation_mean,allocation_max\n";
     if (dt::Dynamics::benchmark::BenchmarkEmitSamples())
     {
@@ -1271,9 +1261,11 @@ int main()
         {
             dtArray<double> meanUs;
             dtArray<double> medianUs;
+            dtArray<double> p95Us;
             dtArray<double> p99Us;
             meanUs.resize(batchCount);
             medianUs.resize(batchCount);
+            p95Us.resize(batchCount);
             p99Us.resize(batchCount);
             unsigned long long allocationMax = 0;
 
@@ -1282,6 +1274,7 @@ int main()
                 const Result result = RunStage(scenario, stage, warmup, iterations);
                 meanUs[batch] = result.meanUs;
                 medianUs[batch] = result.medianUs;
+                p95Us[batch] = result.p95Us;
                 p99Us[batch] = result.p99Us;
                 allocationMax = std::max(allocationMax, result.allocationMax);
                 if (batch == 0)
@@ -1299,6 +1292,7 @@ int main()
                                                                                          batchCount,
                                                                                          meanUs,
                                                                                          medianUs,
+                                                                                         p95Us,
                                                                                          p99Us,
                                                                                          allocationMax));
             }

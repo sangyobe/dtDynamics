@@ -3,7 +3,7 @@
  \brief     Reusable native dtDynamics model and data utility definitions.
  \author    Joonhee Jo, joonhee.jo@hyundai.com
  \date      2026. 07. 16
- \version   0.1.0
+ \version   0.1.1
  \copyright RoboticsLab ART All rights reserved.
 */
 
@@ -28,21 +28,6 @@ dtDynIndex RootIndex(const dtDynModel &model, const dtDynIndex bodyId)
         return DTDYN_INVALID_INDEX;
     }
     return model.body_rootidx[static_cast<std::size_t>(bodyId)];
-}
-
-dtDynIndex RootCentroidalLinearRow(const dtDynIndex rootIdx)
-{
-    return 6 * rootIdx;
-}
-
-dtDynIndex RootCentroidalAngularRow(const dtDynIndex rootIdx)
-{
-    return RootCentroidalLinearRow(rootIdx) + 3;
-}
-
-dtDynIndex RootComRow(const dtDynIndex rootIdx)
-{
-    return 3 * rootIdx;
 }
 
 dt::Math::Vector3<dtDynReal> RootCom(const dtDynModel &model,

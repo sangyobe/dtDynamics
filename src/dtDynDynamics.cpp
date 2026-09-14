@@ -3,7 +3,7 @@
  \brief     Native dtDynamics dynamics ingredient definitions.
  \author    Joonhee Jo, joonhee.jo@hyundai.com
  \date      2026. 07. 16
- \version   0.1.0
+ \version   0.1.1
  \copyright RoboticsLab ART All rights reserved.
 */
 
@@ -427,8 +427,10 @@ bool IsZeroSpatial(const dt::Math::Vector6<dtDynReal> &value)
     return true;
 }
 
-// Fixed-size CCRBA spatial kernels. These helpers keep the hot path allocation
-// free while the comments show the equivalent dtMath-level expressions.
+// Fixed-size CCRBA spatial kernels. These helpers avoid dynamic local
+// temporaries; end-to-end allocation behavior still depends on caller-owned
+// storage and is reported only within the documented benchmark-counter scope.
+// The comments show the equivalent dtMath-level expressions.
 
 void SpatialMulPair(const dt::Math::Matrix<6, 6, dtDynReal> &matrix,
                     const dt::Math::Vector6<dtDynReal> &leftVector,
@@ -807,12 +809,12 @@ void ComputeMassMatrixFromCompositeInertias(const dtDynModel &model, dtDynData &
     }
 }
 
-bool HasRNEATerm(const dtDynRneaTermFlags flags, const dtDynRneaTermFlags term)
+constexpr bool HasRNEATerm(const dtDynRneaTermFlags flags, const dtDynRneaTermFlags term)
 {
     return (flags & term) != 0u;
 }
 
-bool HasCCRBATerm(const dtDynCcrbaTermFlags flags, const dtDynCcrbaTermFlags term)
+constexpr bool HasCCRBATerm(const dtDynCcrbaTermFlags flags, const dtDynCcrbaTermFlags term)
 {
     return (flags & term) != 0u;
 }

@@ -31,6 +31,7 @@
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <new>
 #include <stdexcept>
@@ -43,6 +44,31 @@ namespace
 
 std::atomic<bool> g_countAllocations(false);
 std::atomic<unsigned long long> g_allocationCount(0);
+std::atomic<int> g_externalTimingEngine(0);
+std::atomic<unsigned long long> g_mujocoNativeValidationRunsDuringTiming(0);
+std::atomic<unsigned long long> g_pinocchioNativeValidationRunsDuringTiming(0);
+
+class ExternalTimingGuard
+{
+public:
+    explicit ExternalTimingGuard(const int engine)
+    {
+        const int previous = g_externalTimingEngine.exchange(engine, std::memory_order_relaxed);
+        if (previous != 0)
+        {
+            g_externalTimingEngine.store(previous, std::memory_order_relaxed);
+            throw std::logic_error("nested external-reference timing scope");
+        }
+    }
+
+    ~ExternalTimingGuard()
+    {
+        g_externalTimingEngine.store(0, std::memory_order_relaxed);
+    }
+
+    ExternalTimingGuard(const ExternalTimingGuard &) = delete;
+    ExternalTimingGuard &operator=(const ExternalTimingGuard &) = delete;
+};
 
 void CountAllocation()
 {
@@ -149,6 +175,7 @@ struct Result
     int iterations = 0;
     double meanUs = 0.0;
     double medianUs = 0.0;
+    double p95Us = 0.0;
     double p99Us = 0.0;
     double allocationMean = 0.0;
     unsigned long long allocationMax = 0;
@@ -161,27 +188,54 @@ struct ErrorSummary
     double maxRelative = 0.0;
     double squared = 0.0;
     int count = 0;
+    bool finite = true;
 
     void Add(const double actual, const double expected)
     {
+        ++count;
+        if (!std::isfinite(actual) || !std::isfinite(expected))
+        {
+            finite = false;
+            return;
+        }
         const double error = std::fabs(actual - expected);
         const double scale = std::max(1.0, std::fabs(expected));
+        const double relative = error / scale;
+        const double squaredError = error * error;
+        if (!std::isfinite(error) || !std::isfinite(scale) ||
+            !std::isfinite(relative) || !std::isfinite(squaredError))
+        {
+            finite = false;
+            return;
+        }
         max = std::max(max, error);
-        maxRelative = std::max(maxRelative, error / scale);
-        squared += error * error;
-        ++count;
+        maxRelative = std::max(maxRelative, relative);
+        squared += squaredError;
+        if (!std::isfinite(squared))
+        {
+            finite = false;
+        }
     }
 
     void Merge(const ErrorSummary &other)
     {
+        finite = finite && other.finite;
         max = std::max(max, other.max);
         maxRelative = std::max(maxRelative, other.maxRelative);
         squared += other.squared;
         count += other.count;
+        if (!std::isfinite(max) || !std::isfinite(maxRelative) || !std::isfinite(squared))
+        {
+            finite = false;
+        }
     }
 
     double Rms() const
     {
+        if (!finite)
+        {
+            return std::numeric_limits<double>::quiet_NaN();
+        }
         return count == 0 ? 0.0 : std::sqrt(squared / static_cast<double>(count));
     }
 };
@@ -228,7 +282,29 @@ TolerancePolicy ToleranceFor(const std::string &reference,
 
 bool ErrorWithinTolerance(const ErrorSummary &summary, const TolerancePolicy &tolerance)
 {
-    return summary.max <= tolerance.absTol || summary.maxRelative <= tolerance.relTol;
+    const double rms = summary.Rms();
+    return summary.count > 0 && summary.finite &&
+           std::isfinite(summary.max) && std::isfinite(summary.maxRelative) && std::isfinite(rms) &&
+           std::isfinite(tolerance.absTol) && std::isfinite(tolerance.relTol) &&
+           tolerance.absTol >= 0.0 && tolerance.relTol >= 0.0 &&
+           (summary.max <= tolerance.absTol || summary.maxRelative <= tolerance.relTol);
+}
+
+void ValidateNonFiniteErrorPolicy()
+{
+    ErrorSummary nonFiniteActual;
+    nonFiniteActual.Add(std::numeric_limits<double>::quiet_NaN(), 0.0);
+    ErrorSummary nonFiniteExpected;
+    nonFiniteExpected.Add(0.0, std::numeric_limits<double>::infinity());
+    ErrorSummary finite;
+    finite.Add(0.0, 0.0);
+    const TolerancePolicy nonFiniteTolerance{std::numeric_limits<double>::quiet_NaN(), 1.0e-9};
+    if (ErrorWithinTolerance(nonFiniteActual, TolerancePolicy{}) ||
+        ErrorWithinTolerance(nonFiniteExpected, TolerancePolicy{}) ||
+        ErrorWithinTolerance(finite, nonFiniteTolerance))
+    {
+        throw std::logic_error("reference error policy accepted a non-finite value");
+    }
 }
 
 struct MjModelDeleter
@@ -825,7 +901,14 @@ void RecordError(dtArray<ErrorRow> &rows,
     if (!ErrorWithinTolerance(summary, tolerance))
     {
         row.status = "fail";
-        row.diagnostic = "exceeds tolerance";
+        const double rms = summary.Rms();
+        const bool finiteValues = summary.finite &&
+                                  std::isfinite(summary.max) &&
+                                  std::isfinite(summary.maxRelative) &&
+                                  std::isfinite(rms) &&
+                                  std::isfinite(tolerance.absTol) &&
+                                  std::isfinite(tolerance.relTol);
+        row.diagnostic = finiteValues ? "exceeds tolerance" : "non-finite comparison or tolerance";
     }
     rows.push_back(row);
 }
@@ -869,6 +952,16 @@ NativeRun ComputeNativeRun(const std::string &xml,
                            const Eigen::VectorXd &qpos,
                            const Eigen::VectorXd &qvel)
 {
+    const int externalEngine = g_externalTimingEngine.load(std::memory_order_relaxed);
+    if (externalEngine == 1)
+    {
+        g_mujocoNativeValidationRunsDuringTiming.fetch_add(1, std::memory_order_relaxed);
+    }
+    else if (externalEngine == 2)
+    {
+        g_pinocchioNativeValidationRunsDuringTiming.fetch_add(1, std::memory_order_relaxed);
+    }
+
     NativeRun run;
     const dtDynSpec spec = dtDynSpec::DecodeXml(xml);
     run.model = CompileSpec(spec);
@@ -1325,6 +1418,9 @@ Result RunTimed(const std::string &engine,
     result.iterations = iterations;
     result.meanUs = sum / static_cast<double>(samples.size());
     result.medianUs = samples[samples.size() / 2];
+    const std::size_t p95Index = std::min(samples.size() - 1,
+                                          static_cast<std::size_t>(0.95 * static_cast<double>(samples.size() - 1)));
+    result.p95Us = samples[p95Index];
     const std::size_t p99Index = std::min(samples.size() - 1,
                                           static_cast<std::size_t>(0.99 * static_cast<double>(samples.size() - 1)));
     result.p99Us = samples[p99Index];
@@ -1734,7 +1830,7 @@ dtArray<PinFixture> PinocchioFixtures()
 
 void PrintHeader()
 {
-    std::cout << "engine,fixture,state,nq,nv,nbody,iterations,mean_us,median_us,p99_us,"
+    std::cout << "engine,fixture,state,nq,nv,nbody,iterations,mean_us,median_us,p95_us,p99_us,"
                  "allocation_mean,allocation_max,quantity_scope\n";
 }
 
@@ -1749,6 +1845,7 @@ void PrintResult(const Result &result)
               << result.iterations << ','
               << result.meanUs << ','
               << result.medianUs << ','
+              << result.p95Us << ','
               << result.p99Us << ','
               << result.allocationMean << ','
               << result.allocationMax << ','
@@ -1762,6 +1859,7 @@ void PrintErrorHeader()
 
 void PrintErrorRows(const dtArray<ErrorRow> &rows)
 {
+    std::cout << std::scientific << std::setprecision(17);
     for (const ErrorRow &row : rows)
     {
         std::cout << row.reference << ','
@@ -1777,10 +1875,11 @@ void PrintErrorRows(const dtArray<ErrorRow> &rows)
                   << row.status << ','
                   << row.diagnostic << '\n';
     }
+    std::cout << std::fixed << std::setprecision(6);
 }
 
-void RunNativeSameOutputBenchmarks(dtArray<std::string> &batchSummaryRows,
-                                   const int batchCount)
+void RunNativeReferenceContextBenchmarks(dtArray<std::string> &batchSummaryRows,
+                                         const int batchCount)
 {
     constexpr const char *quantityScope = "wbc_full_m_c_mdot_centroidal_com";
     for (const MjFixture &fixture : MujocoFixtures())
@@ -1798,9 +1897,11 @@ void RunNativeSameOutputBenchmarks(dtArray<std::string> &batchSummaryRows,
 
             dtArray<double> meanUs;
             dtArray<double> medianUs;
+            dtArray<double> p95Us;
             dtArray<double> p99Us;
             meanUs.resize(batchCount);
             medianUs.resize(batchCount);
+            p95Us.resize(batchCount);
             p99Us.resize(batchCount);
             unsigned long long allocationMax = 0;
             for (int batch = 0; batch < batchCount; ++batch)
@@ -1818,6 +1919,7 @@ void RunNativeSameOutputBenchmarks(dtArray<std::string> &batchSummaryRows,
                                                });
                 meanUs[batch] = result.meanUs;
                 medianUs[batch] = result.medianUs;
+                p95Us[batch] = result.p95Us;
                 p99Us[batch] = result.p99Us;
                 allocationMax = std::max(allocationMax, result.allocationMax);
                 if (batch == 0)
@@ -1835,6 +1937,7 @@ void RunNativeSameOutputBenchmarks(dtArray<std::string> &batchSummaryRows,
                                                                   batchCount,
                                                                   meanUs,
                                                                   medianUs,
+                                                                  p95Us,
                                                                   p99Us,
                                                                   allocationMax));
             }
@@ -1871,13 +1974,16 @@ void RunMujocoBenchmarks(dtArray<ErrorRow> &errorRows,
             constexpr const char *quantityScope = "forward_fullM_bias_site_jacobians_centroidal";
             dtArray<double> meanUs;
             dtArray<double> medianUs;
+            dtArray<double> p95Us;
             dtArray<double> p99Us;
             meanUs.resize(batchCount);
             medianUs.resize(batchCount);
+            p95Us.resize(batchCount);
             p99Us.resize(batchCount);
             unsigned long long allocationMax = 0;
             for (int batch = 0; batch < batchCount; ++batch)
             {
+                const ExternalTimingGuard externalTiming(1);
                 const Result result = RunTimed("mujoco",
                                                fixture.name,
                                                state,
@@ -1891,6 +1997,7 @@ void RunMujocoBenchmarks(dtArray<ErrorRow> &errorRows,
                                                });
                 meanUs[batch] = result.meanUs;
                 medianUs[batch] = result.medianUs;
+                p95Us[batch] = result.p95Us;
                 p99Us[batch] = result.p99Us;
                 allocationMax = std::max(allocationMax, result.allocationMax);
                 if (batch == 0)
@@ -1908,6 +2015,7 @@ void RunMujocoBenchmarks(dtArray<ErrorRow> &errorRows,
                                                                   batchCount,
                                                                   meanUs,
                                                                   medianUs,
+                                                                  p95Us,
                                                                   p99Us,
                                                                   allocationMax));
             }
@@ -1929,13 +2037,16 @@ void RunPinocchioBenchmarks(dtArray<ErrorRow> &errorRows,
             constexpr const char *quantityScope = "crba_gravity_nle_coriolis_ccrba_centroidal_dot";
             dtArray<double> meanUs;
             dtArray<double> medianUs;
+            dtArray<double> p95Us;
             dtArray<double> p99Us;
             meanUs.resize(batchCount);
             medianUs.resize(batchCount);
+            p95Us.resize(batchCount);
             p99Us.resize(batchCount);
             unsigned long long allocationMax = 0;
             for (int batch = 0; batch < batchCount; ++batch)
             {
+                const ExternalTimingGuard externalTiming(2);
                 const Result result = RunTimed("pinocchio",
                                                fixture.name,
                                                state,
@@ -1949,6 +2060,7 @@ void RunPinocchioBenchmarks(dtArray<ErrorRow> &errorRows,
                                                });
                 meanUs[batch] = result.meanUs;
                 medianUs[batch] = result.medianUs;
+                p95Us[batch] = result.p95Us;
                 p99Us[batch] = result.p99Us;
                 allocationMax = std::max(allocationMax, result.allocationMax);
                 if (batch == 0)
@@ -1966,65 +2078,10 @@ void RunPinocchioBenchmarks(dtArray<ErrorRow> &errorRows,
                                                                   batchCount,
                                                                   meanUs,
                                                                   medianUs,
+                                                                  p95Us,
                                                                   p99Us,
                                                                   allocationMax));
             }
-            constexpr const char *independentScope = "wbc_full_m_c_mdot_centroidal_com";
-            dtArray<double> independentMeanUs;
-            dtArray<double> independentMedianUs;
-            dtArray<double> independentP99Us;
-            independentMeanUs.resize(batchCount);
-            independentMedianUs.resize(batchCount);
-            independentP99Us.resize(batchCount);
-            unsigned long long independentAllocationMax = 0;
-            for (int batch = 0; batch < batchCount; ++batch)
-            {
-                const Result result = RunTimed("pinocchio_independent",
-                                               fixture.name,
-                                               state,
-                                               fixture.nativeNq,
-                                               fixture.nativeNv,
-                                               fixture.nativeNbody,
-                                               independentScope,
-                                               [&]()
-                                               {
-                                                   pinocchio::crba(fixture.model, scratch.data, scratch.q, pinocchio::Convention::WORLD);
-                                                   scratch.data.M.triangularView<Eigen::StrictlyLower>() =
-                                                       scratch.data.M.transpose().triangularView<Eigen::StrictlyLower>();
-                                                   pinocchio::computeGeneralizedGravity(fixture.model, scratch.data, scratch.q);
-                                                   pinocchio::nonLinearEffects(fixture.model, scratch.data, scratch.q, scratch.v);
-                                                   pinocchio::computeCoriolisMatrix(fixture.model, scratch.data, scratch.q, scratch.v);
-                                                   pinocchio::ccrba(fixture.model, scratch.data, scratch.q, scratch.v);
-                                                   pinocchio::computeCentroidalMapTimeVariation(fixture.model, scratch.data, scratch.q, scratch.v);
-                                                   pinocchio::computeCentroidalMomentumTimeVariation(fixture.model,
-                                                                                                     scratch.data,
-                                                                                                     scratch.q,
-                                                                                                     scratch.v,
-                                                                                                     scratch.zeroAcceleration);
-                                               });
-                independentMeanUs[batch] = result.meanUs;
-                independentMedianUs[batch] = result.medianUs;
-                independentP99Us[batch] = result.p99Us;
-                independentAllocationMax = std::max(independentAllocationMax, result.allocationMax);
-                if (batch == 0)
-                {
-                    PrintResult(result);
-                }
-            }
-            if (batchCount > 1)
-            {
-                batchSummaryRows.push_back(
-                    dt::Dynamics::benchmark::BuildBatchSummaryRow("benchmark_dtDynamicsReferences",
-                                                                  fixture.name,
-                                                                  state,
-                                                                  std::string("pinocchio_independent:") + independentScope,
-                                                                  batchCount,
-                                                                  independentMeanUs,
-                                                                  independentMedianUs,
-                                                                  independentP99Us,
-                                                                  independentAllocationMax));
-            }
-
             AppendPinocchioErrors(errorRows, fixture, state, scratch);
         }
     }
@@ -2036,6 +2093,7 @@ int main()
 {
     try
     {
+        ValidateNonFiniteErrorPolicy();
         PrintHeader();
         if (dt::Dynamics::benchmark::BenchmarkEmitSamples())
         {
@@ -2045,7 +2103,7 @@ int main()
         dtArray<ErrorRow> errorRows;
         dtArray<std::string> batchSummaryRows;
         const int batchCount = dt::Dynamics::benchmark::BenchmarkBatchCount();
-        RunNativeSameOutputBenchmarks(batchSummaryRows, batchCount);
+        RunNativeReferenceContextBenchmarks(batchSummaryRows, batchCount);
         RunMujocoBenchmarks(errorRows, batchSummaryRows, batchCount);
         RunPinocchioBenchmarks(errorRows, batchSummaryRows, batchCount);
         PrintErrorHeader();
@@ -2059,6 +2117,11 @@ int main()
             }
         }
         dt::Dynamics::benchmark::PrintBenchmarkMetadata(std::cout, "benchmark_dtDynamicsReferences", 20, 200);
+        std::cout << "benchmark_metadata,mujoco_native_validation_runs_during_timing,"
+                  << g_mujocoNativeValidationRunsDuringTiming.load(std::memory_order_relaxed) << '\n';
+        std::cout << "benchmark_metadata,pinocchio_native_validation_runs_during_timing,"
+                  << g_pinocchioNativeValidationRunsDuringTiming.load(std::memory_order_relaxed) << '\n';
+        std::cout << "benchmark_metadata,nonfinite_error_policy_self_test,pass\n";
         for (const ErrorRow &row : errorRows)
         {
             if (row.status == "fail")

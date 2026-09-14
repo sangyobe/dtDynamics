@@ -3,7 +3,7 @@
  \brief     Native dtDynamics model and data type definitions.
  \author    Joonhee Jo, joonhee.jo@hyundai.com
  \date      2026. 07. 16
- \version   0.1.0
+ \version   0.1.1
  \copyright RoboticsLab ART All rights reserved.
 */
 
@@ -32,7 +32,10 @@ static constexpr dtDynIndex DTDYN_INVALID_INDEX = -1; //!< Invalid model/data in
 /*! \brief Clamp a signed dtDynIndex to a non-negative std::size_t.
     \details Values less than or equal to zero map to 0. This helper is for sizes/counts,
              not for validating model indices where DTDYN_INVALID_INDEX must stay invalid. */
-std::size_t ToSize(dtDynIndex value);
+constexpr std::size_t ToSize(const dtDynIndex value)
+{
+    return value > 0 ? static_cast<std::size_t>(value) : static_cast<std::size_t>(0);
+}
 
 using dtDynDenseVector = dt::Math::VectorX<dtDynReal>; //!< Dynamic dense vector storage from dtMath.
 using dtDynDenseMatrix = dt::Math::MatrixX<dtDynReal>; //!< Dynamic dense matrix storage from dtMath.

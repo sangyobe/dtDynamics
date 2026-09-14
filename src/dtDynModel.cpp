@@ -3,7 +3,7 @@
  \brief     Compiled native dtDynamics model definitions.
  \author    Joonhee Jo, joonhee.jo@hyundai.com
  \date      2026. 07. 16
- \version   0.1.0
+ \version   0.1.1
  \copyright RoboticsLab ART All rights reserved.
 */
 
@@ -29,10 +29,7 @@ void AssignDenseVector(dtDynDenseVector &dst, const dtDynDenseVector &src)
 
 } // namespace
 
-dtDynModel::dtDynModel(const dtDynModel &other)
-{
-    *this = other;
-}
+dtDynModel::dtDynModel(const dtDynModel &) = default;
 
 dtDynModel &dtDynModel::operator=(const dtDynModel &other)
 {
@@ -100,6 +97,7 @@ dtDynModel &dtDynModel::operator=(const dtDynModel &other)
     m_bodyNameToId = other.m_bodyNameToId;
     m_jointNameToId = other.m_jointNameToId;
     m_siteNameToId = other.m_siteNameToId;
+    m_actuatorNameToId = other.m_actuatorNameToId;
 
     return *this;
 }
@@ -122,9 +120,10 @@ dtDynIndex dtDynModel::SiteId(const std::string &name) const
     return it == m_siteNameToId.end() ? DTDYN_INVALID_INDEX : it->second;
 }
 
-bool dtDynModel::IsWorldBody(const dtDynIndex body) const
+dtDynIndex dtDynModel::ActuatorId(const std::string &name) const
 {
-    return body == 0;
+    const auto it = m_actuatorNameToId.find(name);
+    return it == m_actuatorNameToId.end() ? DTDYN_INVALID_INDEX : it->second;
 }
 
 bool dtDynModel::IsFixedBody(const dtDynIndex body) const
@@ -145,6 +144,7 @@ void dtDynModel::RebuildNameMaps()
     m_bodyNameToId.clear();
     m_jointNameToId.clear();
     m_siteNameToId.clear();
+    m_actuatorNameToId.clear();
 
     for (dtDynIndex i = 0; i < static_cast<dtDynIndex>(body_names.size()); ++i)
     {
@@ -159,6 +159,11 @@ void dtDynModel::RebuildNameMaps()
     for (dtDynIndex i = 0; i < static_cast<dtDynIndex>(site_names.size()); ++i)
     {
         m_siteNameToId[site_names[static_cast<std::size_t>(i)]] = i;
+    }
+
+    for (dtDynIndex i = 0; i < static_cast<dtDynIndex>(actuator_names.size()); ++i)
+    {
+        m_actuatorNameToId[actuator_names[static_cast<std::size_t>(i)]] = i;
     }
 }
 
