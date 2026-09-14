@@ -754,6 +754,30 @@ void TestSpecXmlRejectsWrongVectorArity()
 
     expectInvalidArity("1 2", "1 2");
     expectInvalidArity("1 2 3 4", "4");
+
+    const auto expectInvalidArityXml = [](const std::string &xml, const std::string &anchor)
+    {
+        bool rejected = false;
+        try
+        {
+            (void)dtDynSpec::DecodeXml(xml);
+        }
+        catch (const dtDynXmlError &error)
+        {
+            rejected = error.Code() == dtDynXmlErrorCode::InvalidVectorArity &&
+                       error.Offset() == xml.find(anchor);
+        }
+        assert(rejected);
+    };
+
+    expectInvalidArityXml(
+        "<mujoco><worldbody><body name=\"base\" quat=\"1 0 0\"/>"
+        "</worldbody></mujoco>",
+        "1 0 0");
+    expectInvalidArityXml(
+        "<mujoco><worldbody><body name=\"base\"><joint name=\"hinge\" range=\"0\"/>"
+        "</body></worldbody></mujoco>",
+        "0");
 }
 
 void TestSpecXmlRejectsMalformedAttributes()

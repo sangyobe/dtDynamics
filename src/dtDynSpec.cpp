@@ -11,6 +11,7 @@
 
 #include "dtDynamics/dtDynValidation.h"
 
+#include <array>
 #include <cctype>
 #include <cmath>
 #include <fstream>
@@ -466,10 +467,29 @@ dtArray<dtDynReal> ParseVectorValues(const AttributeValue &attribute, const std:
     return values;
 }
 
+template <std::size_t ExpectedCount>
+std::array<dtDynReal, ExpectedCount> ParseFixedVector(const AttributeValue &attribute,
+                                                      const std::string &sourcePath)
+{
+    const dtArray<dtDynReal> parsed = ParseVectorValues(attribute, ExpectedCount, sourcePath);
+    if (parsed.size() != ExpectedCount)
+    {
+        throw dtDynXmlError(dtDynXmlErrorCode::InvalidVectorArity, sourcePath, attribute.offset,
+                            "parsed vector has an unexpected number of values");
+    }
+
+    std::array<dtDynReal, ExpectedCount> values{};
+    for (std::size_t index = 0; index < ExpectedCount; ++index)
+    {
+        values[index] = parsed[index];
+    }
+    return values;
+}
+
 dt::Math::Vector3<dtDynReal> ParseVector3(const AttributeValue &attribute,
                                           const std::string &sourcePath)
 {
-    const dtArray<dtDynReal> values = ParseVectorValues(attribute, 3, sourcePath);
+    const std::array<dtDynReal, 3> values = ParseFixedVector<3>(attribute, sourcePath);
     dt::Math::Vector3<dtDynReal> value;
     value(0) = values[0];
     value(1) = values[1];
@@ -480,7 +500,7 @@ dt::Math::Vector3<dtDynReal> ParseVector3(const AttributeValue &attribute,
 dt::Math::Vector4<dtDynReal> ParseVector4(const AttributeValue &attribute,
                                           const std::string &sourcePath)
 {
-    const dtArray<dtDynReal> values = ParseVectorValues(attribute, 4, sourcePath);
+    const std::array<dtDynReal, 4> values = ParseFixedVector<4>(attribute, sourcePath);
     dt::Math::Vector4<dtDynReal> value;
     value(0) = values[0];
     value(1) = values[1];
@@ -1108,7 +1128,7 @@ dtDynSpec DecodeXmlImpl(const std::string &xml, const std::string &sourcePath)
             }
             if (HasAttribute(attrs, "range"))
             {
-                const dtArray<dtDynReal> range = ParseVectorValues(attrs.at("range"), 2, sourcePath);
+                const std::array<dtDynReal, 2> range = ParseFixedVector<2>(attrs.at("range"), sourcePath);
                 joint.rangeMin = range[0] * angleScale;
                 joint.rangeMax = range[1] * angleScale;
                 if (!hasLimitedAttribute)

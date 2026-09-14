@@ -10,11 +10,12 @@ from pathlib import Path
 
 
 RESOLVED_STATUSES = {"Justified", "No action planned", "Not a defect"}
+APPROVED_CHECK = "Return of non-const handle to encapsulated data member"
 APPROVED_ACCESSOR_LOCATIONS = {
-    ("dt::Dynamics::dtDynSpec::Bodies()", "1280"),
-    ("dt::Dynamics::dtDynSpec::Joints()", "1285"),
-    ("dt::Dynamics::dtDynSpec::Sites()", "1290"),
-    ("dt::Dynamics::dtDynSpec::Actuators()", "1295"),
+    ("dt::Dynamics::dtDynSpec::Bodies()", "1300"),
+    ("dt::Dynamics::dtDynSpec::Joints()", "1305"),
+    ("dt::Dynamics::dtDynSpec::Sites()", "1310"),
+    ("dt::Dynamics::dtDynSpec::Actuators()", "1315"),
 }
 REQUIRED_COLUMNS = {"Color", "Check", "Status", "File", "Line", "Function"}
 
@@ -28,7 +29,7 @@ def parse_arguments() -> argparse.Namespace:
 def is_approved_accessor_justification(row: dict[str, str]) -> bool:
     source_file = row.get("File", "").replace("\\", "/")
     return (
-        row.get("Check") == "BREAKING_DATA_ENCAPSULATION"
+        row.get("Check") == APPROVED_CHECK
         and (row.get("Function"), row.get("Line")) in APPROVED_ACCESSOR_LOCATIONS
         and (source_file == "src/dtDynSpec.cpp" or source_file.endswith("/src/dtDynSpec.cpp"))
     )

@@ -53,16 +53,16 @@ def assert_gate_fails_for_unreviewed_red() -> None:
 
 def assert_gate_accepts_only_approved_accessor_justifications() -> None:
     locations = (
-        ("dt::Dynamics::dtDynSpec::Bodies()", 1280),
-        ("dt::Dynamics::dtDynSpec::Joints()", 1285),
-        ("dt::Dynamics::dtDynSpec::Sites()", 1290),
-        ("dt::Dynamics::dtDynSpec::Actuators()", 1295),
+        ("dt::Dynamics::dtDynSpec::Bodies()", 1300),
+        ("dt::Dynamics::dtDynSpec::Joints()", 1305),
+        ("dt::Dynamics::dtDynSpec::Sites()", 1310),
+        ("dt::Dynamics::dtDynSpec::Actuators()", 1315),
     )
     result = run_gate(
         [
             *[
                 result_row(
-                    "BREAKING_DATA_ENCAPSULATION",
+                    "Return of non-const handle to encapsulated data member",
                     "Red",
                     "Justified",
                     function=function,
@@ -85,7 +85,7 @@ def assert_gate_rejects_unapproved_justification() -> None:
     assert "unresolved=1" in result.stdout
 
 
-def assert_gate_rejects_extra_finding_at_approved_accessor() -> None:
+def assert_gate_rejects_legacy_checker_id() -> None:
     result = run_gate(
         [
             result_row(
@@ -94,7 +94,24 @@ def assert_gate_rejects_extra_finding_at_approved_accessor() -> None:
                 "Justified",
                 function="dt::Dynamics::dtDynSpec::Bodies()",
                 file="/builds/dtdynamics/src/dtDynSpec.cpp",
-                line=1281,
+                line=1300,
+            )
+        ]
+    )
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "unresolved=1" in result.stdout
+
+
+def assert_gate_rejects_extra_finding_at_approved_accessor() -> None:
+    result = run_gate(
+        [
+            result_row(
+                "Return of non-const handle to encapsulated data member",
+                "Red",
+                "Justified",
+                function="dt::Dynamics::dtDynSpec::Bodies()",
+                file="/builds/dtdynamics/src/dtDynSpec.cpp",
+                line=1301,
             )
         ]
     )
@@ -106,12 +123,12 @@ def assert_gate_rejects_nonjustified_approved_location() -> None:
     result = run_gate(
         [
             result_row(
-                "BREAKING_DATA_ENCAPSULATION",
+                "Return of non-const handle to encapsulated data member",
                 "Red",
                 "No action planned",
                 function="dt::Dynamics::dtDynSpec::Bodies()",
                 file="/builds/dtdynamics/src/dtDynSpec.cpp",
-                line=1280,
+                line=1300,
             )
         ]
     )
@@ -121,12 +138,12 @@ def assert_gate_rejects_nonjustified_approved_location() -> None:
 
 def assert_gate_rejects_duplicate_approved_location() -> None:
     row = result_row(
-        "BREAKING_DATA_ENCAPSULATION",
+        "Return of non-const handle to encapsulated data member",
         "Red",
         "Justified",
         function="dt::Dynamics::dtDynSpec::Bodies()",
         file="/builds/dtdynamics/src/dtDynSpec.cpp",
-        line=1280,
+        line=1300,
     )
     result = run_gate([row, row])
     assert result.returncode == 1, result.stdout + result.stderr
@@ -156,6 +173,7 @@ def main() -> None:
     assert_gate_fails_for_unreviewed_red()
     assert_gate_accepts_only_approved_accessor_justifications()
     assert_gate_rejects_unapproved_justification()
+    assert_gate_rejects_legacy_checker_id()
     assert_gate_rejects_extra_finding_at_approved_accessor()
     assert_gate_rejects_nonjustified_approved_location()
     assert_gate_rejects_duplicate_approved_location()
