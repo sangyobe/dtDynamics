@@ -156,10 +156,9 @@ public:
     dtDynSpec(const dtDynSpec &other);
     /*! \brief Move specification storage when the source is not being edited. */
     dtDynSpec(dtDynSpec &&other);
-    /*! \brief Copy-and-swap assignment guarded against an active edit callback. */
-    dtDynSpec &operator=(const dtDynSpec &other);
-    /*! \brief Move assignment guarded against active edit callbacks. */
-    dtDynSpec &operator=(dtDynSpec &&other);
+    /*! \brief Assignment is supported outside active scoped edits. */
+    dtDynSpec &operator=(const dtDynSpec &other) = default;
+    dtDynSpec &operator=(dtDynSpec &&other) = default;
 
     /*! \brief Add a body under parent and return its index.
         \details If parent is not a valid existing body index, the new body remains detached

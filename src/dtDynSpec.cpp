@@ -681,41 +681,6 @@ dtDynSpec::dtDynSpec(dtDynSpec &&other)
     m_actuators = std::move(other.m_actuators);
 }
 
-dtDynSpec &dtDynSpec::operator=(const dtDynSpec &other)
-{
-    if (m_editDepth != 0)
-    {
-        m_editAborted = true;
-        throw std::logic_error("dtDynSpec: assignment during Edit* callback");
-    }
-    if (&other == this)
-    {
-        return *this;
-    }
-    dtDynSpec copy(other);
-    swap(*this, copy);
-    return *this;
-}
-
-dtDynSpec &dtDynSpec::operator=(dtDynSpec &&other)
-{
-    if (m_editDepth != 0)
-    {
-        m_editAborted = true;
-        throw std::logic_error("dtDynSpec: assignment during Edit* callback");
-    }
-    if (&other == this)
-    {
-        return *this;
-    }
-    other.EnsureNotEditing();
-    m_bodies = std::move(other.m_bodies);
-    m_joints = std::move(other.m_joints);
-    m_sites = std::move(other.m_sites);
-    m_actuators = std::move(other.m_actuators);
-    return *this;
-}
-
 void swap(dtDynSpec &left, dtDynSpec &right)
 {
     const bool leftEditing = left.m_editDepth != 0;

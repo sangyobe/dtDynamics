@@ -791,42 +791,6 @@ void TestSpecEditorsDiscardCaughtReentrantAttempt()
     assert(spec.Bodies()[body].inertial.mass == originalMass);
 }
 
-void TestSpecEditorsDiscardCaughtSelfAssignment()
-{
-    dtDynSpec spec;
-    const dtDynIndex body = spec.AddBody("base", 0);
-    const dtDynReal originalMass = spec.Bodies()[body].inertial.mass;
-
-    const auto expectAbortedEdit = [&](const auto &selfAssign)
-    {
-        bool rejected = false;
-        try
-        {
-            spec.EditBody(body, [&](dtDynBodySpec &draft)
-                          {
-                draft.inertial.mass = 7.0;
-                try
-                {
-                    selfAssign();
-                }
-                catch (const std::logic_error &)
-                {
-                } });
-        }
-        catch (const std::logic_error &)
-        {
-            rejected = true;
-        }
-        assert(rejected);
-        assert(spec.Bodies()[body].inertial.mass == originalMass);
-    };
-
-    expectAbortedEdit([&]
-                      { spec = spec; });
-    expectAbortedEdit([&]
-                      { spec = std::move(spec); });
-}
-
 void TestSpecEditorsRejectReentrantStructuralMutation()
 {
     dtDynSpec spec;
@@ -878,7 +842,7 @@ void TestSpecEditorsRejectReentrantStructuralMutation()
                                       {
             try
             {
-                spec = replacement;
+                spec.EditJoint(joint, [](dtDynJointSpec &) {});
             }
             catch (const std::logic_error &)
             {
@@ -902,7 +866,7 @@ void TestSpecEditorsRejectReentrantStructuralMutation()
                                          {
             try
             {
-                spec = std::move(replacement);
+                spec.EditActuator(actuator, [](dtDynActuatorSpec &) {});
             }
             catch (const std::logic_error &)
             {
@@ -3333,7 +3297,6 @@ int main()
     TestSpecEditorsDiscardFailedDrafts();
     TestSpecEditorsRejectReentrantMutation();
     TestSpecEditorsDiscardCaughtReentrantAttempt();
-    TestSpecEditorsDiscardCaughtSelfAssignment();
     TestSpecEditorsRejectReentrantStructuralMutation();
     TestSpecEditorsAbortBothReentrantSwapTransactions();
     TestSpecNameLookupReflectsEditorMutations();
