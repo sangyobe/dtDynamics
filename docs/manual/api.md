@@ -10,7 +10,7 @@ Author: Joonhee Jo
 |---|---|---|
 | XML text | `DecodeXml`, `EncodeXml` | caller가 memory bytes를 소유 |
 | XML file | `LoadXmlFile`, `SaveXmlFile` | package가 file I/O와 source path diagnostic 소유 |
-| editable spec | `dtDynSpec`, `ValidateSpec` | public mutable arrays, setup-time linear lookup |
+| editable spec | `dtDynSpec`, `ValidateSpec` | immutable collection views, callback-scoped `Edit*`, setup-time linear lookup |
 | checked compile | `CompileSpecChecked` | external/editable input을 validate한 뒤 compile |
 | trusted compile | `CompileSpec` | 이미 검증된 setup input을 위한 호환 path |
 | compiled model | `dtDynModel`, `ValidateModel` | dimensions/address/name map이 고정된 setup contract |

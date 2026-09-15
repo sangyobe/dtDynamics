@@ -1,6 +1,6 @@
 #include "dtDynamics/dtArray.h"
-#include "dtDynamics/dtDynData.h"
 #include "dtDynamics/dtDynCompile.h"
+#include "dtDynamics/dtDynData.h"
 #include "dtDynamics/dtDynDynamics.h"
 #include "dtDynamics/dtDynKinematics.h"
 #include "dtDynamics/dtDynMath.h"
@@ -21,6 +21,8 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
+#include <utility>
 
 using namespace dt::Dynamics;
 
@@ -30,6 +32,10 @@ static_assert(ToSize(7) == 7U);
 static_assert(utils::RootCentroidalLinearRow(2) == 12);
 static_assert(utils::RootCentroidalAngularRow(2) == 15);
 static_assert(utils::RootComRow(2) == 6);
+static_assert(std::is_same_v<decltype(std::declval<dtDynSpec &>().Bodies()), const dtArray<dtDynBodySpec> &>);
+static_assert(std::is_same_v<decltype(std::declval<dtDynSpec &>().Joints()), const dtArray<dtDynJointSpec> &>);
+static_assert(std::is_same_v<decltype(std::declval<dtDynSpec &>().Sites()), const dtArray<dtDynSiteSpec> &>);
+static_assert(std::is_same_v<decltype(std::declval<dtDynSpec &>().Actuators()), const dtArray<dtDynActuatorSpec> &>);
 
 namespace
 {
@@ -64,7 +70,8 @@ void TestCheckedCompileRejectsInvalidParent()
 {
     dtDynSpec spec;
     const dtDynIndex body = spec.AddBody("base", 0);
-    spec.Bodies()[body].parent = 99;
+    spec.EditBody(body, [&](dtDynBodySpec &draft)
+                  { draft.parent = 99; });
 
     dtDynValidationError error;
     assert(!ValidateSpec(spec, &error));
@@ -103,7 +110,8 @@ void TestSpecValidationRejectsSiblingCycle()
     dtDynSpec spec;
     const dtDynIndex first = spec.AddBody("first", 0);
     const dtDynIndex second = spec.AddBody("second", 0);
-    spec.Bodies()[second].nextSibling = second;
+    spec.EditBody(second, [&](dtDynBodySpec &draft)
+                  { draft.nextSibling = second; });
 
     dtDynValidationError error;
     assert(!ValidateSpec(spec, &error));
@@ -142,7 +150,8 @@ void TestSpecValidationRejectsInvalidBodyJointReference()
     dtDynSpec spec;
     const dtDynIndex body = spec.AddBody("base", 0);
     spec.AddJoint(body, "hinge", dtDynJointType::Hinge);
-    spec.Bodies()[body].joints[0] = 99;
+    spec.EditBody(body, [&](dtDynBodySpec &draft)
+                  { draft.joints[0] = 99; });
 
     dtDynValidationError error;
     assert(!ValidateSpec(spec, &error));
@@ -182,7 +191,8 @@ void TestSpecValidationRejectsNonFiniteValues()
 {
     dtDynSpec spec;
     const dtDynIndex body = spec.AddBody("base", 0);
-    spec.Bodies()[body].inertial.mass = std::numeric_limits<dtDynReal>::infinity();
+    spec.EditBody(body, [&](dtDynBodySpec &draft)
+                  { draft.inertial.mass = std::numeric_limits<dtDynReal>::infinity(); });
 
     dtDynValidationError error;
     assert(!ValidateSpec(spec, &error));
@@ -439,9 +449,11 @@ void TestModelValidationRejectsInconsistentDerivedMasses()
 {
     dtDynSpec spec;
     const dtDynIndex root = spec.AddBody("root", 0);
-    spec.Bodies()[root].inertial.mass = 2.0;
+    spec.EditBody(root, [&](dtDynBodySpec &draft)
+                  { draft.inertial.mass = 2.0; });
     const dtDynIndex child = spec.AddBody("child", root);
-    spec.Bodies()[child].inertial.mass = 3.0;
+    spec.EditBody(child, [&](dtDynBodySpec &draft)
+                  { draft.inertial.mass = 3.0; });
     const dtDynModel valid = CompileSpec(spec);
     dtDynValidationError error;
 
@@ -462,38 +474,48 @@ void TestSpecValidationRejectsInvalidPhysicalValues()
 
     dtDynSpec negativeMass;
     const dtDynIndex massBody = negativeMass.AddBody("mass_body", 0);
-    negativeMass.Bodies()[massBody].inertial.mass = -1.0;
+    negativeMass.EditBody(massBody, [&](dtDynBodySpec &draft)
+                          { draft.inertial.mass = -1.0; });
     assert(!ValidateSpec(negativeMass, &error));
 
     dtDynSpec invalidInertia;
     const dtDynIndex inertiaBody = invalidInertia.AddBody("inertia_body", 0);
-    invalidInertia.Bodies()[inertiaBody].inertial.mass = 1.0;
-    invalidInertia.Bodies()[inertiaBody].inertial.inertia(0) = 3.0;
-    invalidInertia.Bodies()[inertiaBody].inertial.inertia(1) = 1.0;
-    invalidInertia.Bodies()[inertiaBody].inertial.inertia(2) = 1.0;
+    invalidInertia.EditBody(inertiaBody, [&](dtDynBodySpec &draft)
+                            { draft.inertial.mass = 1.0; });
+    invalidInertia.EditBody(inertiaBody, [&](dtDynBodySpec &draft)
+                            { draft.inertial.inertia(0) = 3.0; });
+    invalidInertia.EditBody(inertiaBody, [&](dtDynBodySpec &draft)
+                            { draft.inertial.inertia(1) = 1.0; });
+    invalidInertia.EditBody(inertiaBody, [&](dtDynBodySpec &draft)
+                            { draft.inertial.inertia(2) = 1.0; });
     assert(!ValidateSpec(invalidInertia, &error));
 
     dtDynSpec invalidAxis;
     const dtDynIndex axisBody = invalidAxis.AddBody("axis_body", 0);
     const dtDynIndex axisJoint =
         invalidAxis.AddJoint(axisBody, "hinge", dtDynJointType::Hinge);
-    invalidAxis.Joints()[axisJoint].axis(2) = 2.0;
+    invalidAxis.EditJoint(axisJoint, [&](dtDynJointSpec &draft)
+                          { draft.axis(2) = 2.0; });
     assert(!ValidateSpec(invalidAxis, &error));
 
     dtDynSpec negativeArmature;
     const dtDynIndex armatureBody = negativeArmature.AddBody("armature_body", 0);
     const dtDynIndex armatureJoint =
         negativeArmature.AddJoint(armatureBody, "hinge", dtDynJointType::Hinge);
-    negativeArmature.Joints()[armatureJoint].armature = -1.0;
+    negativeArmature.EditJoint(armatureJoint, [&](dtDynJointSpec &draft)
+                               { draft.armature = -1.0; });
     assert(!ValidateSpec(negativeArmature, &error));
 
     dtDynSpec roundedAxis;
     const dtDynIndex roundedBody = roundedAxis.AddBody("rounded_axis_body", 0);
     const dtDynIndex roundedJoint =
         roundedAxis.AddJoint(roundedBody, "rounded_axis", dtDynJointType::Hinge);
-    roundedAxis.Joints()[roundedJoint].axis(0) = 0.70710678;
-    roundedAxis.Joints()[roundedJoint].axis(1) = 0.70710678;
-    roundedAxis.Joints()[roundedJoint].axis(2) = 0.0;
+    roundedAxis.EditJoint(roundedJoint, [&](dtDynJointSpec &draft)
+                          { draft.axis(0) = 0.70710678; });
+    roundedAxis.EditJoint(roundedJoint, [&](dtDynJointSpec &draft)
+                          { draft.axis(1) = 0.70710678; });
+    roundedAxis.EditJoint(roundedJoint, [&](dtDynJointSpec &draft)
+                          { draft.axis(2) = 0.0; });
     assert(ValidateSpec(roundedAxis, &error));
 }
 
@@ -501,12 +523,17 @@ void TestModelValidationRejectsInvalidPhysicalValues()
 {
     dtDynSpec spec;
     const dtDynIndex body = spec.AddBody("base", 0);
-    spec.Bodies()[body].inertial.mass = 1.0;
-    spec.Bodies()[body].inertial.inertia(0) = 1.0;
-    spec.Bodies()[body].inertial.inertia(1) = 1.0;
-    spec.Bodies()[body].inertial.inertia(2) = 1.0;
+    spec.EditBody(body, [&](dtDynBodySpec &draft)
+                  { draft.inertial.mass = 1.0; });
+    spec.EditBody(body, [&](dtDynBodySpec &draft)
+                  { draft.inertial.inertia(0) = 1.0; });
+    spec.EditBody(body, [&](dtDynBodySpec &draft)
+                  { draft.inertial.inertia(1) = 1.0; });
+    spec.EditBody(body, [&](dtDynBodySpec &draft)
+                  { draft.inertial.inertia(2) = 1.0; });
     const dtDynIndex joint = spec.AddJoint(body, "hinge", dtDynJointType::Hinge);
-    spec.Joints()[joint].armature = 1.0;
+    spec.EditJoint(joint, [&](dtDynJointSpec &draft)
+                   { draft.armature = 1.0; });
     const dtDynIndex site = spec.AddSite(body, "site");
     const dtDynModel valid = CompileSpec(spec);
     dtDynValidationError error;
@@ -647,7 +674,290 @@ void TestSpecWorldAndFixedBody()
     assert(spec.Joints()[hinge].type == dtDynJointType::Hinge);
 }
 
-void TestSpecNameLookupReflectsMutableStorage()
+void TestSpecEditorsCommitScopedCopies()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("base", 0);
+    const dtDynIndex joint = spec.AddJoint(body, "joint", dtDynJointType::Hinge);
+    const dtDynIndex site = spec.AddSite(body, "tool");
+    const dtDynIndex actuator = spec.AddActuator(joint, "motor");
+
+    spec.EditBody(body, [](dtDynBodySpec &draft)
+                  {
+        draft.pos(0) = 1.0;
+        draft.inertial.mass = 2.0; });
+    spec.EditJoint(joint, [](dtDynJointSpec &draft)
+                   {
+        draft.axis(1) = 1.0;
+        draft.armature = 0.1; });
+    spec.EditSite(site, [](dtDynSiteSpec &draft)
+                  { draft.pos(2) = 0.5; });
+    spec.EditActuator(actuator, [](dtDynActuatorSpec &draft)
+                      { draft.gear = 80.0; });
+
+    const dtDynSpec &view = spec;
+    assert(view.Bodies()[body].pos(0) == 1.0);
+    assert(view.Bodies()[body].inertial.mass == 2.0);
+    assert(view.Joints()[joint].axis(1) == 1.0);
+    assert(view.Joints()[joint].armature == 0.1);
+    assert(view.Sites()[site].pos(2) == 0.5);
+    assert(view.Actuators()[actuator].gear == 80.0);
+}
+
+void TestSpecEditorsDiscardFailedDrafts()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("base", 0);
+    const dtDynReal originalMass = spec.Bodies()[body].inertial.mass;
+
+    bool rejected = false;
+    try
+    {
+        spec.EditBody(body, [](dtDynBodySpec &draft)
+                      {
+            draft.inertial.mass = 7.0;
+            throw std::runtime_error("reject draft"); });
+    }
+    catch (const std::runtime_error &)
+    {
+        rejected = true;
+    }
+    assert(rejected);
+    assert(spec.Bodies()[body].inertial.mass == originalMass);
+
+    bool invalidIndexRejected = false;
+    try
+    {
+        spec.EditBody(99, [](dtDynBodySpec &) {});
+    }
+    catch (const std::out_of_range &)
+    {
+        invalidIndexRejected = true;
+    }
+    assert(invalidIndexRejected);
+}
+
+void TestSpecEditorsRejectReentrantMutation()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("base", 0);
+
+    bool rejected = false;
+    try
+    {
+        spec.EditBody(body, [&](dtDynBodySpec &)
+                      {
+            try
+            {
+                spec.EditBody(body, [](dtDynBodySpec &) {});
+            }
+            catch (const std::logic_error &)
+            {
+            } });
+    }
+    catch (const std::logic_error &)
+    {
+        rejected = true;
+    }
+    assert(rejected);
+    assert(spec.Bodies()[body].name == "base");
+}
+
+void TestSpecEditorsDiscardCaughtReentrantAttempt()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("base", 0);
+    const dtDynReal originalMass = spec.Bodies()[body].inertial.mass;
+
+    bool rejected = false;
+    try
+    {
+        spec.EditBody(body, [&](dtDynBodySpec &draft)
+                      {
+            draft.inertial.mass = 7.0;
+            try
+            {
+                spec.Clear();
+            }
+            catch (const std::logic_error &)
+            {
+            } });
+    }
+    catch (const std::logic_error &)
+    {
+        rejected = true;
+    }
+    assert(rejected);
+    assert(spec.Bodies()[body].inertial.mass == originalMass);
+}
+
+void TestSpecEditorsRejectReentrantStructuralMutation()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("base", 0);
+    const dtDynIndex joint = spec.AddJoint(body, "joint", dtDynJointType::Hinge);
+    const dtDynIndex site = spec.AddSite(body, "site");
+    const dtDynIndex actuator = spec.AddActuator(joint, "actuator");
+    dtDynSpec replacement;
+    replacement.AddBody("replacement", 0);
+    dtDynSpec copied;
+    copied = spec;
+    assert(copied.Bodies()[body].name == "base");
+    assert(copied.Joints()[joint].name == "joint");
+
+    spec = spec;
+    spec = std::move(spec);
+    assert(spec.Bodies()[body].name == "base");
+    assert(spec.Joints()[joint].name == "joint");
+
+    const auto expectLogicError = [](const auto &operation)
+    {
+        bool rejected = false;
+        try
+        {
+            operation();
+        }
+        catch (const std::logic_error &)
+        {
+            rejected = true;
+        }
+        assert(rejected);
+    };
+
+    expectLogicError([&]
+                     { spec.EditBody(body, [&](dtDynBodySpec &)
+                                     {
+            try
+            {
+                spec.Clear();
+            }
+            catch (const std::logic_error &)
+            {
+            } }); });
+    assert(spec.Bodies().size() == 2);
+    assert(spec.Bodies()[body].name == "base");
+
+    expectLogicError([&]
+                     { spec.EditJoint(joint, [&](dtDynJointSpec &)
+                                      {
+            try
+            {
+                spec.EditJoint(joint, [](dtDynJointSpec &) {});
+            }
+            catch (const std::logic_error &)
+            {
+            } }); });
+    assert(spec.Joints()[joint].name == "joint");
+
+    expectLogicError([&]
+                     { spec.EditSite(site, [&](dtDynSiteSpec &)
+                                     {
+            try
+            {
+                spec.AddBody("forbidden", body);
+            }
+            catch (const std::logic_error &)
+            {
+            } }); });
+    assert(spec.Bodies().size() == 2);
+
+    expectLogicError([&]
+                     { spec.EditActuator(actuator, [&](dtDynActuatorSpec &)
+                                         {
+            try
+            {
+                spec.EditActuator(actuator, [](dtDynActuatorSpec &) {});
+            }
+            catch (const std::logic_error &)
+            {
+            } }); });
+    assert(spec.Actuators()[actuator].name == "actuator");
+
+    expectLogicError([&]
+                     { spec.EditBody(body, [&](dtDynBodySpec &)
+                                     {
+            try
+            {
+                swap(spec, replacement);
+            }
+            catch (const std::logic_error &)
+            {
+            } }); });
+    assert(spec.Bodies()[body].name == "base");
+
+    expectLogicError([&]
+                     { spec.EditBody(body, [&](dtDynBodySpec &)
+                                     {
+            try
+            {
+                swap(replacement, spec);
+            }
+            catch (const std::logic_error &)
+            {
+            } }); });
+    assert(spec.Bodies()[body].name == "base");
+}
+
+void TestSpecEditorsAbortBothReentrantSwapTransactions()
+{
+    const auto expectBothAborted = [](const bool reverseOperands)
+    {
+        dtDynSpec first;
+        dtDynSpec second;
+        const dtDynIndex firstBody = first.AddBody("first", 0);
+        const dtDynIndex secondBody = second.AddBody("second", 0);
+        const dtDynReal firstMass = first.Bodies()[firstBody].inertial.mass;
+        const dtDynReal secondMass = second.Bodies()[secondBody].inertial.mass;
+        bool firstRejected = false;
+        bool secondRejected = false;
+
+        try
+        {
+            first.EditBody(firstBody, [&](dtDynBodySpec &firstDraft)
+                           {
+                firstDraft.inertial.mass = 3.0;
+                try
+                {
+                    second.EditBody(secondBody, [&](dtDynBodySpec &secondDraft)
+                                    {
+                        secondDraft.inertial.mass = 5.0;
+                        try
+                        {
+                            if (reverseOperands)
+                            {
+                                swap(second, first);
+                            }
+                            else
+                            {
+                                swap(first, second);
+                            }
+                        }
+                        catch (const std::logic_error &)
+                        {
+                        }
+                    });
+                }
+                catch (const std::logic_error &)
+                {
+                    secondRejected = true;
+                } });
+        }
+        catch (const std::logic_error &)
+        {
+            firstRejected = true;
+        }
+
+        assert(firstRejected);
+        assert(secondRejected);
+        assert(first.Bodies()[firstBody].inertial.mass == firstMass);
+        assert(second.Bodies()[secondBody].inertial.mass == secondMass);
+    };
+
+    expectBothAborted(false);
+    expectBothAborted(true);
+}
+
+void TestSpecNameLookupReflectsEditorMutations()
 {
     dtDynSpec spec;
     const dtDynIndex body = spec.AddBody("body", 0);
@@ -664,10 +974,14 @@ void TestSpecNameLookupReflectsMutableStorage()
     assert(spec.SiteId("missing") == DTDYN_INVALID_INDEX);
     assert(spec.ActuatorId("missing") == DTDYN_INVALID_INDEX);
 
-    spec.Bodies()[body].name = "renamed_body";
-    spec.Joints()[joint].name = "renamed_joint";
-    spec.Sites()[site].name = "renamed_site";
-    spec.Actuators()[actuator].name = "renamed_actuator";
+    spec.EditBody(body, [&](dtDynBodySpec &draft)
+                  { draft.name = "renamed_body"; });
+    spec.EditJoint(joint, [&](dtDynJointSpec &draft)
+                   { draft.name = "renamed_joint"; });
+    spec.EditSite(site, [&](dtDynSiteSpec &draft)
+                  { draft.name = "renamed_site"; });
+    spec.EditActuator(actuator, [&](dtDynActuatorSpec &draft)
+                      { draft.name = "renamed_actuator"; });
     assert(spec.BodyId("body") == DTDYN_INVALID_INDEX);
     assert(spec.JointId("joint") == DTDYN_INVALID_INDEX);
     assert(spec.SiteId("site") == DTDYN_INVALID_INDEX);
@@ -708,8 +1022,9 @@ void TestSpecXmlReportsTypedNumericErrors()
     {
         const std::string xml =
             "<mujoco><worldbody><body name=\"base\">"
-            "<inertial mass=\"" + value + "\"/>"
-            "</body></worldbody></mujoco>";
+            "<inertial mass=\"" +
+            value + "\"/>"
+                    "</body></worldbody></mujoco>";
 
         bool rejected = false;
         try
@@ -1484,11 +1799,13 @@ void TestCompiledModelCopiesIntoDefaultModel()
     const auto base = spec.AddBody("base", 0);
     spec.AddJoint(base, "floating_base", dtDynJointType::Free);
     const auto link = spec.AddBody("link", base);
-    spec.Bodies()[static_cast<std::size_t>(link)].inertial.mass = 2.0;
+    spec.EditBody(static_cast<std::size_t>(link), [&](dtDynBodySpec &draft)
+                  { draft.inertial.mass = 2.0; });
     spec.AddJoint(link, "hinge_z", dtDynJointType::Hinge);
     spec.AddSite(link, "tool");
     const auto actuator = spec.AddActuator(1, "hinge_motor");
-    spec.Actuators()[static_cast<std::size_t>(actuator)].gear = 120.0;
+    spec.EditActuator(static_cast<std::size_t>(actuator), [&](dtDynActuatorSpec &draft)
+                      { draft.gear = 120.0; });
 
     const dtDynModel compiled = CompileSpec(spec);
 
@@ -1515,7 +1832,8 @@ void TestCompiledModelCopiesZeroSizedOptionalDenseFields()
 {
     dtDynSpec spec;
     const auto link = spec.AddBody("link", 0);
-    spec.Bodies()[static_cast<std::size_t>(link)].inertial.mass = 1.0;
+    spec.EditBody(static_cast<std::size_t>(link), [&](dtDynBodySpec &draft)
+                  { draft.inertial.mass = 1.0; });
     spec.AddJoint(link, "hinge_z", dtDynJointType::Hinge);
 
     const dtDynModel compiled = CompileSpec(spec);
@@ -1534,7 +1852,8 @@ void TestCompileSpecCanFillExistingModel()
 {
     dtDynSpec spec;
     const auto link = spec.AddBody("link", 0);
-    spec.Bodies()[static_cast<std::size_t>(link)].inertial.mass = 1.0;
+    spec.EditBody(static_cast<std::size_t>(link), [&](dtDynBodySpec &draft)
+                  { draft.inertial.mass = 1.0; });
     spec.AddJoint(link, "hinge_z", dtDynJointType::Hinge);
 
     dtDynModel model;
@@ -1767,17 +2086,24 @@ void TestCompileSpecUsesNativeIndexLayout()
     const auto tool = spec.AddBody("tool", elbow);
     const auto toolSite = spec.AddSite(tool, "tool_tip");
 
-    spec.Bodies()[base].inertial.mass = 2.0;
-    spec.Bodies()[shoulder].inertial.mass = 3.0;
-    spec.Bodies()[elbow].inertial.mass = 4.0;
-    spec.Bodies()[tool].inertial.mass = 1.0;
+    spec.EditBody(base, [&](dtDynBodySpec &draft)
+                  { draft.inertial.mass = 2.0; });
+    spec.EditBody(shoulder, [&](dtDynBodySpec &draft)
+                  { draft.inertial.mass = 3.0; });
+    spec.EditBody(elbow, [&](dtDynBodySpec &draft)
+                  { draft.inertial.mass = 4.0; });
+    spec.EditBody(tool, [&](dtDynBodySpec &draft)
+                  { draft.inertial.mass = 1.0; });
 
     const auto elbowJoint = spec.AddJoint(elbow, "elbow_hinge", dtDynJointType::Hinge);
     const auto floatingBase = spec.AddJoint(shoulder, "floating_base", dtDynJointType::Free);
-    spec.Joints()[floatingBase].armature = 0.1;
-    spec.Joints()[elbowJoint].armature = 0.2;
+    spec.EditJoint(floatingBase, [&](dtDynJointSpec &draft)
+                   { draft.armature = 0.1; });
+    spec.EditJoint(elbowJoint, [&](dtDynJointSpec &draft)
+                   { draft.armature = 0.2; });
     const auto actuator = spec.AddActuator(elbowJoint, "elbow_motor");
-    spec.Actuators()[actuator].gear = 120.0;
+    spec.EditActuator(actuator, [&](dtDynActuatorSpec &draft)
+                      { draft.gear = 120.0; });
 
     const dtDynModel model = CompileSpec(spec);
 
@@ -1869,16 +2195,23 @@ void TestCompileSpecSupportsMultipleMovableRoots()
     const auto left = spec.AddBody("left_link", 0);
     const auto right = spec.AddBody("right_link", 0);
 
-    spec.Bodies()[left].inertial.mass = 2.0;
-    spec.Bodies()[left].inertial.pos(0) = 1.0;
-    spec.Bodies()[right].pos(0) = 3.0;
-    spec.Bodies()[right].inertial.mass = 3.0;
-    spec.Bodies()[right].inertial.pos(0) = 1.0;
+    spec.EditBody(left, [&](dtDynBodySpec &draft)
+                  { draft.inertial.mass = 2.0; });
+    spec.EditBody(left, [&](dtDynBodySpec &draft)
+                  { draft.inertial.pos(0) = 1.0; });
+    spec.EditBody(right, [&](dtDynBodySpec &draft)
+                  { draft.pos(0) = 3.0; });
+    spec.EditBody(right, [&](dtDynBodySpec &draft)
+                  { draft.inertial.mass = 3.0; });
+    spec.EditBody(right, [&](dtDynBodySpec &draft)
+                  { draft.inertial.pos(0) = 1.0; });
 
     const auto leftJoint = spec.AddJoint(left, "left_hinge", dtDynJointType::Hinge);
     const auto rightJoint = spec.AddJoint(right, "right_hinge", dtDynJointType::Hinge);
-    spec.Joints()[leftJoint].axis(2) = 1.0;
-    spec.Joints()[rightJoint].axis(2) = 1.0;
+    spec.EditJoint(leftJoint, [&](dtDynJointSpec &draft)
+                   { draft.axis(2) = 1.0; });
+    spec.EditJoint(rightJoint, [&](dtDynJointSpec &draft)
+                   { draft.axis(2) = 1.0; });
 
     const dtDynModel model = CompileSpec(spec);
     assert(model.nroot == 2);
@@ -1912,10 +2245,14 @@ void TestCompileSpecSupportsFloatingBaseQuadrupedTree()
 {
     dtDynSpec spec;
     const auto trunk = spec.AddBody("trunk", 0);
-    spec.Bodies()[trunk].inertial.mass = 5.0;
-    spec.Bodies()[trunk].inertial.inertia(0) = 0.25;
-    spec.Bodies()[trunk].inertial.inertia(1) = 0.35;
-    spec.Bodies()[trunk].inertial.inertia(2) = 0.45;
+    spec.EditBody(trunk, [&](dtDynBodySpec &draft)
+                  { draft.inertial.mass = 5.0; });
+    spec.EditBody(trunk, [&](dtDynBodySpec &draft)
+                  { draft.inertial.inertia(0) = 0.25; });
+    spec.EditBody(trunk, [&](dtDynBodySpec &draft)
+                  { draft.inertial.inertia(1) = 0.35; });
+    spec.EditBody(trunk, [&](dtDynBodySpec &draft)
+                  { draft.inertial.inertia(2) = 0.45; });
 
     spec.AddJoint(trunk, "floating_base", dtDynJointType::Free);
 
@@ -1926,16 +2263,24 @@ void TestCompileSpecSupportsFloatingBaseQuadrupedTree()
     for (dtDynIndex leg = 0; leg < 4; ++leg)
     {
         const auto upper = spec.AddBody(std::string(legNames[leg]) + "_upper", trunk);
-        spec.Bodies()[upper].pos(0) = xOffsets[leg];
-        spec.Bodies()[upper].pos(1) = yOffsets[leg];
-        spec.Bodies()[upper].inertial.mass = 1.0;
-        spec.Bodies()[upper].inertial.pos(2) = -0.2;
-        spec.Bodies()[upper].inertial.inertia(0) = 0.02;
-        spec.Bodies()[upper].inertial.inertia(1) = 0.02;
-        spec.Bodies()[upper].inertial.inertia(2) = 0.01;
+        spec.EditBody(upper, [&](dtDynBodySpec &draft)
+                      { draft.pos(0) = xOffsets[leg]; });
+        spec.EditBody(upper, [&](dtDynBodySpec &draft)
+                      { draft.pos(1) = yOffsets[leg]; });
+        spec.EditBody(upper, [&](dtDynBodySpec &draft)
+                      { draft.inertial.mass = 1.0; });
+        spec.EditBody(upper, [&](dtDynBodySpec &draft)
+                      { draft.inertial.pos(2) = -0.2; });
+        spec.EditBody(upper, [&](dtDynBodySpec &draft)
+                      { draft.inertial.inertia(0) = 0.02; });
+        spec.EditBody(upper, [&](dtDynBodySpec &draft)
+                      { draft.inertial.inertia(1) = 0.02; });
+        spec.EditBody(upper, [&](dtDynBodySpec &draft)
+                      { draft.inertial.inertia(2) = 0.01; });
 
         const auto hip = spec.AddJoint(upper, std::string(legNames[leg]) + "_hip", dtDynJointType::Hinge);
-        spec.Joints()[hip].axis(1) = 1.0;
+        spec.EditJoint(hip, [&](dtDynJointSpec &draft)
+                       { draft.axis(1) = 1.0; });
     }
 
     const dtDynModel model = CompileSpec(spec);
@@ -1985,12 +2330,16 @@ void TestForwardKinematicsAndPointJacobianForFixedChain()
     const auto forearm = spec.AddBody("forearm", shoulder);
     const auto tool = spec.AddSite(forearm, "tool");
 
-    spec.Bodies()[shoulder].pos(0) = 1.0;
-    spec.Bodies()[forearm].pos(0) = 1.0;
-    spec.Sites()[tool].pos(0) = 1.0;
+    spec.EditBody(shoulder, [&](dtDynBodySpec &draft)
+                  { draft.pos(0) = 1.0; });
+    spec.EditBody(forearm, [&](dtDynBodySpec &draft)
+                  { draft.pos(0) = 1.0; });
+    spec.EditSite(tool, [&](dtDynSiteSpec &draft)
+                  { draft.pos(0) = 1.0; });
 
     const auto hinge = spec.AddJoint(shoulder, "shoulder_yaw", dtDynJointType::Hinge);
-    spec.Joints()[hinge].axis(2) = 1.0;
+    spec.EditJoint(hinge, [&](dtDynJointSpec &draft)
+                   { draft.axis(2) = 1.0; });
 
     const dtDynModel model = CompileSpec(spec);
 
@@ -2077,13 +2426,18 @@ void TestIndexedJacobiansOnlyRefreshRequestedIds()
     const auto tool = spec.AddSite(forearm, "tool");
     const auto unused = spec.AddSite(shoulder, "unused");
 
-    spec.Bodies()[shoulder].pos(0) = 1.0;
-    spec.Bodies()[forearm].pos(0) = 1.0;
-    spec.Sites()[tool].pos(0) = 1.0;
-    spec.Sites()[unused].pos(1) = 0.5;
+    spec.EditBody(shoulder, [&](dtDynBodySpec &draft)
+                  { draft.pos(0) = 1.0; });
+    spec.EditBody(forearm, [&](dtDynBodySpec &draft)
+                  { draft.pos(0) = 1.0; });
+    spec.EditSite(tool, [&](dtDynSiteSpec &draft)
+                  { draft.pos(0) = 1.0; });
+    spec.EditSite(unused, [&](dtDynSiteSpec &draft)
+                  { draft.pos(1) = 0.5; });
 
     const auto hinge = spec.AddJoint(shoulder, "shoulder_yaw", dtDynJointType::Hinge);
-    spec.Joints()[hinge].axis(2) = 1.0;
+    spec.EditJoint(hinge, [&](dtDynJointSpec &draft)
+                   { draft.axis(2) = 1.0; });
 
     const dtDynModel model = CompileSpec(spec);
 
@@ -2150,21 +2504,30 @@ void TestIndexedJacobiansRefreshFloatingBaseBodyAndTaskSite()
 {
     dtDynSpec spec;
     const auto trunk = spec.AddBody("trunk", 0);
-    spec.Bodies()[trunk].inertial.mass = 5.0;
-    spec.Bodies()[trunk].inertial.inertia(0) = 0.20;
-    spec.Bodies()[trunk].inertial.inertia(1) = 0.30;
-    spec.Bodies()[trunk].inertial.inertia(2) = 0.40;
+    spec.EditBody(trunk, [&](dtDynBodySpec &draft)
+                  { draft.inertial.mass = 5.0; });
+    spec.EditBody(trunk, [&](dtDynBodySpec &draft)
+                  { draft.inertial.inertia(0) = 0.20; });
+    spec.EditBody(trunk, [&](dtDynBodySpec &draft)
+                  { draft.inertial.inertia(1) = 0.30; });
+    spec.EditBody(trunk, [&](dtDynBodySpec &draft)
+                  { draft.inertial.inertia(2) = 0.40; });
     spec.AddJoint(trunk, "floating_base", dtDynJointType::Free);
 
     const auto thigh = spec.AddBody("thigh", trunk);
-    spec.Bodies()[thigh].pos(0) = 0.35;
-    spec.Bodies()[thigh].pos(2) = -0.10;
-    spec.Bodies()[thigh].inertial.mass = 1.0;
+    spec.EditBody(thigh, [&](dtDynBodySpec &draft)
+                  { draft.pos(0) = 0.35; });
+    spec.EditBody(thigh, [&](dtDynBodySpec &draft)
+                  { draft.pos(2) = -0.10; });
+    spec.EditBody(thigh, [&](dtDynBodySpec &draft)
+                  { draft.inertial.mass = 1.0; });
     const auto hip = spec.AddJoint(thigh, "hip_pitch", dtDynJointType::Hinge);
-    spec.Joints()[hip].axis(1) = 1.0;
+    spec.EditJoint(hip, [&](dtDynJointSpec &draft)
+                   { draft.axis(1) = 1.0; });
 
     const auto foot = spec.AddSite(thigh, "foot");
-    spec.Sites()[foot].pos(2) = -0.25;
+    spec.EditSite(foot, [&](dtDynSiteSpec &draft)
+                  { draft.pos(2) = -0.25; });
 
     const dtDynModel model = CompileSpec(spec);
 
@@ -2228,18 +2591,27 @@ void TestPointJacobianDotMatchesFiniteDifferenceForMaterialSite()
     const auto link2 = spec.AddBody("link2", link1);
     const auto tool = spec.AddSite(link2, "tool");
 
-    spec.Bodies()[link1].pos(0) = 0.5;
-    spec.Bodies()[link1].inertial.mass = 1.0;
-    spec.Bodies()[link1].inertial.pos(0) = 0.5;
-    spec.Bodies()[link2].pos(0) = 1.0;
-    spec.Bodies()[link2].inertial.mass = 0.75;
-    spec.Bodies()[link2].inertial.pos(0) = 0.5;
-    spec.Sites()[tool].pos(0) = 0.8;
+    spec.EditBody(link1, [&](dtDynBodySpec &draft)
+                  { draft.pos(0) = 0.5; });
+    spec.EditBody(link1, [&](dtDynBodySpec &draft)
+                  { draft.inertial.mass = 1.0; });
+    spec.EditBody(link1, [&](dtDynBodySpec &draft)
+                  { draft.inertial.pos(0) = 0.5; });
+    spec.EditBody(link2, [&](dtDynBodySpec &draft)
+                  { draft.pos(0) = 1.0; });
+    spec.EditBody(link2, [&](dtDynBodySpec &draft)
+                  { draft.inertial.mass = 0.75; });
+    spec.EditBody(link2, [&](dtDynBodySpec &draft)
+                  { draft.inertial.pos(0) = 0.5; });
+    spec.EditSite(tool, [&](dtDynSiteSpec &draft)
+                  { draft.pos(0) = 0.8; });
 
     const auto joint1 = spec.AddJoint(link1, "joint1_z", dtDynJointType::Hinge);
     const auto joint2 = spec.AddJoint(link2, "joint2_z", dtDynJointType::Hinge);
-    spec.Joints()[joint1].axis(2) = 1.0;
-    spec.Joints()[joint2].axis(2) = 1.0;
+    spec.EditJoint(joint1, [&](dtDynJointSpec &draft)
+                   { draft.axis(2) = 1.0; });
+    spec.EditJoint(joint2, [&](dtDynJointSpec &draft)
+                   { draft.axis(2) = 1.0; });
 
     const dtDynModel model = CompileSpec(spec);
 
@@ -2325,18 +2697,27 @@ void TestPointJacobianTermsMatchesSeparateAPIs()
     const auto link2 = spec.AddBody("link2", link1);
     const auto tool = spec.AddSite(link2, "tool");
 
-    spec.Bodies()[link1].pos(0) = 0.5;
-    spec.Bodies()[link1].inertial.mass = 1.0;
-    spec.Bodies()[link1].inertial.pos(0) = 0.5;
-    spec.Bodies()[link2].pos(0) = 1.0;
-    spec.Bodies()[link2].inertial.mass = 0.75;
-    spec.Bodies()[link2].inertial.pos(0) = 0.5;
-    spec.Sites()[tool].pos(0) = 0.8;
+    spec.EditBody(link1, [&](dtDynBodySpec &draft)
+                  { draft.pos(0) = 0.5; });
+    spec.EditBody(link1, [&](dtDynBodySpec &draft)
+                  { draft.inertial.mass = 1.0; });
+    spec.EditBody(link1, [&](dtDynBodySpec &draft)
+                  { draft.inertial.pos(0) = 0.5; });
+    spec.EditBody(link2, [&](dtDynBodySpec &draft)
+                  { draft.pos(0) = 1.0; });
+    spec.EditBody(link2, [&](dtDynBodySpec &draft)
+                  { draft.inertial.mass = 0.75; });
+    spec.EditBody(link2, [&](dtDynBodySpec &draft)
+                  { draft.inertial.pos(0) = 0.5; });
+    spec.EditSite(tool, [&](dtDynSiteSpec &draft)
+                  { draft.pos(0) = 0.8; });
 
     const auto joint1 = spec.AddJoint(link1, "joint1_z", dtDynJointType::Hinge);
     const auto joint2 = spec.AddJoint(link2, "joint2_z", dtDynJointType::Hinge);
-    spec.Joints()[joint1].axis(2) = 1.0;
-    spec.Joints()[joint2].axis(2) = 1.0;
+    spec.EditJoint(joint1, [&](dtDynJointSpec &draft)
+                   { draft.axis(2) = 1.0; });
+    spec.EditJoint(joint2, [&](dtDynJointSpec &draft)
+                   { draft.axis(2) = 1.0; });
 
     const dtDynModel model = CompileSpec(spec);
 
@@ -2417,18 +2798,27 @@ void TestBodyAndSiteJacobianTermsMatchSeparateAPIs()
     const auto link2 = spec.AddBody("link2", link1);
     const auto tool = spec.AddSite(link2, "tool");
 
-    spec.Bodies()[link1].pos(0) = 0.5;
-    spec.Bodies()[link1].inertial.mass = 1.0;
-    spec.Bodies()[link1].inertial.pos(0) = 0.5;
-    spec.Bodies()[link2].pos(0) = 1.0;
-    spec.Bodies()[link2].inertial.mass = 0.75;
-    spec.Bodies()[link2].inertial.pos(0) = 0.5;
-    spec.Sites()[tool].pos(0) = 0.8;
+    spec.EditBody(link1, [&](dtDynBodySpec &draft)
+                  { draft.pos(0) = 0.5; });
+    spec.EditBody(link1, [&](dtDynBodySpec &draft)
+                  { draft.inertial.mass = 1.0; });
+    spec.EditBody(link1, [&](dtDynBodySpec &draft)
+                  { draft.inertial.pos(0) = 0.5; });
+    spec.EditBody(link2, [&](dtDynBodySpec &draft)
+                  { draft.pos(0) = 1.0; });
+    spec.EditBody(link2, [&](dtDynBodySpec &draft)
+                  { draft.inertial.mass = 0.75; });
+    spec.EditBody(link2, [&](dtDynBodySpec &draft)
+                  { draft.inertial.pos(0) = 0.5; });
+    spec.EditSite(tool, [&](dtDynSiteSpec &draft)
+                  { draft.pos(0) = 0.8; });
 
     const auto joint1 = spec.AddJoint(link1, "joint1_z", dtDynJointType::Hinge);
     const auto joint2 = spec.AddJoint(link2, "joint2_z", dtDynJointType::Hinge);
-    spec.Joints()[joint1].axis(2) = 1.0;
-    spec.Joints()[joint2].axis(2) = 1.0;
+    spec.EditJoint(joint1, [&](dtDynJointSpec &draft)
+                   { draft.axis(2) = 1.0; });
+    spec.EditJoint(joint2, [&](dtDynJointSpec &draft)
+                   { draft.axis(2) = 1.0; });
 
     const dtDynModel model = CompileSpec(spec);
 
@@ -2521,13 +2911,18 @@ void TestMassMatrixGravityAndSubtreeComForSingleHinge()
 {
     dtDynSpec spec;
     const auto link = spec.AddBody("link", 0);
-    spec.Bodies()[link].inertial.mass = 2.0;
-    spec.Bodies()[link].inertial.pos(0) = 1.0;
-    spec.Bodies()[link].inertial.inertia(2) = 0.5;
+    spec.EditBody(link, [&](dtDynBodySpec &draft)
+                  { draft.inertial.mass = 2.0; });
+    spec.EditBody(link, [&](dtDynBodySpec &draft)
+                  { draft.inertial.pos(0) = 1.0; });
+    spec.EditBody(link, [&](dtDynBodySpec &draft)
+                  { draft.inertial.inertia(2) = 0.5; });
 
     const auto hinge = spec.AddJoint(link, "hinge_z", dtDynJointType::Hinge);
-    spec.Joints()[hinge].axis(2) = 1.0;
-    spec.Joints()[hinge].armature = 0.25;
+    spec.EditJoint(hinge, [&](dtDynJointSpec &draft)
+                   { draft.axis(2) = 1.0; });
+    spec.EditJoint(hinge, [&](dtDynJointSpec &draft)
+                   { draft.armature = 0.25; });
 
     const dtDynModel model = CompileSpec(spec);
 
@@ -2557,16 +2952,23 @@ void TestCrbaMassMatrixAndIntermediatesForTwoLinkChain()
     const auto link1 = spec.AddBody("link1", 0);
     const auto link2 = spec.AddBody("link2", link1);
 
-    spec.Bodies()[link1].inertial.mass = 1.0;
-    spec.Bodies()[link1].inertial.pos(0) = 1.0;
-    spec.Bodies()[link2].pos(0) = 1.0;
-    spec.Bodies()[link2].inertial.mass = 1.0;
-    spec.Bodies()[link2].inertial.pos(0) = 1.0;
+    spec.EditBody(link1, [&](dtDynBodySpec &draft)
+                  { draft.inertial.mass = 1.0; });
+    spec.EditBody(link1, [&](dtDynBodySpec &draft)
+                  { draft.inertial.pos(0) = 1.0; });
+    spec.EditBody(link2, [&](dtDynBodySpec &draft)
+                  { draft.pos(0) = 1.0; });
+    spec.EditBody(link2, [&](dtDynBodySpec &draft)
+                  { draft.inertial.mass = 1.0; });
+    spec.EditBody(link2, [&](dtDynBodySpec &draft)
+                  { draft.inertial.pos(0) = 1.0; });
 
     const auto joint1 = spec.AddJoint(link1, "joint1_z", dtDynJointType::Hinge);
     const auto joint2 = spec.AddJoint(link2, "joint2_z", dtDynJointType::Hinge);
-    spec.Joints()[joint1].axis(2) = 1.0;
-    spec.Joints()[joint2].axis(2) = 1.0;
+    spec.EditJoint(joint1, [&](dtDynJointSpec &draft)
+                   { draft.axis(2) = 1.0; });
+    spec.EditJoint(joint2, [&](dtDynJointSpec &draft)
+                   { draft.axis(2) = 1.0; });
 
     const dtDynModel model = CompileSpec(spec);
 
@@ -2639,24 +3041,39 @@ void TestDynamicsRNEAMatchesCCRBAForBaseTerms()
     const auto link1 = spec.AddBody("link1", 0);
     const auto link2 = spec.AddBody("link2", link1);
 
-    spec.Bodies()[link1].inertial.mass = 1.4;
-    spec.Bodies()[link1].inertial.pos(0) = 0.4;
-    spec.Bodies()[link1].inertial.inertia(0) = 0.02;
-    spec.Bodies()[link1].inertial.inertia(1) = 0.03;
-    spec.Bodies()[link1].inertial.inertia(2) = 0.04;
-    spec.Bodies()[link2].pos(0) = 0.8;
-    spec.Bodies()[link2].pos(2) = -0.1;
-    spec.Bodies()[link2].inertial.mass = 0.9;
-    spec.Bodies()[link2].inertial.pos(0) = 0.35;
-    spec.Bodies()[link2].inertial.pos(2) = -0.05;
-    spec.Bodies()[link2].inertial.inertia(0) = 0.015;
-    spec.Bodies()[link2].inertial.inertia(1) = 0.02;
-    spec.Bodies()[link2].inertial.inertia(2) = 0.025;
+    spec.EditBody(link1, [&](dtDynBodySpec &draft)
+                  { draft.inertial.mass = 1.4; });
+    spec.EditBody(link1, [&](dtDynBodySpec &draft)
+                  { draft.inertial.pos(0) = 0.4; });
+    spec.EditBody(link1, [&](dtDynBodySpec &draft)
+                  { draft.inertial.inertia(0) = 0.02; });
+    spec.EditBody(link1, [&](dtDynBodySpec &draft)
+                  { draft.inertial.inertia(1) = 0.03; });
+    spec.EditBody(link1, [&](dtDynBodySpec &draft)
+                  { draft.inertial.inertia(2) = 0.04; });
+    spec.EditBody(link2, [&](dtDynBodySpec &draft)
+                  { draft.pos(0) = 0.8; });
+    spec.EditBody(link2, [&](dtDynBodySpec &draft)
+                  { draft.pos(2) = -0.1; });
+    spec.EditBody(link2, [&](dtDynBodySpec &draft)
+                  { draft.inertial.mass = 0.9; });
+    spec.EditBody(link2, [&](dtDynBodySpec &draft)
+                  { draft.inertial.pos(0) = 0.35; });
+    spec.EditBody(link2, [&](dtDynBodySpec &draft)
+                  { draft.inertial.pos(2) = -0.05; });
+    spec.EditBody(link2, [&](dtDynBodySpec &draft)
+                  { draft.inertial.inertia(0) = 0.015; });
+    spec.EditBody(link2, [&](dtDynBodySpec &draft)
+                  { draft.inertial.inertia(1) = 0.02; });
+    spec.EditBody(link2, [&](dtDynBodySpec &draft)
+                  { draft.inertial.inertia(2) = 0.025; });
 
     const auto joint1 = spec.AddJoint(link1, "joint1_z", dtDynJointType::Hinge);
     const auto joint2 = spec.AddJoint(link2, "joint2_y", dtDynJointType::Hinge);
-    spec.Joints()[joint1].axis(2) = 1.0;
-    spec.Joints()[joint2].axis(1) = 1.0;
+    spec.EditJoint(joint1, [&](dtDynJointSpec &draft)
+                   { draft.axis(2) = 1.0; });
+    spec.EditJoint(joint2, [&](dtDynJointSpec &draft)
+                   { draft.axis(1) = 1.0; });
 
     const dtDynModel model = CompileSpec(spec);
 
@@ -2707,16 +3124,23 @@ void TestDynamicsCCRBAComputesOnlyRequestedExtraTerms()
     const auto link1 = spec.AddBody("link1", 0);
     const auto link2 = spec.AddBody("link2", link1);
 
-    spec.Bodies()[link1].inertial.mass = 1.0;
-    spec.Bodies()[link1].inertial.pos(0) = 1.0;
-    spec.Bodies()[link2].pos(0) = 1.0;
-    spec.Bodies()[link2].inertial.mass = 1.0;
-    spec.Bodies()[link2].inertial.pos(0) = 1.0;
+    spec.EditBody(link1, [&](dtDynBodySpec &draft)
+                  { draft.inertial.mass = 1.0; });
+    spec.EditBody(link1, [&](dtDynBodySpec &draft)
+                  { draft.inertial.pos(0) = 1.0; });
+    spec.EditBody(link2, [&](dtDynBodySpec &draft)
+                  { draft.pos(0) = 1.0; });
+    spec.EditBody(link2, [&](dtDynBodySpec &draft)
+                  { draft.inertial.mass = 1.0; });
+    spec.EditBody(link2, [&](dtDynBodySpec &draft)
+                  { draft.inertial.pos(0) = 1.0; });
 
     const auto joint1 = spec.AddJoint(link1, "joint1_z", dtDynJointType::Hinge);
     const auto joint2 = spec.AddJoint(link2, "joint2_z", dtDynJointType::Hinge);
-    spec.Joints()[joint1].axis(2) = 1.0;
-    spec.Joints()[joint2].axis(2) = 1.0;
+    spec.EditJoint(joint1, [&](dtDynJointSpec &draft)
+                   { draft.axis(2) = 1.0; });
+    spec.EditJoint(joint2, [&](dtDynJointSpec &draft)
+                   { draft.axis(2) = 1.0; });
 
     const dtDynModel model = CompileSpec(spec);
     dtDynData data;
@@ -2751,12 +3175,16 @@ void TestDynamicsRNEAComputesOnlyRneaRequestedTerms()
 {
     dtDynSpec spec;
     const auto link = spec.AddBody("link", 0);
-    spec.Bodies()[link].inertial.mass = 2.0;
-    spec.Bodies()[link].inertial.pos(0) = 0.7;
-    spec.Bodies()[link].inertial.inertia(2) = 0.2;
+    spec.EditBody(link, [&](dtDynBodySpec &draft)
+                  { draft.inertial.mass = 2.0; });
+    spec.EditBody(link, [&](dtDynBodySpec &draft)
+                  { draft.inertial.pos(0) = 0.7; });
+    spec.EditBody(link, [&](dtDynBodySpec &draft)
+                  { draft.inertial.inertia(2) = 0.2; });
 
     const auto hinge = spec.AddJoint(link, "hinge_z", dtDynJointType::Hinge);
-    spec.Joints()[hinge].axis(2) = 1.0;
+    spec.EditJoint(hinge, [&](dtDynJointSpec &draft)
+                   { draft.axis(2) = 1.0; });
 
     const dtDynModel model = CompileSpec(spec);
     dtDynData data;
@@ -2793,11 +3221,15 @@ void TestDynamicsCCRBAAllTermsIsRepeatable()
 {
     dtDynSpec spec;
     const auto link = spec.AddBody("link", 0);
-    spec.Bodies()[link].inertial.mass = 2.0;
-    spec.Bodies()[link].inertial.pos(0) = 0.7;
-    spec.Bodies()[link].inertial.inertia(2) = 0.2;
+    spec.EditBody(link, [&](dtDynBodySpec &draft)
+                  { draft.inertial.mass = 2.0; });
+    spec.EditBody(link, [&](dtDynBodySpec &draft)
+                  { draft.inertial.pos(0) = 0.7; });
+    spec.EditBody(link, [&](dtDynBodySpec &draft)
+                  { draft.inertial.inertia(2) = 0.2; });
     const auto hinge = spec.AddJoint(link, "hinge_z", dtDynJointType::Hinge);
-    spec.Joints()[hinge].axis(2) = 1.0;
+    spec.EditJoint(hinge, [&](dtDynJointSpec &draft)
+                   { draft.axis(2) = 1.0; });
 
     const dtDynModel model = CompileSpec(spec);
     dtDynData firstData;
@@ -2861,7 +3293,13 @@ int main()
     TestJointSizes();
     TestDtArrayDirectHeader();
     TestSpecWorldAndFixedBody();
-    TestSpecNameLookupReflectsMutableStorage();
+    TestSpecEditorsCommitScopedCopies();
+    TestSpecEditorsDiscardFailedDrafts();
+    TestSpecEditorsRejectReentrantMutation();
+    TestSpecEditorsDiscardCaughtReentrantAttempt();
+    TestSpecEditorsRejectReentrantStructuralMutation();
+    TestSpecEditorsAbortBothReentrantSwapTransactions();
+    TestSpecNameLookupReflectsEditorMutations();
     TestModelActuatorNameLookupUsesRebuiltCache();
     TestSpecXmlReportsTypedNumericErrors();
     TestSpecXmlRejectsWrongVectorArity();

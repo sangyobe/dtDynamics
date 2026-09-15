@@ -55,7 +55,7 @@ catch (const dtDynXmlError &error)
 
 ## 2-2. Checked compilation과 trusted compilation
 
-- 외부 XML과 public mutable array를 거친 spec의 처리 순서: setup validation을 먼저 적용
+- 외부 XML과 callback-scoped `Edit*`를 거친 spec의 처리 순서: setup validation을 먼저 적용
 
 ```cpp
 dtDynValidationError error;
@@ -90,8 +90,12 @@ if (body == DTDYN_INVALID_INDEX ||
 }
 ```
 
-- `dtDynSpec`의 public arrays: 사용자가 직접 수정 가능 → lookup은 setup-time linear scan
-- 영구 cache의 위험: direct mutation 뒤 stale map을 숨길 수 있음
+- `dtDynSpec` collection view: `Bodies()`, `Joints()`, `Sites()`, `Actuators()`는 immutable
+- setup-time property 수정: `EditBody`, `EditJoint`, `EditSite`, `EditActuator`가 item copy를 callback에 전달하고 정상 반환 시에만 commit
+- `Edit*` 실패 조건: invalid index는 `std::out_of_range`, callback 예외는 stored item을 변경하지 않고 전파
+- callback reentrancy 금지: 같은 `dtDynSpec`의 `Edit*`, `Add*`, `Clear`, `swap` 호출은 `std::logic_error`; assignment는 active callback 밖에서만 사용
+- spec 교환: `using std::swap; swap(left, right);`로 ADL `dt::Dynamics::swap`을 사용하며, active edit 중 교환은 양쪽 transaction을 abort
+- lookup은 setup-time linear scan이므로 committed edit를 즉시 반영하며 stale persistent map을 만들지 않음
 - compiled `dtDynModel`의 lookup 방식: setup boundary가 통제되므로 rebuilt map 사용
 - missing name 처리: 양쪽 모두 예외 대신 `DTDYN_INVALID_INDEX` 반환
 

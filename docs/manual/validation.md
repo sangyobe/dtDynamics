@@ -12,7 +12,7 @@ Author: Joonhee Jo
 
 > **주의 — fail-closed validation 동작**
 >
-> `ValidateSpec()`와 `CompileSpecChecked()` 원칙: public mutable arrays 비신뢰.
+> `ValidateSpec()`와 `CompileSpecChecked()` 원칙: 외부 XML과 committed callback edit를 모두 비신뢰 setup input으로 취급.
 
 - setup에서 검사하는 항목: ownership, parent/root topology, duplicate name, joint type/axis, finite physical data, quaternion/rotation, inertia, index/dimension overflow
 - 지원 범위 안에서 scan 성격: linear, dynamics hot loop 밖

@@ -242,22 +242,36 @@ dtDynIndex AddHingeLink(dtDynSpec &spec,
                         const dtDynReal axisZ)
 {
     const dtDynIndex body = spec.AddBody(name, parent);
-    spec.Bodies()[body].pos(0) = x;
-    spec.Bodies()[body].pos(1) = y;
-    spec.Bodies()[body].pos(2) = z;
-    spec.Bodies()[body].inertial.mass = mass;
-    spec.Bodies()[body].inertial.pos(0) = 0.5 * x;
-    spec.Bodies()[body].inertial.pos(1) = 0.5 * y;
-    spec.Bodies()[body].inertial.pos(2) = 0.5 * z;
-    spec.Bodies()[body].inertial.inertia(0) = 0.01 * mass + 0.001;
-    spec.Bodies()[body].inertial.inertia(1) = 0.012 * mass + 0.001;
-    spec.Bodies()[body].inertial.inertia(2) = 0.014 * mass + 0.001;
+    spec.EditBody(body, [&](dtDynBodySpec &draft)
+                  { draft.pos(0) = x; });
+    spec.EditBody(body, [&](dtDynBodySpec &draft)
+                  { draft.pos(1) = y; });
+    spec.EditBody(body, [&](dtDynBodySpec &draft)
+                  { draft.pos(2) = z; });
+    spec.EditBody(body, [&](dtDynBodySpec &draft)
+                  { draft.inertial.mass = mass; });
+    spec.EditBody(body, [&](dtDynBodySpec &draft)
+                  { draft.inertial.pos(0) = 0.5 * x; });
+    spec.EditBody(body, [&](dtDynBodySpec &draft)
+                  { draft.inertial.pos(1) = 0.5 * y; });
+    spec.EditBody(body, [&](dtDynBodySpec &draft)
+                  { draft.inertial.pos(2) = 0.5 * z; });
+    spec.EditBody(body, [&](dtDynBodySpec &draft)
+                  { draft.inertial.inertia(0) = 0.01 * mass + 0.001; });
+    spec.EditBody(body, [&](dtDynBodySpec &draft)
+                  { draft.inertial.inertia(1) = 0.012 * mass + 0.001; });
+    spec.EditBody(body, [&](dtDynBodySpec &draft)
+                  { draft.inertial.inertia(2) = 0.014 * mass + 0.001; });
 
     const dtDynIndex joint = spec.AddJoint(body, name + "_joint", dtDynJointType::Hinge);
-    spec.Joints()[joint].axis(0) = axisX;
-    spec.Joints()[joint].axis(1) = axisY;
-    spec.Joints()[joint].axis(2) = axisZ;
-    spec.Joints()[joint].armature = 0.001 * (static_cast<dtDynReal>(joint) + 1.0);
+    spec.EditJoint(joint, [&](dtDynJointSpec &draft)
+                   { draft.axis(0) = axisX; });
+    spec.EditJoint(joint, [&](dtDynJointSpec &draft)
+                   { draft.axis(1) = axisY; });
+    spec.EditJoint(joint, [&](dtDynJointSpec &draft)
+                   { draft.axis(2) = axisZ; });
+    spec.EditJoint(joint, [&](dtDynJointSpec &draft)
+                   { draft.armature = 0.001 * (static_cast<dtDynReal>(joint) + 1.0); });
     return body;
 }
 
@@ -265,17 +279,22 @@ dtDynSpec SingleManipulatorSpec()
 {
     dtDynSpec spec;
     const dtDynIndex base = spec.AddBody("base", 0);
-    spec.Bodies()[base].inertial.mass = 3.0;
-    spec.Bodies()[base].inertial.inertia(0) = 0.05;
-    spec.Bodies()[base].inertial.inertia(1) = 0.05;
-    spec.Bodies()[base].inertial.inertia(2) = 0.05;
+    spec.EditBody(base, [&](dtDynBodySpec &draft)
+                  { draft.inertial.mass = 3.0; });
+    spec.EditBody(base, [&](dtDynBodySpec &draft)
+                  { draft.inertial.inertia(0) = 0.05; });
+    spec.EditBody(base, [&](dtDynBodySpec &draft)
+                  { draft.inertial.inertia(1) = 0.05; });
+    spec.EditBody(base, [&](dtDynBodySpec &draft)
+                  { draft.inertial.inertia(2) = 0.05; });
 
     dtDynIndex parent = base;
     parent = AddHingeLink(spec, parent, "link1", 0.30, 0.00, 0.05, 1.5, 0.0, 0.0, 1.0);
     parent = AddHingeLink(spec, parent, "link2", 0.25, 0.00, 0.00, 1.0, 0.0, 1.0, 0.0);
     parent = AddHingeLink(spec, parent, "link3", 0.20, 0.00, 0.00, 0.8, 1.0, 0.0, 0.0);
     spec.AddSite(parent, "tool");
-    spec.Sites()[0].pos(0) = 0.2;
+    spec.EditSite(0, [&](dtDynSiteSpec &draft)
+                  { draft.pos(0) = 0.2; });
     return spec;
 }
 
@@ -283,10 +302,14 @@ dtDynSpec DualManipulatorSpec()
 {
     dtDynSpec spec;
     const dtDynIndex base = spec.AddBody("base", 0);
-    spec.Bodies()[base].inertial.mass = 5.0;
-    spec.Bodies()[base].inertial.inertia(0) = 0.08;
-    spec.Bodies()[base].inertial.inertia(1) = 0.08;
-    spec.Bodies()[base].inertial.inertia(2) = 0.10;
+    spec.EditBody(base, [&](dtDynBodySpec &draft)
+                  { draft.inertial.mass = 5.0; });
+    spec.EditBody(base, [&](dtDynBodySpec &draft)
+                  { draft.inertial.inertia(0) = 0.08; });
+    spec.EditBody(base, [&](dtDynBodySpec &draft)
+                  { draft.inertial.inertia(1) = 0.08; });
+    spec.EditBody(base, [&](dtDynBodySpec &draft)
+                  { draft.inertial.inertia(2) = 0.10; });
 
     const dtDynIndex leftShoulder = AddHingeLink(spec, base, "left_link1", 0.10, 0.25, 0.0, 1.0, 0.0, 0.0, 1.0);
     const dtDynIndex leftElbow = AddHingeLink(spec, leftShoulder, "left_link2", 0.25, 0.0, 0.0, 0.7, 0.0, 1.0, 0.0);
@@ -295,8 +318,10 @@ dtDynSpec DualManipulatorSpec()
 
     const dtDynIndex leftTool = spec.AddSite(leftElbow, "left_tool");
     const dtDynIndex rightTool = spec.AddSite(rightElbow, "right_tool");
-    spec.Sites()[leftTool].pos(0) = 0.2;
-    spec.Sites()[rightTool].pos(0) = 0.2;
+    spec.EditSite(leftTool, [&](dtDynSiteSpec &draft)
+                  { draft.pos(0) = 0.2; });
+    spec.EditSite(rightTool, [&](dtDynSiteSpec &draft)
+                  { draft.pos(0) = 0.2; });
     return spec;
 }
 
@@ -305,51 +330,74 @@ dtDynSpec MultiRobotSpec()
     dtDynSpec spec;
 
     const dtDynIndex robotABase = spec.AddBody("robot_a_base", 0);
-    spec.Bodies()[robotABase].pos(0) = 0.4;
-    spec.Bodies()[robotABase].pos(1) = 0.25;
-    spec.Bodies()[robotABase].inertial.mass = 2.0;
-    spec.Bodies()[robotABase].inertial.inertia(0) = 0.04;
-    spec.Bodies()[robotABase].inertial.inertia(1) = 0.05;
-    spec.Bodies()[robotABase].inertial.inertia(2) = 0.06;
+    spec.EditBody(robotABase, [&](dtDynBodySpec &draft)
+                  { draft.pos(0) = 0.4; });
+    spec.EditBody(robotABase, [&](dtDynBodySpec &draft)
+                  { draft.pos(1) = 0.25; });
+    spec.EditBody(robotABase, [&](dtDynBodySpec &draft)
+                  { draft.inertial.mass = 2.0; });
+    spec.EditBody(robotABase, [&](dtDynBodySpec &draft)
+                  { draft.inertial.inertia(0) = 0.04; });
+    spec.EditBody(robotABase, [&](dtDynBodySpec &draft)
+                  { draft.inertial.inertia(1) = 0.05; });
+    spec.EditBody(robotABase, [&](dtDynBodySpec &draft)
+                  { draft.inertial.inertia(2) = 0.06; });
 
     const dtDynIndex robotAShoulder =
         AddHingeLink(spec, robotABase, "robot_a_shoulder", 0.10, 0.0, 0.20, 0.8, 0.0, 0.0, 1.0);
     const dtDynIndex robotAElbow =
         AddHingeLink(spec, robotAShoulder, "robot_a_elbow", 0.25, 0.0, 0.0, 0.6, 0.0, 1.0, 0.0);
     const dtDynIndex robotATool = spec.AddSite(robotAElbow, "robot_a_tool");
-    spec.Sites()[robotATool].pos(0) = 0.2;
+    spec.EditSite(robotATool, [&](dtDynSiteSpec &draft)
+                  { draft.pos(0) = 0.2; });
 
     const dtDynIndex robotBBase = spec.AddBody("robot_b_base", 0);
-    spec.Bodies()[robotBBase].pos(0) = -0.35;
-    spec.Bodies()[robotBBase].pos(1) = -0.2;
-    spec.Bodies()[robotBBase].pos(2) = 0.05;
-    spec.Bodies()[robotBBase].inertial.mass = 1.5;
-    spec.Bodies()[robotBBase].inertial.inertia(0) = 0.03;
-    spec.Bodies()[robotBBase].inertial.inertia(1) = 0.035;
-    spec.Bodies()[robotBBase].inertial.inertia(2) = 0.04;
+    spec.EditBody(robotBBase, [&](dtDynBodySpec &draft)
+                  { draft.pos(0) = -0.35; });
+    spec.EditBody(robotBBase, [&](dtDynBodySpec &draft)
+                  { draft.pos(1) = -0.2; });
+    spec.EditBody(robotBBase, [&](dtDynBodySpec &draft)
+                  { draft.pos(2) = 0.05; });
+    spec.EditBody(robotBBase, [&](dtDynBodySpec &draft)
+                  { draft.inertial.mass = 1.5; });
+    spec.EditBody(robotBBase, [&](dtDynBodySpec &draft)
+                  { draft.inertial.inertia(0) = 0.03; });
+    spec.EditBody(robotBBase, [&](dtDynBodySpec &draft)
+                  { draft.inertial.inertia(1) = 0.035; });
+    spec.EditBody(robotBBase, [&](dtDynBodySpec &draft)
+                  { draft.inertial.inertia(2) = 0.04; });
 
     const dtDynIndex sensorFrame = spec.AddBody("robot_b_sensor_frame", robotBBase);
-    spec.Bodies()[sensorFrame].pos(0) = 0.02;
-    spec.Bodies()[sensorFrame].pos(1) = 0.03;
-    spec.Bodies()[sensorFrame].pos(2) = 0.04;
+    spec.EditBody(sensorFrame, [&](dtDynBodySpec &draft)
+                  { draft.pos(0) = 0.02; });
+    spec.EditBody(sensorFrame, [&](dtDynBodySpec &draft)
+                  { draft.pos(1) = 0.03; });
+    spec.EditBody(sensorFrame, [&](dtDynBodySpec &draft)
+                  { draft.pos(2) = 0.04; });
     const dtDynIndex sensorSite = spec.AddSite(sensorFrame, "robot_b_sensor");
-    spec.Sites()[sensorSite].pos(0) = 0.01;
-    spec.Sites()[sensorSite].pos(1) = 0.02;
-    spec.Sites()[sensorSite].pos(2) = 0.03;
+    spec.EditSite(sensorSite, [&](dtDynSiteSpec &draft)
+                  { draft.pos(0) = 0.01; });
+    spec.EditSite(sensorSite, [&](dtDynSiteSpec &draft)
+                  { draft.pos(1) = 0.02; });
+    spec.EditSite(sensorSite, [&](dtDynSiteSpec &draft)
+                  { draft.pos(2) = 0.03; });
 
     const dtDynIndex robotBHip =
         AddHingeLink(spec, sensorFrame, "robot_b_hip", 0.0, 0.0, 0.18, 0.7, 1.0, 0.0, 0.0);
     const dtDynIndex robotBKnee =
         AddHingeLink(spec, robotBHip, "robot_b_knee", 0.22, 0.0, 0.0, 0.45, 0.0, 1.0, 0.0);
     const dtDynIndex robotBTool = spec.AddSite(robotBKnee, "robot_b_tool");
-    spec.Sites()[robotBTool].pos(0) = 0.18;
+    spec.EditSite(robotBTool, [&](dtDynSiteSpec &draft)
+                  { draft.pos(0) = 0.18; });
 
     const dtDynIndex robotAElbowMotor =
         spec.AddActuator(spec.Bodies()[robotAElbow].joints[0], "robot_a_elbow_motor");
-    spec.Actuators()[robotAElbowMotor].gear = 90.0;
+    spec.EditActuator(robotAElbowMotor, [&](dtDynActuatorSpec &draft)
+                      { draft.gear = 90.0; });
     const dtDynIndex robotBKneeMotor =
         spec.AddActuator(spec.Bodies()[robotBKnee].joints[0], "robot_b_knee_motor");
-    spec.Actuators()[robotBKneeMotor].gear = 70.0;
+    spec.EditActuator(robotBKneeMotor, [&](dtDynActuatorSpec &draft)
+                      { draft.gear = 70.0; });
 
     return spec;
 }
@@ -359,13 +407,20 @@ dtDynSpec MultiRobotFloatingSpec()
     dtDynSpec spec;
 
     const dtDynIndex robotABase = spec.AddBody("robot_a_floating_base", 0);
-    spec.Bodies()[robotABase].pos(0) = 0.4;
-    spec.Bodies()[robotABase].pos(1) = 0.25;
-    spec.Bodies()[robotABase].pos(2) = 0.6;
-    spec.Bodies()[robotABase].inertial.mass = 3.0;
-    spec.Bodies()[robotABase].inertial.inertia(0) = 0.08;
-    spec.Bodies()[robotABase].inertial.inertia(1) = 0.09;
-    spec.Bodies()[robotABase].inertial.inertia(2) = 0.10;
+    spec.EditBody(robotABase, [&](dtDynBodySpec &draft)
+                  { draft.pos(0) = 0.4; });
+    spec.EditBody(robotABase, [&](dtDynBodySpec &draft)
+                  { draft.pos(1) = 0.25; });
+    spec.EditBody(robotABase, [&](dtDynBodySpec &draft)
+                  { draft.pos(2) = 0.6; });
+    spec.EditBody(robotABase, [&](dtDynBodySpec &draft)
+                  { draft.inertial.mass = 3.0; });
+    spec.EditBody(robotABase, [&](dtDynBodySpec &draft)
+                  { draft.inertial.inertia(0) = 0.08; });
+    spec.EditBody(robotABase, [&](dtDynBodySpec &draft)
+                  { draft.inertial.inertia(1) = 0.09; });
+    spec.EditBody(robotABase, [&](dtDynBodySpec &draft)
+                  { draft.inertial.inertia(2) = 0.10; });
     spec.AddJoint(robotABase, "robot_a_free", dtDynJointType::Free);
 
     const dtDynIndex robotAShoulder =
@@ -373,40 +428,57 @@ dtDynSpec MultiRobotFloatingSpec()
     const dtDynIndex robotAElbow =
         AddHingeLink(spec, robotAShoulder, "robot_a_floating_elbow", 0.25, 0.0, 0.0, 0.6, 0.0, 1.0, 0.0);
     const dtDynIndex robotATool = spec.AddSite(robotAElbow, "robot_a_floating_tool");
-    spec.Sites()[robotATool].pos(0) = 0.2;
+    spec.EditSite(robotATool, [&](dtDynSiteSpec &draft)
+                  { draft.pos(0) = 0.2; });
 
     const dtDynIndex robotBBase = spec.AddBody("robot_b_floating_base", 0);
-    spec.Bodies()[robotBBase].pos(0) = -0.35;
-    spec.Bodies()[robotBBase].pos(1) = -0.20;
-    spec.Bodies()[robotBBase].pos(2) = 0.70;
-    spec.Bodies()[robotBBase].inertial.mass = 2.5;
-    spec.Bodies()[robotBBase].inertial.inertia(0) = 0.07;
-    spec.Bodies()[robotBBase].inertial.inertia(1) = 0.08;
-    spec.Bodies()[robotBBase].inertial.inertia(2) = 0.09;
+    spec.EditBody(robotBBase, [&](dtDynBodySpec &draft)
+                  { draft.pos(0) = -0.35; });
+    spec.EditBody(robotBBase, [&](dtDynBodySpec &draft)
+                  { draft.pos(1) = -0.20; });
+    spec.EditBody(robotBBase, [&](dtDynBodySpec &draft)
+                  { draft.pos(2) = 0.70; });
+    spec.EditBody(robotBBase, [&](dtDynBodySpec &draft)
+                  { draft.inertial.mass = 2.5; });
+    spec.EditBody(robotBBase, [&](dtDynBodySpec &draft)
+                  { draft.inertial.inertia(0) = 0.07; });
+    spec.EditBody(robotBBase, [&](dtDynBodySpec &draft)
+                  { draft.inertial.inertia(1) = 0.08; });
+    spec.EditBody(robotBBase, [&](dtDynBodySpec &draft)
+                  { draft.inertial.inertia(2) = 0.09; });
     spec.AddJoint(robotBBase, "robot_b_free", dtDynJointType::Free);
 
     const dtDynIndex sensorFrame = spec.AddBody("robot_b_floating_sensor_frame", robotBBase);
-    spec.Bodies()[sensorFrame].pos(0) = 0.02;
-    spec.Bodies()[sensorFrame].pos(1) = 0.03;
-    spec.Bodies()[sensorFrame].pos(2) = 0.04;
+    spec.EditBody(sensorFrame, [&](dtDynBodySpec &draft)
+                  { draft.pos(0) = 0.02; });
+    spec.EditBody(sensorFrame, [&](dtDynBodySpec &draft)
+                  { draft.pos(1) = 0.03; });
+    spec.EditBody(sensorFrame, [&](dtDynBodySpec &draft)
+                  { draft.pos(2) = 0.04; });
     const dtDynIndex sensorSite = spec.AddSite(sensorFrame, "robot_b_floating_sensor");
-    spec.Sites()[sensorSite].pos(0) = 0.01;
-    spec.Sites()[sensorSite].pos(1) = 0.02;
-    spec.Sites()[sensorSite].pos(2) = 0.03;
+    spec.EditSite(sensorSite, [&](dtDynSiteSpec &draft)
+                  { draft.pos(0) = 0.01; });
+    spec.EditSite(sensorSite, [&](dtDynSiteSpec &draft)
+                  { draft.pos(1) = 0.02; });
+    spec.EditSite(sensorSite, [&](dtDynSiteSpec &draft)
+                  { draft.pos(2) = 0.03; });
 
     const dtDynIndex robotBHip =
         AddHingeLink(spec, sensorFrame, "robot_b_floating_hip", 0.0, 0.0, -0.18, 0.7, 1.0, 0.0, 0.0);
     const dtDynIndex robotBKnee =
         AddHingeLink(spec, robotBHip, "robot_b_floating_knee", 0.22, 0.0, 0.0, 0.45, 0.0, 1.0, 0.0);
     const dtDynIndex robotBTool = spec.AddSite(robotBKnee, "robot_b_floating_tool");
-    spec.Sites()[robotBTool].pos(0) = 0.18;
+    spec.EditSite(robotBTool, [&](dtDynSiteSpec &draft)
+                  { draft.pos(0) = 0.18; });
 
     const dtDynIndex robotAElbowMotor =
         spec.AddActuator(spec.Bodies()[robotAElbow].joints[0], "robot_a_floating_elbow_motor");
-    spec.Actuators()[robotAElbowMotor].gear = 85.0;
+    spec.EditActuator(robotAElbowMotor, [&](dtDynActuatorSpec &draft)
+                      { draft.gear = 85.0; });
     const dtDynIndex robotBKneeMotor =
         spec.AddActuator(spec.Bodies()[robotBKnee].joints[0], "robot_b_floating_knee_motor");
-    spec.Actuators()[robotBKneeMotor].gear = 65.0;
+    spec.EditActuator(robotBKneeMotor, [&](dtDynActuatorSpec &draft)
+                      { draft.gear = 65.0; });
 
     return spec;
 }
@@ -415,10 +487,14 @@ dtDynSpec FloatingQuadrupedSpec()
 {
     dtDynSpec spec;
     const dtDynIndex trunk = spec.AddBody("trunk", 0);
-    spec.Bodies()[trunk].inertial.mass = 10.0;
-    spec.Bodies()[trunk].inertial.inertia(0) = 0.20;
-    spec.Bodies()[trunk].inertial.inertia(1) = 0.30;
-    spec.Bodies()[trunk].inertial.inertia(2) = 0.40;
+    spec.EditBody(trunk, [&](dtDynBodySpec &draft)
+                  { draft.inertial.mass = 10.0; });
+    spec.EditBody(trunk, [&](dtDynBodySpec &draft)
+                  { draft.inertial.inertia(0) = 0.20; });
+    spec.EditBody(trunk, [&](dtDynBodySpec &draft)
+                  { draft.inertial.inertia(1) = 0.30; });
+    spec.EditBody(trunk, [&](dtDynBodySpec &draft)
+                  { draft.inertial.inertia(2) = 0.40; });
     spec.AddJoint(trunk, "floating_base", dtDynJointType::Free);
 
     const char *legNames[4] = {"front_left", "front_right", "rear_left", "rear_right"};
@@ -431,7 +507,8 @@ dtDynSpec FloatingQuadrupedSpec()
         const dtDynIndex thigh = AddHingeLink(spec, hip, prefix + "_thigh", 0.0, 0.0, -0.25, 0.8, 0.0, 1.0, 0.0);
         const dtDynIndex shank = AddHingeLink(spec, thigh, prefix + "_shank", 0.0, 0.0, -0.25, 0.5, 0.0, 1.0, 0.0);
         const dtDynIndex foot = spec.AddSite(shank, prefix + "_foot");
-        spec.Sites()[foot].pos(2) = -0.25;
+        spec.EditSite(foot, [&](dtDynSiteSpec &draft)
+                      { draft.pos(2) = -0.25; });
     }
     return spec;
 }
@@ -440,19 +517,24 @@ dtDynSpec FixedBodyHeavySpec()
 {
     dtDynSpec spec;
     const dtDynIndex base = spec.AddBody("base", 0);
-    spec.Bodies()[base].inertial.mass = 4.0;
+    spec.EditBody(base, [&](dtDynBodySpec &draft)
+                  { draft.inertial.mass = 4.0; });
     dtDynIndex parent = base;
     for (dtDynIndex i = 0; i < 8; ++i)
     {
         const dtDynIndex mount = spec.AddBody("fixed_mount_" + std::to_string(i), parent);
-        spec.Bodies()[mount].pos(0) = 0.03 * static_cast<dtDynReal>(i + 1);
-        spec.Bodies()[mount].pos(1) = 0.02 * static_cast<dtDynReal>((i % 2) == 0 ? 1 : -1);
-        spec.Bodies()[mount].inertial.mass = 0.05;
+        spec.EditBody(mount, [&](dtDynBodySpec &draft)
+                      { draft.pos(0) = 0.03 * static_cast<dtDynReal>(i + 1); });
+        spec.EditBody(mount, [&](dtDynBodySpec &draft)
+                      { draft.pos(1) = 0.02 * static_cast<dtDynReal>((i % 2) == 0 ? 1 : -1); });
+        spec.EditBody(mount, [&](dtDynBodySpec &draft)
+                      { draft.inertial.mass = 0.05; });
         parent = mount;
     }
     const dtDynIndex jointed = AddHingeLink(spec, parent, "jointed_link", 0.25, 0.0, 0.0, 1.2, 0.0, 0.0, 1.0);
     spec.AddSite(jointed, "tool");
-    spec.Sites()[0].pos(0) = 0.15;
+    spec.EditSite(0, [&](dtDynSiteSpec &draft)
+                  { draft.pos(0) = 0.15; });
     return spec;
 }
 
@@ -552,16 +634,18 @@ void SetState(const dtDynModel &model, const std::string &state, dtDynData &data
     }
 }
 
-
-
 dtDynSpec SerialChainSpec(const int linkCount)
 {
     dtDynSpec spec;
     const dtDynIndex base = spec.AddBody("base", 0);
-    spec.Bodies()[base].inertial.mass = 2.0;
-    spec.Bodies()[base].inertial.inertia(0) = 0.04;
-    spec.Bodies()[base].inertial.inertia(1) = 0.04;
-    spec.Bodies()[base].inertial.inertia(2) = 0.04;
+    spec.EditBody(base, [&](dtDynBodySpec &draft)
+                  { draft.inertial.mass = 2.0; });
+    spec.EditBody(base, [&](dtDynBodySpec &draft)
+                  { draft.inertial.inertia(0) = 0.04; });
+    spec.EditBody(base, [&](dtDynBodySpec &draft)
+                  { draft.inertial.inertia(1) = 0.04; });
+    spec.EditBody(base, [&](dtDynBodySpec &draft)
+                  { draft.inertial.inertia(2) = 0.04; });
 
     dtDynIndex parent = base;
     for (int i = 0; i < linkCount; ++i)
@@ -583,7 +667,8 @@ dtDynSpec SerialChainSpec(const int linkCount)
                               axisZ);
     }
     spec.AddSite(parent, "serial_tip");
-    spec.Sites()[0].pos(0) = static_cast<dtDynReal>(0.10);
+    spec.EditSite(0, [&](dtDynSiteSpec &draft)
+                  { draft.pos(0) = static_cast<dtDynReal>(0.10); });
     return spec;
 }
 
@@ -808,8 +893,6 @@ Result RunScenario(Scenario &scenario,
     result.comVelocityRms = scope == NativeScope::CcrbaAll ? comVelocity.rms : notApplicable;
     return result;
 }
-
-
 
 ResourceResult MeasureCompileSpec(const Scenario &scenario, const int iterations)
 {
