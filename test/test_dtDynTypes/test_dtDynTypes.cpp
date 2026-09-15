@@ -836,6 +836,10 @@ void TestSpecEditorsRejectReentrantStructuralMutation()
     const dtDynIndex actuator = spec.AddActuator(joint, "actuator");
     dtDynSpec replacement;
     replacement.AddBody("replacement", 0);
+    dtDynSpec copied;
+    copied = spec;
+    assert(copied.Bodies()[body].name == "base");
+    assert(copied.Joints()[joint].name == "joint");
 
     spec = spec;
     spec = std::move(spec);
@@ -904,6 +908,89 @@ void TestSpecEditorsRejectReentrantStructuralMutation()
             {
             } }); });
     assert(spec.Actuators()[actuator].name == "actuator");
+
+    expectLogicError([&]
+                     { spec.EditBody(body, [&](dtDynBodySpec &)
+                                     {
+            try
+            {
+                swap(spec, replacement);
+            }
+            catch (const std::logic_error &)
+            {
+            } }); });
+    assert(spec.Bodies()[body].name == "base");
+
+    expectLogicError([&]
+                     { spec.EditBody(body, [&](dtDynBodySpec &)
+                                     {
+            try
+            {
+                swap(replacement, spec);
+            }
+            catch (const std::logic_error &)
+            {
+            } }); });
+    assert(spec.Bodies()[body].name == "base");
+}
+
+void TestSpecEditorsAbortBothReentrantSwapTransactions()
+{
+    const auto expectBothAborted = [](const bool reverseOperands)
+    {
+        dtDynSpec first;
+        dtDynSpec second;
+        const dtDynIndex firstBody = first.AddBody("first", 0);
+        const dtDynIndex secondBody = second.AddBody("second", 0);
+        const dtDynReal firstMass = first.Bodies()[firstBody].inertial.mass;
+        const dtDynReal secondMass = second.Bodies()[secondBody].inertial.mass;
+        bool firstRejected = false;
+        bool secondRejected = false;
+
+        try
+        {
+            first.EditBody(firstBody, [&](dtDynBodySpec &firstDraft)
+                           {
+                firstDraft.inertial.mass = 3.0;
+                try
+                {
+                    second.EditBody(secondBody, [&](dtDynBodySpec &secondDraft)
+                                    {
+                        secondDraft.inertial.mass = 5.0;
+                        try
+                        {
+                            if (reverseOperands)
+                            {
+                                swap(second, first);
+                            }
+                            else
+                            {
+                                swap(first, second);
+                            }
+                        }
+                        catch (const std::logic_error &)
+                        {
+                        }
+                    });
+                }
+                catch (const std::logic_error &)
+                {
+                    secondRejected = true;
+                } });
+        }
+        catch (const std::logic_error &)
+        {
+            firstRejected = true;
+        }
+
+        assert(firstRejected);
+        assert(secondRejected);
+        assert(first.Bodies()[firstBody].inertial.mass == firstMass);
+        assert(second.Bodies()[secondBody].inertial.mass == secondMass);
+    };
+
+    expectBothAborted(false);
+    expectBothAborted(true);
 }
 
 void TestSpecNameLookupReflectsEditorMutations()
@@ -3248,6 +3335,7 @@ int main()
     TestSpecEditorsDiscardCaughtReentrantAttempt();
     TestSpecEditorsDiscardCaughtSelfAssignment();
     TestSpecEditorsRejectReentrantStructuralMutation();
+    TestSpecEditorsAbortBothReentrantSwapTransactions();
     TestSpecNameLookupReflectsEditorMutations();
     TestModelActuatorNameLookupUsesRebuiltCache();
     TestSpecXmlReportsTypedNumericErrors();

@@ -689,10 +689,8 @@ dtDynSpec &dtDynSpec::operator=(const dtDynSpec &other)
         return *this;
     }
     EnsureNotEditing();
-    m_bodies = other.m_bodies;
-    m_joints = other.m_joints;
-    m_sites = other.m_sites;
-    m_actuators = other.m_actuators;
+    dtDynSpec copy(other);
+    swap(*this, copy);
     return *this;
 }
 
@@ -710,6 +708,34 @@ dtDynSpec &dtDynSpec::operator=(dtDynSpec &&other)
     m_sites = std::move(other.m_sites);
     m_actuators = std::move(other.m_actuators);
     return *this;
+}
+
+void swap(dtDynSpec &left, dtDynSpec &right)
+{
+    const bool leftEditing = left.m_editDepth != 0;
+    const bool rightEditing = right.m_editDepth != 0;
+    if (leftEditing || rightEditing)
+    {
+        if (leftEditing)
+        {
+            left.m_editAborted = true;
+        }
+        if (rightEditing)
+        {
+            right.m_editAborted = true;
+        }
+        throw std::logic_error("dtDynSpec: swap during Edit* callback");
+    }
+    left.SwapStorage(right);
+}
+
+void dtDynSpec::SwapStorage(dtDynSpec &other) noexcept
+{
+    using std::swap;
+    swap(m_bodies, other.m_bodies);
+    swap(m_joints, other.m_joints);
+    swap(m_sites, other.m_sites);
+    swap(m_actuators, other.m_actuators);
 }
 
 void dtDynSpec::EnsureNotEditing()

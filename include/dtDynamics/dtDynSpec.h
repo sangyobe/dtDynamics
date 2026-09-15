@@ -156,7 +156,7 @@ public:
     dtDynSpec(const dtDynSpec &other);
     /*! \brief Move specification storage when the source is not being edited. */
     dtDynSpec(dtDynSpec &&other);
-    /*! \brief Copy assignment guarded against an active edit callback. */
+    /*! \brief Copy-and-swap assignment guarded against an active edit callback. */
     dtDynSpec &operator=(const dtDynSpec &other);
     /*! \brief Move assignment guarded against active edit callbacks. */
     dtDynSpec &operator=(dtDynSpec &&other);
@@ -224,7 +224,7 @@ public:
      \details The callback receives a temporary copy, not a reference into dtDynSpec storage.
               This setup-time API preserves editable model construction without exposing the
               owning container. Throwing from the callback leaves the stored body unchanged.
-              Calling Edit*, Add*, Clear, or assignment on this dtDynSpec from the callback
+              Calling Edit*, Add*, Clear, assignment, or swap on this dtDynSpec from the callback
               throws std::logic_error; even if caught, the edit aborts and discards its draft.
     */
     template <typename Editor>
@@ -252,7 +252,10 @@ public:
     }
 
 private:
+    friend void swap(dtDynSpec &left, dtDynSpec &right);
+
     void EnsureNotEditing();
+    void SwapStorage(dtDynSpec &other) noexcept;
 
     template <typename Item, typename Editor>
     void EditItem(dtArray<Item> &items,
@@ -296,6 +299,9 @@ private:
     std::size_t m_editDepth = 0;
     bool m_editAborted = false;
 };
+
+/*! \brief Swap specification storage when neither instance is inside an edit callback. */
+void swap(dtDynSpec &left, dtDynSpec &right);
 
 } // namespace dt::Dynamics
 

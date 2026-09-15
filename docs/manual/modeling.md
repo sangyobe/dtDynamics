@@ -93,7 +93,8 @@ if (body == DTDYN_INVALID_INDEX ||
 - `dtDynSpec` collection view: `Bodies()`, `Joints()`, `Sites()`, `Actuators()`는 immutable
 - setup-time property 수정: `EditBody`, `EditJoint`, `EditSite`, `EditActuator`가 item copy를 callback에 전달하고 정상 반환 시에만 commit
 - `Edit*` 실패 조건: invalid index는 `std::out_of_range`, callback 예외는 stored item을 변경하지 않고 전파
-- callback reentrancy 금지: 같은 `dtDynSpec`의 `Edit*`, `Add*`, `Clear`, assignment 호출은 `std::logic_error`; callback이 catch해도 edit는 abort되고 draft는 discard
+- callback reentrancy 금지: 같은 `dtDynSpec`의 `Edit*`, `Add*`, `Clear`, assignment, `swap` 호출은 `std::logic_error`; callback이 catch해도 edit는 abort되고 draft는 discard
+- spec 교환: `using std::swap; swap(left, right);`로 ADL `dt::Dynamics::swap`을 사용하며, active edit 중 교환은 양쪽 transaction을 abort
 - lookup은 setup-time linear scan이므로 committed edit를 즉시 반영하며 stale persistent map을 만들지 않음
 - compiled `dtDynModel`의 lookup 방식: setup boundary가 통제되므로 rebuilt map 사용
 - missing name 처리: 양쪽 모두 예외 대신 `DTDYN_INVALID_INDEX` 반환
