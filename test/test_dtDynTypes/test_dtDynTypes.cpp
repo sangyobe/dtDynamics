@@ -791,6 +791,41 @@ void TestSpecEditorsDiscardCaughtReentrantAttempt()
     assert(spec.Bodies()[body].inertial.mass == originalMass);
 }
 
+void TestSpecEditorsDiscardCaughtSelfAssignment()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("base", 0);
+    const dtDynReal originalMass = spec.Bodies()[body].inertial.mass;
+
+    const auto expectAbortedEdit = [&](const auto &selfAssign)
+    {
+        bool rejected = false;
+        try
+        {
+            spec.EditBody(body, [&](dtDynBodySpec &draft)
+                          {
+                draft.inertial.mass = 7.0;
+                try
+                {
+                    selfAssign();
+                }
+                catch (const std::logic_error &)
+                {
+                }
+            });
+        }
+        catch (const std::logic_error &)
+        {
+            rejected = true;
+        }
+        assert(rejected);
+        assert(spec.Bodies()[body].inertial.mass == originalMass);
+    };
+
+    expectAbortedEdit([&] { spec = spec; });
+    expectAbortedEdit([&] { spec = std::move(spec); });
+}
+
 void TestSpecEditorsRejectReentrantStructuralMutation()
 {
     dtDynSpec spec;
@@ -800,6 +835,11 @@ void TestSpecEditorsRejectReentrantStructuralMutation()
     const dtDynIndex actuator = spec.AddActuator(joint, "actuator");
     dtDynSpec replacement;
     replacement.AddBody("replacement", 0);
+
+    spec = spec;
+    spec = std::move(spec);
+    assert(spec.Bodies()[body].name == "base");
+    assert(spec.Joints()[joint].name == "joint");
 
     const auto expectLogicError = [](const auto &operation)
     {
@@ -3205,6 +3245,7 @@ int main()
     TestSpecEditorsDiscardFailedDrafts();
     TestSpecEditorsRejectReentrantMutation();
     TestSpecEditorsDiscardCaughtReentrantAttempt();
+    TestSpecEditorsDiscardCaughtSelfAssignment();
     TestSpecEditorsRejectReentrantStructuralMutation();
     TestSpecNameLookupReflectsEditorMutations();
     TestModelActuatorNameLookupUsesRebuiltCache();

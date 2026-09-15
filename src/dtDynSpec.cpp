@@ -683,28 +683,32 @@ dtDynSpec::dtDynSpec(dtDynSpec &&other)
 
 dtDynSpec &dtDynSpec::operator=(const dtDynSpec &other)
 {
-    EnsureNotEditing();
-    if (this != &other)
+    if (this == &other)
     {
-        m_bodies = other.m_bodies;
-        m_joints = other.m_joints;
-        m_sites = other.m_sites;
-        m_actuators = other.m_actuators;
+        EnsureNotEditing();
+        return *this;
     }
+    EnsureNotEditing();
+    m_bodies = other.m_bodies;
+    m_joints = other.m_joints;
+    m_sites = other.m_sites;
+    m_actuators = other.m_actuators;
     return *this;
 }
 
 dtDynSpec &dtDynSpec::operator=(dtDynSpec &&other)
 {
+    if (this == &other)
+    {
+        EnsureNotEditing();
+        return *this;
+    }
     EnsureNotEditing();
     other.EnsureNotEditing();
-    if (this != &other)
-    {
-        m_bodies = std::move(other.m_bodies);
-        m_joints = std::move(other.m_joints);
-        m_sites = std::move(other.m_sites);
-        m_actuators = std::move(other.m_actuators);
-    }
+    m_bodies = std::move(other.m_bodies);
+    m_joints = std::move(other.m_joints);
+    m_sites = std::move(other.m_sites);
+    m_actuators = std::move(other.m_actuators);
     return *this;
 }
 
