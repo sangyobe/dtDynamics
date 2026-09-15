@@ -156,9 +156,9 @@ public:
     dtDynSpec(const dtDynSpec &other);
     /*! \brief Move specification storage when the source is not being edited. */
     dtDynSpec(dtDynSpec &&other);
-    /*! \brief Assign specification storage when this instance is not inside an edit callback. */
+    /*! \brief Copy assignment guarded against an active edit callback. */
     dtDynSpec &operator=(const dtDynSpec &other);
-    /*! \brief Move-assign storage when neither instance is inside an edit callback. */
+    /*! \brief Move assignment guarded against active edit callbacks. */
     dtDynSpec &operator=(dtDynSpec &&other);
 
     /*! \brief Add a body under parent and return its index.

@@ -811,8 +811,7 @@ void TestSpecEditorsDiscardCaughtSelfAssignment()
                 }
                 catch (const std::logic_error &)
                 {
-                }
-            });
+                } });
         }
         catch (const std::logic_error &)
         {
@@ -822,8 +821,10 @@ void TestSpecEditorsDiscardCaughtSelfAssignment()
         assert(spec.Bodies()[body].inertial.mass == originalMass);
     };
 
-    expectAbortedEdit([&] { spec = spec; });
-    expectAbortedEdit([&] { spec = std::move(spec); });
+    expectAbortedEdit([&]
+                      { spec = spec; });
+    expectAbortedEdit([&]
+                      { spec = std::move(spec); });
 }
 
 void TestSpecEditorsRejectReentrantStructuralMutation()

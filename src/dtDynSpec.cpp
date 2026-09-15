@@ -683,7 +683,7 @@ dtDynSpec::dtDynSpec(dtDynSpec &&other)
 
 dtDynSpec &dtDynSpec::operator=(const dtDynSpec &other)
 {
-    if (this == &other)
+    if (&other == this)
     {
         EnsureNotEditing();
         return *this;
@@ -698,7 +698,7 @@ dtDynSpec &dtDynSpec::operator=(const dtDynSpec &other)
 
 dtDynSpec &dtDynSpec::operator=(dtDynSpec &&other)
 {
-    if (this == &other)
+    if (&other == this)
     {
         EnsureNotEditing();
         return *this;
