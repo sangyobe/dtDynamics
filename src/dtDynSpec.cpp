@@ -683,12 +683,15 @@ dtDynSpec::dtDynSpec(dtDynSpec &&other)
 
 dtDynSpec &dtDynSpec::operator=(const dtDynSpec &other)
 {
+    if (m_editDepth != 0)
+    {
+        m_editAborted = true;
+        throw std::logic_error("dtDynSpec: assignment during Edit* callback");
+    }
     if (&other == this)
     {
-        EnsureNotEditing();
         return *this;
     }
-    EnsureNotEditing();
     dtDynSpec copy(other);
     swap(*this, copy);
     return *this;
@@ -696,12 +699,15 @@ dtDynSpec &dtDynSpec::operator=(const dtDynSpec &other)
 
 dtDynSpec &dtDynSpec::operator=(dtDynSpec &&other)
 {
+    if (m_editDepth != 0)
+    {
+        m_editAborted = true;
+        throw std::logic_error("dtDynSpec: assignment during Edit* callback");
+    }
     if (&other == this)
     {
-        EnsureNotEditing();
         return *this;
     }
-    EnsureNotEditing();
     other.EnsureNotEditing();
     m_bodies = std::move(other.m_bodies);
     m_joints = std::move(other.m_joints);
