@@ -15,6 +15,7 @@
 #include <cstddef>
 #include <stdexcept>
 #include <string>
+#include <utility>
 
 namespace dt::Dynamics
 {
@@ -141,15 +142,24 @@ struct dtDynActuatorSpec
           units. Equality constraints and tendons are rejected by DecodeXml because the public
           dynamics API currently targets open tree models, not closed-chain models.
 
-          Accessors expose the underlying arrays intentionally for advanced editing. Callers
-          that mutate indices directly are responsible for preserving referential integrity
-          before compiling or encoding the model.
+          Collection accessors are immutable. Setup-time property changes use callback-scoped
+          EditBody/EditJoint/EditSite/EditActuator operations, which commit an item copy without
+          exposing the owning container. CompileSpecChecked validates referential integrity before
+          producing a model from externally assembled specifications.
 */
 class dtDynSpec
 {
 public:
     /*! \brief Construct a specification containing only the world body. */
     dtDynSpec();
+    /*! \brief Copy only specification storage; active edit state is never copied. */
+    dtDynSpec(const dtDynSpec &other);
+    /*! \brief Move specification storage when the source is not being edited. */
+    dtDynSpec(dtDynSpec &&other);
+    /*! \brief Assign specification storage when this instance is not inside an edit callback. */
+    dtDynSpec &operator=(const dtDynSpec &other);
+    /*! \brief Move-assign storage when neither instance is inside an edit callback. */
+    dtDynSpec &operator=(dtDynSpec &&other);
 
     /*! \brief Add a body under parent and return its index.
         \details If parent is not a valid existing body index, the new body remains detached
@@ -188,16 +198,16 @@ public:
     static dtDynSpec LoadXmlFile(const std::string &path);
 
     /*! \brief Return body id by name, or DTDYN_INVALID_INDEX when absent.
-        \details Performs a setup-time linear scan so direct mutable-array edits are visible. */
+        \details Performs a setup-time linear scan so committed scoped edits are visible. */
     dtDynIndex BodyId(const std::string &name) const;
     /*! \brief Return joint id by name, or DTDYN_INVALID_INDEX when absent.
-        \details Performs a setup-time linear scan so direct mutable-array edits are visible. */
+        \details Performs a setup-time linear scan so committed scoped edits are visible. */
     dtDynIndex JointId(const std::string &name) const;
     /*! \brief Return site id by name, or DTDYN_INVALID_INDEX when absent.
-        \details Performs a setup-time linear scan so direct mutable-array edits are visible. */
+        \details Performs a setup-time linear scan so committed scoped edits are visible. */
     dtDynIndex SiteId(const std::string &name) const;
     /*! \brief Return actuator id by name, or DTDYN_INVALID_INDEX when absent.
-        \details Performs a setup-time linear scan so direct mutable-array edits are visible. */
+        \details Performs a setup-time linear scan so committed scoped edits are visible. */
     dtDynIndex ActuatorId(const std::string &name) const;
 
     /*! \brief Return immutable body storage. */
@@ -209,20 +219,82 @@ public:
     /*! \brief Return immutable actuator storage. */
     const dtArray<dtDynActuatorSpec> &Actuators() const;
 
-    /*! \brief Return mutable body storage for advanced specification editing. */
-    dtArray<dtDynBodySpec> &Bodies();
-    /*! \brief Return mutable joint storage for advanced specification editing. */
-    dtArray<dtDynJointSpec> &Joints();
-    /*! \brief Return mutable site storage for advanced specification editing. */
-    dtArray<dtDynSiteSpec> &Sites();
-    /*! \brief Return mutable actuator storage for advanced specification editing. */
-    dtArray<dtDynActuatorSpec> &Actuators();
+    /*!
+     \brief Edit one body through a callback-scoped copy and commit it on return.
+     \details The callback receives a temporary copy, not a reference into dtDynSpec storage.
+              This setup-time API preserves editable model construction without exposing the
+              owning container. Throwing from the callback leaves the stored body unchanged.
+              Calling Edit*, Add*, Clear, or assignment on this dtDynSpec from the callback
+              throws std::logic_error; even if caught, the edit aborts and discards its draft.
+    */
+    template <typename Editor>
+    void EditBody(const dtDynIndex bodyId, Editor &&editor)
+    {
+        EditItem(m_bodies, bodyId, std::forward<Editor>(editor), "body");
+    }
+    /*! \brief Edit one joint through a callback-scoped copy and commit it on return. */
+    template <typename Editor>
+    void EditJoint(const dtDynIndex jointId, Editor &&editor)
+    {
+        EditItem(m_joints, jointId, std::forward<Editor>(editor), "joint");
+    }
+    /*! \brief Edit one site through a callback-scoped copy and commit it on return. */
+    template <typename Editor>
+    void EditSite(const dtDynIndex siteId, Editor &&editor)
+    {
+        EditItem(m_sites, siteId, std::forward<Editor>(editor), "site");
+    }
+    /*! \brief Edit one actuator through a callback-scoped copy and commit it on return. */
+    template <typename Editor>
+    void EditActuator(const dtDynIndex actuatorId, Editor &&editor)
+    {
+        EditItem(m_actuators, actuatorId, std::forward<Editor>(editor), "actuator");
+    }
 
 private:
+    void EnsureNotEditing();
+
+    template <typename Item, typename Editor>
+    void EditItem(dtArray<Item> &items,
+                  const dtDynIndex itemId,
+                  Editor &&editor,
+                  const char *const itemType)
+    {
+        EnsureNotEditing();
+        if (itemId < 0 || static_cast<std::size_t>(itemId) >= items.size())
+        {
+            throw std::out_of_range(std::string("dtDynSpec: invalid ") + itemType + " index");
+        }
+
+        Item draft = items[static_cast<std::size_t>(itemId)];
+        m_editAborted = false;
+        ++m_editDepth;
+        try
+        {
+            std::forward<Editor>(editor)(draft);
+        }
+        catch (...)
+        {
+            --m_editDepth;
+            m_editAborted = false;
+            throw;
+        }
+        const bool aborted = m_editAborted;
+        --m_editDepth;
+        m_editAborted = false;
+        if (aborted)
+        {
+            throw std::logic_error("dtDynSpec: reentrant mutation aborted Edit* callback");
+        }
+        items[static_cast<std::size_t>(itemId)] = std::move(draft);
+    }
+
     dtArray<dtDynBodySpec> m_bodies;
     dtArray<dtDynJointSpec> m_joints;
     dtArray<dtDynSiteSpec> m_sites;
     dtArray<dtDynActuatorSpec> m_actuators;
+    std::size_t m_editDepth = 0;
+    bool m_editAborted = false;
 };
 
 } // namespace dt::Dynamics

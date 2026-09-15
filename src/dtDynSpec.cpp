@@ -664,8 +664,62 @@ dtDynSpec::dtDynSpec()
     Clear();
 }
 
+dtDynSpec::dtDynSpec(const dtDynSpec &other)
+    : m_bodies(other.m_bodies),
+      m_joints(other.m_joints),
+      m_sites(other.m_sites),
+      m_actuators(other.m_actuators)
+{
+}
+
+dtDynSpec::dtDynSpec(dtDynSpec &&other)
+{
+    other.EnsureNotEditing();
+    m_bodies = std::move(other.m_bodies);
+    m_joints = std::move(other.m_joints);
+    m_sites = std::move(other.m_sites);
+    m_actuators = std::move(other.m_actuators);
+}
+
+dtDynSpec &dtDynSpec::operator=(const dtDynSpec &other)
+{
+    EnsureNotEditing();
+    if (this != &other)
+    {
+        m_bodies = other.m_bodies;
+        m_joints = other.m_joints;
+        m_sites = other.m_sites;
+        m_actuators = other.m_actuators;
+    }
+    return *this;
+}
+
+dtDynSpec &dtDynSpec::operator=(dtDynSpec &&other)
+{
+    EnsureNotEditing();
+    other.EnsureNotEditing();
+    if (this != &other)
+    {
+        m_bodies = std::move(other.m_bodies);
+        m_joints = std::move(other.m_joints);
+        m_sites = std::move(other.m_sites);
+        m_actuators = std::move(other.m_actuators);
+    }
+    return *this;
+}
+
+void dtDynSpec::EnsureNotEditing()
+{
+    if (m_editDepth != 0)
+    {
+        m_editAborted = true;
+        throw std::logic_error("dtDynSpec: reentrant structural mutation during Edit* callback");
+    }
+}
+
 dtDynIndex dtDynSpec::AddBody(const std::string &name, const dtDynIndex parent)
 {
+    EnsureNotEditing();
     dtDynBodySpec body;
     body.name = name;
     body.parent = parent;
@@ -686,6 +740,7 @@ dtDynIndex dtDynSpec::AddBody(const std::string &name, const dtDynIndex parent)
 
 dtDynIndex dtDynSpec::AddJoint(const dtDynIndex body, const std::string &name, const dtDynJointType type)
 {
+    EnsureNotEditing();
     dtDynJointSpec joint;
     joint.name = name;
     joint.body = body;
@@ -707,6 +762,7 @@ dtDynIndex dtDynSpec::AddJoint(const dtDynIndex body, const std::string &name, c
 
 dtDynIndex dtDynSpec::AddSite(const dtDynIndex body, const std::string &name)
 {
+    EnsureNotEditing();
     dtDynSiteSpec site;
     site.name = name;
     site.body = body;
@@ -725,6 +781,7 @@ dtDynIndex dtDynSpec::AddSite(const dtDynIndex body, const std::string &name)
 
 dtDynIndex dtDynSpec::AddActuator(const dtDynIndex joint, const std::string &name)
 {
+    EnsureNotEditing();
     dtDynActuatorSpec actuator;
     actuator.name = name;
     actuator.joint = joint;
@@ -736,6 +793,7 @@ dtDynIndex dtDynSpec::AddActuator(const dtDynIndex joint, const std::string &nam
 
 void dtDynSpec::Clear()
 {
+    EnsureNotEditing();
     m_bodies.clear();
     m_joints.clear();
     m_sites.clear();
@@ -1054,14 +1112,16 @@ dtDynSpec DecodeXmlImpl(const std::string &xml, const std::string &sourcePath)
             RequireUniqueName(bodyName, attrs, bodyNames, begin, "body", sourcePath);
             const dtDynIndex bodyId = spec.AddBody(bodyName, parent);
             bodyOrigins.push_back(begin);
-            if (HasAttribute(attrs, "pos"))
-            {
-                spec.Bodies()[bodyId].pos = ParseVector3(attrs.at("pos"), sourcePath);
-            }
-            if (HasAttribute(attrs, "quat"))
-            {
-                spec.Bodies()[bodyId].quat = ParseVector4(attrs.at("quat"), sourcePath);
-            }
+            spec.EditBody(bodyId, [&](dtDynBodySpec &draft)
+                          {
+                if (HasAttribute(attrs, "pos"))
+                {
+                    draft.pos = ParseVector3(attrs.at("pos"), sourcePath);
+                }
+                if (HasAttribute(attrs, "quat"))
+                {
+                    draft.quat = ParseVector4(attrs.at("quat"), sourcePath);
+                } });
             if (!selfClosing)
             {
                 bodyStack.push_back(bodyId);
@@ -1071,20 +1131,23 @@ dtDynSpec DecodeXmlImpl(const std::string &xml, const std::string &sourcePath)
 
         if (name == "inertial" && bodyStack.size() > 1)
         {
-            dtDynInertialSpec &inertial = spec.Bodies()[bodyStack[bodyStack.size() - 1]].inertial;
-            inertial.mass = RealAttributeOr(attrs, "mass", inertial.mass, sourcePath);
-            if (HasAttribute(attrs, "pos"))
-            {
-                inertial.pos = ParseVector3(attrs.at("pos"), sourcePath);
-            }
-            if (HasAttribute(attrs, "quat"))
-            {
-                inertial.quat = ParseVector4(attrs.at("quat"), sourcePath);
-            }
-            if (HasAttribute(attrs, "diaginertia"))
-            {
-                inertial.inertia = ParseVector3(attrs.at("diaginertia"), sourcePath);
-            }
+            const dtDynIndex bodyId = bodyStack[bodyStack.size() - 1];
+            spec.EditBody(bodyId, [&](dtDynBodySpec &body)
+                          {
+                dtDynInertialSpec &inertial = body.inertial;
+                inertial.mass = RealAttributeOr(attrs, "mass", inertial.mass, sourcePath);
+                if (HasAttribute(attrs, "pos"))
+                {
+                    inertial.pos = ParseVector3(attrs.at("pos"), sourcePath);
+                }
+                if (HasAttribute(attrs, "quat"))
+                {
+                    inertial.quat = ParseVector4(attrs.at("quat"), sourcePath);
+                }
+                if (HasAttribute(attrs, "diaginertia"))
+                {
+                    inertial.inertia = ParseVector3(attrs.at("diaginertia"), sourcePath);
+                } });
             continue;
         }
 
@@ -1097,45 +1160,46 @@ dtDynSpec DecodeXmlImpl(const std::string &xml, const std::string &sourcePath)
             const dtDynJointType jointType = typeAttribute == attrs.end() ? dtDynJointType::Hinge : JointTypeFromXml(typeAttribute->second, sourcePath);
             const dtDynIndex jointId = spec.AddJoint(bodyId, jointName, jointType);
             jointOrigins.push_back(begin);
-            dtDynJointSpec &joint = spec.Joints()[jointId];
-            if (HasAttribute(attrs, "pos"))
-            {
-                joint.pos = ParseVector3(attrs.at("pos"), sourcePath);
-            }
-            if (HasAttribute(attrs, "axis"))
-            {
-                joint.axis = ParseVector3(attrs.at("axis"), sourcePath);
-            }
-            joint.armature = RealAttributeOr(attrs, "armature", joint.armature, sourcePath);
-            const bool hasLimitedAttribute = HasAttribute(attrs, "limited");
-            if (hasLimitedAttribute)
-            {
-                const AttributeValue &limited = attrs.at("limited");
-                if (limited.text == "true" || limited.text == "1")
+            spec.EditJoint(jointId, [&](dtDynJointSpec &draft)
+                           {
+                if (HasAttribute(attrs, "pos"))
                 {
-                    joint.limited = true;
+                    draft.pos = ParseVector3(attrs.at("pos"), sourcePath);
                 }
-                else if (limited.text == "false" || limited.text == "0")
+                if (HasAttribute(attrs, "axis"))
                 {
-                    joint.limited = false;
+                    draft.axis = ParseVector3(attrs.at("axis"), sourcePath);
                 }
-                else
+                draft.armature = RealAttributeOr(attrs, "armature", draft.armature, sourcePath);
+                const bool hasLimitedAttribute = HasAttribute(attrs, "limited");
+                if (hasLimitedAttribute)
                 {
-                    throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath,
-                                        limited.offset,
-                                        "limited must be true, false, 1, or 0");
+                    const AttributeValue &limited = attrs.at("limited");
+                    if (limited.text == "true" || limited.text == "1")
+                    {
+                        draft.limited = true;
+                    }
+                    else if (limited.text == "false" || limited.text == "0")
+                    {
+                        draft.limited = false;
+                    }
+                    else
+                    {
+                        throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath,
+                                            limited.offset,
+                                            "limited must be true, false, 1, or 0");
+                    }
                 }
-            }
-            if (HasAttribute(attrs, "range"))
-            {
-                const std::array<dtDynReal, 2> range = ParseFixedVector<2>(attrs.at("range"), sourcePath);
-                joint.rangeMin = range[0] * angleScale;
-                joint.rangeMax = range[1] * angleScale;
-                if (!hasLimitedAttribute)
+                if (HasAttribute(attrs, "range"))
                 {
-                    joint.limited = true;
-                }
-            }
+                    const std::array<dtDynReal, 2> range = ParseFixedVector<2>(attrs.at("range"), sourcePath);
+                    draft.rangeMin = range[0] * angleScale;
+                    draft.rangeMax = range[1] * angleScale;
+                    if (!hasLimitedAttribute)
+                    {
+                        draft.limited = true;
+                    }
+                } });
             jointNameToId[jointName] = jointId;
             continue;
         }
@@ -1158,14 +1222,16 @@ dtDynSpec DecodeXmlImpl(const std::string &xml, const std::string &sourcePath)
             RequireUniqueName(siteName, attrs, siteNames, begin, "site", sourcePath);
             const dtDynIndex siteId = spec.AddSite(bodyId, siteName);
             siteOrigins.push_back(begin);
-            if (HasAttribute(attrs, "pos"))
-            {
-                spec.Sites()[siteId].pos = ParseVector3(attrs.at("pos"), sourcePath);
-            }
-            if (HasAttribute(attrs, "quat"))
-            {
-                spec.Sites()[siteId].quat = ParseVector4(attrs.at("quat"), sourcePath);
-            }
+            spec.EditSite(siteId, [&](dtDynSiteSpec &draft)
+                          {
+                if (HasAttribute(attrs, "pos"))
+                {
+                    draft.pos = ParseVector3(attrs.at("pos"), sourcePath);
+                }
+                if (HasAttribute(attrs, "quat"))
+                {
+                    draft.quat = ParseVector4(attrs.at("quat"), sourcePath);
+                } });
             continue;
         }
 
@@ -1185,7 +1251,8 @@ dtDynSpec DecodeXmlImpl(const std::string &xml, const std::string &sourcePath)
             const dtDynIndex actuatorId =
                 spec.AddActuator(jointIt->second, actuatorName);
             actuatorOrigins.push_back(begin);
-            spec.Actuators()[actuatorId].gear = RealAttributeOr(attrs, "gear", spec.Actuators()[actuatorId].gear, sourcePath);
+            spec.EditActuator(actuatorId, [&](dtDynActuatorSpec &draft)
+                              { draft.gear = RealAttributeOr(attrs, "gear", draft.gear, sourcePath); });
             continue;
         }
     }
@@ -1293,26 +1360,6 @@ const dtArray<dtDynSiteSpec> &dtDynSpec::Sites() const
 const dtArray<dtDynActuatorSpec> &dtDynSpec::Actuators() const
 {
     return m_actuators;
-}
-
-dtArray<dtDynBodySpec> &dtDynSpec::Bodies()
-{
-    return m_bodies; // polyspace DEFECT:BREAKING_DATA_ENCAPSULATION [Justified:Medium] "Editable setup-time container; callers preserve referential integrity before compile or encode."
-}
-
-dtArray<dtDynJointSpec> &dtDynSpec::Joints()
-{
-    return m_joints; // polyspace DEFECT:BREAKING_DATA_ENCAPSULATION [Justified:Medium] "Editable setup-time container; callers preserve referential integrity before compile or encode."
-}
-
-dtArray<dtDynSiteSpec> &dtDynSpec::Sites()
-{
-    return m_sites; // polyspace DEFECT:BREAKING_DATA_ENCAPSULATION [Justified:Medium] "Editable setup-time container; callers preserve referential integrity before compile or encode."
-}
-
-dtArray<dtDynActuatorSpec> &dtDynSpec::Actuators()
-{
-    return m_actuators; // polyspace DEFECT:BREAKING_DATA_ENCAPSULATION [Justified:Medium] "Editable setup-time container; callers preserve referential integrity before compile or encode."
 }
 
 } // namespace dt::Dynamics

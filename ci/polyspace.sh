@@ -126,8 +126,9 @@ if [[ -n "${PSLOG}" ]] && grep -q "License error\|Licensing Error" "${PSLOG}"; t
     exit 1
 fi
 
-# CI passes only when every result is Green or carries a narrow Polyspace
-# justification. Compilation failures always block the static-analysis gate.
+# CI passes only when every exported Polyspace row is Green with a blank or Unreviewed status.
+# Any Justified/other review status, non-Green result, malformed export, or compilation failure
+# blocks the gate.
 POLYSPACE_EXIT=0
 if [[ -f "${REPORT}" ]]; then
     echo "=============================="
