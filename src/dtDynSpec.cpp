@@ -664,96 +664,97 @@ dtDynSpec::dtDynSpec()
     Clear();
 }
 
-dtDynSpec::dtDynSpec(const dtDynSpec &other)
-    : m_bodies(other.m_bodies),
-      m_joints(other.m_joints),
-      m_sites(other.m_sites),
-      m_actuators(other.m_actuators)
+dtDynSpec::EditTransaction::EditTransaction(const EditTransaction &) noexcept
 {
 }
 
-dtDynSpec::dtDynSpec(dtDynSpec &&other)
+dtDynSpec::EditTransaction::EditTransaction(EditTransaction &&other)
 {
-    other.EnsureNotEditing();
-    m_bodies = std::move(other.m_bodies);
-    m_joints = std::move(other.m_joints);
-    m_sites = std::move(other.m_sites);
-    m_actuators = std::move(other.m_actuators);
+    other.EnsureInactive();
 }
 
-dtDynSpec &dtDynSpec::operator=(const dtDynSpec &other)
+dtDynSpec::EditTransaction &dtDynSpec::EditTransaction::operator=(const EditTransaction &other)
 {
-    if (this == &other)
-    {
-        if (m_editDepth != 0)
-        {
-            m_editAborted = true;
-            throw std::logic_error("dtDynSpec: self assignment during Edit* callback");
-        }
-        return *this;
-    }
-
-    EnsureNotEditing();
-    dtArray<dtDynBodySpec> bodies(other.m_bodies);
-    dtArray<dtDynJointSpec> joints(other.m_joints);
-    dtArray<dtDynSiteSpec> sites(other.m_sites);
-    dtArray<dtDynActuatorSpec> actuators(other.m_actuators);
-    m_bodies = std::move(bodies);
-    m_joints = std::move(joints);
-    m_sites = std::move(sites);
-    m_actuators = std::move(actuators);
+    RejectAssignment(other, "dtDynSpec: assignment during Edit* callback");
     return *this;
 }
 
-dtDynSpec &dtDynSpec::operator=(dtDynSpec &&other)
+dtDynSpec::EditTransaction &dtDynSpec::EditTransaction::operator=(EditTransaction &&other)
 {
-    const bool thisEditing = m_editDepth != 0;
-    const bool otherEditing = other.m_editDepth != 0;
-    if (thisEditing || otherEditing)
+    RejectAssignment(other, "dtDynSpec: move assignment during Edit* callback");
+    return *this;
+}
+
+void dtDynSpec::EditTransaction::Begin() noexcept
+{
+    m_aborted = false;
+    ++m_depth;
+}
+
+void dtDynSpec::EditTransaction::Cancel() noexcept
+{
+    --m_depth;
+    m_aborted = false;
+}
+
+bool dtDynSpec::EditTransaction::Finish() noexcept
+{
+    const bool aborted = m_aborted;
+    --m_depth;
+    m_aborted = false;
+    return aborted;
+}
+
+bool dtDynSpec::EditTransaction::IsActive() const noexcept
+{
+    return m_depth != 0;
+}
+
+void dtDynSpec::EditTransaction::Abort() const noexcept
+{
+    if (IsActive())
     {
-        if (thisEditing)
-        {
-            m_editAborted = true;
-        }
-        if (otherEditing)
-        {
-            other.m_editAborted = true;
-        }
-        throw std::logic_error("dtDynSpec: move assignment during Edit* callback");
+        m_aborted = true;
     }
-    if (this == &other)
+}
+
+void dtDynSpec::EditTransaction::RejectAssignment(const EditTransaction &other,
+                                                   const char *const message)
+{
+    const bool thisEditing = IsActive();
+    const bool otherEditing = other.IsActive();
+    if (!thisEditing && !otherEditing)
     {
-        return *this;
+        return;
     }
 
-    m_bodies = std::move(other.m_bodies);
-    m_joints = std::move(other.m_joints);
-    m_sites = std::move(other.m_sites);
-    m_actuators = std::move(other.m_actuators);
-    return *this;
+    Abort();
+    other.Abort();
+    throw std::logic_error(message);
+}
+
+void dtDynSpec::EditTransaction::EnsureInactive()
+{
+    if (IsActive())
+    {
+        Abort();
+        throw std::logic_error("dtDynSpec: reentrant structural mutation during Edit* callback");
+    }
+}
+
+void dtDynSpec::EditTransaction::RejectSwap(EditTransaction &other)
+{
+    RejectAssignment(other, "dtDynSpec: swap during Edit* callback");
 }
 
 void swap(dtDynSpec &left, dtDynSpec &right)
 {
-    const bool leftEditing = left.m_editDepth != 0;
-    const bool rightEditing = right.m_editDepth != 0;
-    if (leftEditing || rightEditing)
-    {
-        if (leftEditing)
-        {
-            left.m_editAborted = true;
-        }
-        if (rightEditing)
-        {
-            right.m_editAborted = true;
-        }
-        throw std::logic_error("dtDynSpec: swap during Edit* callback");
-    }
     left.SwapStorage(right);
 }
 
-void dtDynSpec::SwapStorage(dtDynSpec &other) noexcept
+void dtDynSpec::SwapStorage(dtDynSpec &other)
 {
+    m_editTransaction.RejectSwap(other.m_editTransaction);
     using std::swap;
     swap(m_bodies, other.m_bodies);
     swap(m_joints, other.m_joints);
@@ -763,11 +764,7 @@ void dtDynSpec::SwapStorage(dtDynSpec &other) noexcept
 
 void dtDynSpec::EnsureNotEditing()
 {
-    if (m_editDepth != 0)
-    {
-        m_editAborted = true;
-        throw std::logic_error("dtDynSpec: reentrant structural mutation during Edit* callback");
-    }
+    m_editTransaction.EnsureInactive();
 }
 
 dtDynIndex dtDynSpec::AddBody(const std::string &name, const dtDynIndex parent)

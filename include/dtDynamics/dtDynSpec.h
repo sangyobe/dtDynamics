@@ -153,12 +153,16 @@ public:
     /*! \brief Construct a specification containing only the world body. */
     dtDynSpec();
     /*! \brief Copy only specification storage; active edit state is never copied. */
-    dtDynSpec(const dtDynSpec &other);
+    dtDynSpec(const dtDynSpec &other) = default;
     /*! \brief Move specification storage when the source is not being edited. */
-    dtDynSpec(dtDynSpec &&other);
-    /*! \brief Assignment is supported outside active scoped edits. */
-    dtDynSpec &operator=(const dtDynSpec &other);
-    dtDynSpec &operator=(dtDynSpec &&other);
+    dtDynSpec(dtDynSpec &&other) = default;
+    /*! \brief Assign inline storage when both specifications are outside scoped edits.
+        \details The first-member edit transaction hook rejects an active source or destination
+                 before any dtArray assignment starts, and poisons every active transaction.
+        \note This minimal defaulted memberwise assignment does not provide a strong whole-object
+              copy guarantee if a later dtArray assignment throws after an earlier one succeeds. */
+    dtDynSpec &operator=(const dtDynSpec &other) = default;
+    dtDynSpec &operator=(dtDynSpec &&other) = default;
 
     /*! \brief Add a body under parent and return its index.
         \details If parent is not a valid existing body index, the new body remains detached
@@ -253,8 +257,32 @@ public:
 private:
     friend void swap(dtDynSpec &left, dtDynSpec &right);
 
+    class EditTransaction
+    {
+    public:
+        EditTransaction() = default;
+        EditTransaction(const EditTransaction &other) noexcept;
+        EditTransaction(EditTransaction &&other);
+        EditTransaction &operator=(const EditTransaction &other);
+        EditTransaction &operator=(EditTransaction &&other);
+
+        void Begin() noexcept;
+        void Cancel() noexcept;
+        bool Finish() noexcept;
+        void EnsureInactive();
+        void RejectSwap(EditTransaction &other);
+
+    private:
+        bool IsActive() const noexcept;
+        void Abort() const noexcept;
+        void RejectAssignment(const EditTransaction &other, const char *message);
+
+        std::size_t m_depth = 0;
+        mutable bool m_aborted = false;
+    };
+
     void EnsureNotEditing();
-    void SwapStorage(dtDynSpec &other) noexcept;
+    void SwapStorage(dtDynSpec &other);
 
     template <typename Item, typename Editor>
     void EditItem(dtArray<Item> &items,
@@ -269,21 +297,17 @@ private:
         }
 
         Item draft = items[static_cast<std::size_t>(itemId)];
-        m_editAborted = false;
-        ++m_editDepth;
+        m_editTransaction.Begin();
         try
         {
             std::forward<Editor>(editor)(draft);
         }
         catch (...)
         {
-            --m_editDepth;
-            m_editAborted = false;
+            m_editTransaction.Cancel();
             throw;
         }
-        const bool aborted = m_editAborted;
-        --m_editDepth;
-        m_editAborted = false;
+        const bool aborted = m_editTransaction.Finish();
         if (aborted)
         {
             throw std::logic_error("dtDynSpec: reentrant mutation aborted Edit* callback");
@@ -291,12 +315,12 @@ private:
         items[static_cast<std::size_t>(itemId)] = std::move(draft);
     }
 
+    // This must remain first so defaulted outer assignment checks it before inline storage.
+    EditTransaction m_editTransaction;
     dtArray<dtDynBodySpec> m_bodies;
     dtArray<dtDynJointSpec> m_joints;
     dtArray<dtDynSiteSpec> m_sites;
     dtArray<dtDynActuatorSpec> m_actuators;
-    std::size_t m_editDepth = 0;
-    bool m_editAborted = false;
 };
 
 /*! \brief Swap specification storage when neither instance is inside an edit callback. */
