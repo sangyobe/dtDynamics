@@ -685,7 +685,11 @@ dtDynSpec &dtDynSpec::operator=(const dtDynSpec &other)
 {
     if (this == &other)
     {
-        EnsureNotEditing();
+        if (m_editDepth != 0)
+        {
+            m_editAborted = true;
+            throw std::logic_error("dtDynSpec: self assignment during Edit* callback");
+        }
         return *this;
     }
 
