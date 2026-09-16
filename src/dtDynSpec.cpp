@@ -747,6 +747,22 @@ void dtDynSpec::EditTransaction::RejectSwap(EditTransaction &other)
     RejectAssignment(other, "dtDynSpec: swap during Edit* callback");
 }
 
+dtDynSpec::SpecStorage &dtDynSpec::SpecStorage::operator=(const SpecStorage &other)
+{
+    SpecStorage copy(other);
+    Swap(copy);
+    return *this;
+}
+
+void dtDynSpec::SpecStorage::Swap(SpecStorage &other) noexcept
+{
+    using std::swap;
+    swap(m_bodies, other.m_bodies);
+    swap(m_joints, other.m_joints);
+    swap(m_sites, other.m_sites);
+    swap(m_actuators, other.m_actuators);
+}
+
 void swap(dtDynSpec &left, dtDynSpec &right)
 {
     left.SwapStorage(right);
@@ -755,11 +771,7 @@ void swap(dtDynSpec &left, dtDynSpec &right)
 void dtDynSpec::SwapStorage(dtDynSpec &other)
 {
     m_editTransaction.RejectSwap(other.m_editTransaction);
-    using std::swap;
-    swap(m_bodies, other.m_bodies);
-    swap(m_joints, other.m_joints);
-    swap(m_sites, other.m_sites);
-    swap(m_actuators, other.m_actuators);
+    m_storage.Swap(other.m_storage);
 }
 
 void dtDynSpec::EnsureNotEditing()
@@ -776,13 +788,13 @@ dtDynIndex dtDynSpec::AddBody(const std::string &name, const dtDynIndex parent)
     SetIdentityQuat(body.quat);
     SetIdentityQuat(body.inertial.quat);
 
-    const dtDynIndex id = static_cast<dtDynIndex>(m_bodies.size());
-    m_bodies.push_back(body);
+    const dtDynIndex id = static_cast<dtDynIndex>(m_storage.m_bodies.size());
+    m_storage.m_bodies.push_back(body);
 
     if (parent >= 0 && parent < id)
     {
-        m_bodies[id].nextSibling = m_bodies[parent].firstChild;
-        m_bodies[parent].firstChild = id;
+        m_storage.m_bodies[id].nextSibling = m_storage.m_bodies[parent].firstChild;
+        m_storage.m_bodies[parent].firstChild = id;
     }
 
     return id;
@@ -799,12 +811,12 @@ dtDynIndex dtDynSpec::AddJoint(const dtDynIndex body, const std::string &name, c
     joint.axis(1) = 0.0;
     joint.axis(2) = 1.0;
 
-    const dtDynIndex id = static_cast<dtDynIndex>(m_joints.size());
-    m_joints.push_back(joint);
+    const dtDynIndex id = static_cast<dtDynIndex>(m_storage.m_joints.size());
+    m_storage.m_joints.push_back(joint);
 
-    if (body >= 0 && body < static_cast<dtDynIndex>(m_bodies.size()))
+    if (body >= 0 && body < static_cast<dtDynIndex>(m_storage.m_bodies.size()))
     {
-        m_bodies[body].joints.push_back(id);
+        m_storage.m_bodies[body].joints.push_back(id);
     }
 
     return id;
@@ -818,12 +830,12 @@ dtDynIndex dtDynSpec::AddSite(const dtDynIndex body, const std::string &name)
     site.body = body;
     SetIdentityQuat(site.quat);
 
-    const dtDynIndex id = static_cast<dtDynIndex>(m_sites.size());
-    m_sites.push_back(site);
+    const dtDynIndex id = static_cast<dtDynIndex>(m_storage.m_sites.size());
+    m_storage.m_sites.push_back(site);
 
-    if (body >= 0 && body < static_cast<dtDynIndex>(m_bodies.size()))
+    if (body >= 0 && body < static_cast<dtDynIndex>(m_storage.m_bodies.size()))
     {
-        m_bodies[body].sites.push_back(id);
+        m_storage.m_bodies[body].sites.push_back(id);
     }
 
     return id;
@@ -836,18 +848,18 @@ dtDynIndex dtDynSpec::AddActuator(const dtDynIndex joint, const std::string &nam
     actuator.name = name;
     actuator.joint = joint;
 
-    const dtDynIndex id = static_cast<dtDynIndex>(m_actuators.size());
-    m_actuators.push_back(actuator);
+    const dtDynIndex id = static_cast<dtDynIndex>(m_storage.m_actuators.size());
+    m_storage.m_actuators.push_back(actuator);
     return id;
 }
 
 void dtDynSpec::Clear()
 {
     EnsureNotEditing();
-    m_bodies.clear();
-    m_joints.clear();
-    m_sites.clear();
-    m_actuators.clear();
+    m_storage.m_bodies.clear();
+    m_storage.m_joints.clear();
+    m_storage.m_sites.clear();
+    m_storage.m_actuators.clear();
     AddBody("world", DTDYN_INVALID_INDEX);
 }
 
@@ -857,20 +869,22 @@ std::string dtDynSpec::EncodeXml() const
     out << "<mujoco>\n";
     out << "  <compiler angle=\"radian\"/>\n";
     out << "  <worldbody>\n";
-    for (dtDynIndex child = m_bodies[0].firstChild; child >= 0; child = m_bodies[static_cast<std::size_t>(child)].nextSibling)
+    for (dtDynIndex child = m_storage.m_bodies[0].firstChild;
+         child >= 0;
+         child = m_storage.m_bodies[static_cast<std::size_t>(child)].nextSibling)
     {
         EncodeBody(*this, child, 2, out);
     }
     out << "  </worldbody>\n";
-    if (!m_actuators.empty())
+    if (!m_storage.m_actuators.empty())
     {
         out << "  <actuator>\n";
-        for (const dtDynActuatorSpec &actuator : m_actuators)
+        for (const dtDynActuatorSpec &actuator : m_storage.m_actuators)
         {
             out << "    <motor name=\"" << actuator.name << "\"";
-            if (actuator.joint >= 0 && actuator.joint < static_cast<dtDynIndex>(m_joints.size()))
+            if (actuator.joint >= 0 && actuator.joint < static_cast<dtDynIndex>(m_storage.m_joints.size()))
             {
-                out << " joint=\"" << m_joints[static_cast<std::size_t>(actuator.joint)].name << "\"";
+                out << " joint=\"" << m_storage.m_joints[static_cast<std::size_t>(actuator.joint)].name << "\"";
             }
             out << " gear=\"" << FormatReal(actuator.gear) << "\"/>\n";
         }
@@ -1374,42 +1388,42 @@ dtDynSpec dtDynSpec::LoadXmlFile(const std::string &path)
 
 dtDynIndex dtDynSpec::BodyId(const std::string &name) const
 {
-    return FindNamedObject(m_bodies, name);
+    return FindNamedObject(m_storage.m_bodies, name);
 }
 
 dtDynIndex dtDynSpec::JointId(const std::string &name) const
 {
-    return FindNamedObject(m_joints, name);
+    return FindNamedObject(m_storage.m_joints, name);
 }
 
 dtDynIndex dtDynSpec::SiteId(const std::string &name) const
 {
-    return FindNamedObject(m_sites, name);
+    return FindNamedObject(m_storage.m_sites, name);
 }
 
 dtDynIndex dtDynSpec::ActuatorId(const std::string &name) const
 {
-    return FindNamedObject(m_actuators, name);
+    return FindNamedObject(m_storage.m_actuators, name);
 }
 
 const dtArray<dtDynBodySpec> &dtDynSpec::Bodies() const
 {
-    return m_bodies;
+    return m_storage.m_bodies;
 }
 
 const dtArray<dtDynJointSpec> &dtDynSpec::Joints() const
 {
-    return m_joints;
+    return m_storage.m_joints;
 }
 
 const dtArray<dtDynSiteSpec> &dtDynSpec::Sites() const
 {
-    return m_sites;
+    return m_storage.m_sites;
 }
 
 const dtArray<dtDynActuatorSpec> &dtDynSpec::Actuators() const
 {
-    return m_actuators;
+    return m_storage.m_actuators;
 }
 
 } // namespace dt::Dynamics

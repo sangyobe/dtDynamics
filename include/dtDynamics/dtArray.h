@@ -60,20 +60,36 @@ public:
     /*! \brief Construct by copying values from an initializer list. */
     dtArray(std::initializer_list<T> values)
     {
-        reserve(values.size());
-        for (const T &value : values)
+        try
         {
-            push_back(value);
+            reserve(values.size());
+            for (const T &value : values)
+            {
+                push_back(value);
+            }
+        }
+        catch (...)
+        {
+            clear();
+            throw;
         }
     }
 
     /*! \brief Copy-construct by appending each element from other. */
     dtArray(const dtArray &other)
     {
-        reserve(other.m_size);
-        for (std::size_t i = 0; i < other.m_size; ++i)
+        try
         {
-            push_back(other.m_data[i]);
+            reserve(other.m_size);
+            for (std::size_t i = 0; i < other.m_size; ++i)
+            {
+                push_back(other.m_data[i]);
+            }
+        }
+        catch (...)
+        {
+            clear();
+            throw;
         }
     }
 
@@ -223,7 +239,9 @@ public:
     const T *end() const { return m_data == nullptr ? nullptr : m_data + m_size; }
 
 private:
-    /*! \brief Ensure capacity is at least capacity, preserving existing logical elements. */
+    /*! \brief Ensure capacity is at least capacity, preserving existing logical elements.
+        \details Elements must be copy-assignable or noexcept move-assignable so failed growth
+                 never leaves a move-only source partially transferred. */
     void reserve(const std::size_t capacity)
     {
         if (capacity <= m_capacity)
@@ -231,10 +249,27 @@ private:
             return;
         }
 
-        T *newData = new T[capacity];
-        for (std::size_t i = 0; i < m_size; ++i)
+        T *const newData = new T[capacity];
+        try
         {
-            newData[i] = std::move(m_data[i]);
+            for (std::size_t i = 0; i < m_size; ++i)
+            {
+                if constexpr (std::is_copy_assignable<T>::value)
+                {
+                    newData[i] = m_data[i];
+                }
+                else
+                {
+                    static_assert(std::is_nothrow_move_assignable<T>::value,
+                                  "dtArray growth requires copy-assignable or noexcept move-assignable elements");
+                    newData[i] = std::move(m_data[i]);
+                }
+            }
+        }
+        catch (...)
+        {
+            delete[] newData;
+            throw;
         }
         delete[] m_data;
         m_data = newData;

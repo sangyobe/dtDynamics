@@ -156,11 +156,12 @@ public:
     dtDynSpec(const dtDynSpec &other) = default;
     /*! \brief Move specification storage when the source is not being edited. */
     dtDynSpec(dtDynSpec &&other) = default;
-    /*! \brief Assign inline storage when both specifications are outside scoped edits.
+    /*! \brief Assign inline specification storage transactionally when both
+        specifications are outside scoped edits.
         \details The first-member edit transaction hook rejects an active source or destination
-                 before any dtArray assignment starts, and poisons every active transaction.
-        \note This minimal defaulted memberwise assignment does not provide a strong whole-object
-              copy guarantee if a later dtArray assignment throws after an earlier one succeeds. */
+                 before storage assignment starts and poisons every active transaction. The nested
+                 inline storage completes a full copy before noexcept-swapping its arrays, leaving
+                 this specification unchanged if copying throws. */
     dtDynSpec &operator=(const dtDynSpec &other) = default;
     dtDynSpec &operator=(dtDynSpec &&other) = default;
 
@@ -233,25 +234,25 @@ public:
     template <typename Editor>
     void EditBody(const dtDynIndex bodyId, Editor &&editor)
     {
-        EditItem(m_bodies, bodyId, std::forward<Editor>(editor), "body");
+        EditItem(m_storage.m_bodies, bodyId, std::forward<Editor>(editor), "body");
     }
     /*! \brief Edit one joint through a callback-scoped copy and commit it on return. */
     template <typename Editor>
     void EditJoint(const dtDynIndex jointId, Editor &&editor)
     {
-        EditItem(m_joints, jointId, std::forward<Editor>(editor), "joint");
+        EditItem(m_storage.m_joints, jointId, std::forward<Editor>(editor), "joint");
     }
     /*! \brief Edit one site through a callback-scoped copy and commit it on return. */
     template <typename Editor>
     void EditSite(const dtDynIndex siteId, Editor &&editor)
     {
-        EditItem(m_sites, siteId, std::forward<Editor>(editor), "site");
+        EditItem(m_storage.m_sites, siteId, std::forward<Editor>(editor), "site");
     }
     /*! \brief Edit one actuator through a callback-scoped copy and commit it on return. */
     template <typename Editor>
     void EditActuator(const dtDynIndex actuatorId, Editor &&editor)
     {
-        EditItem(m_actuators, actuatorId, std::forward<Editor>(editor), "actuator");
+        EditItem(m_storage.m_actuators, actuatorId, std::forward<Editor>(editor), "actuator");
     }
 
 private:
@@ -279,6 +280,27 @@ private:
 
         std::size_t m_depth = 0;
         mutable bool m_aborted = false;
+    };
+
+    /*! \brief Inline collection storage with transactional copy assignment. */
+    class SpecStorage
+    {
+    public:
+        SpecStorage() = default;
+        SpecStorage(const SpecStorage &other) = default;
+        SpecStorage(SpecStorage &&other) = default;
+        SpecStorage &operator=(const SpecStorage &other);
+        SpecStorage &operator=(SpecStorage &&other) = default;
+
+        void Swap(SpecStorage &other) noexcept;
+
+    private:
+        friend class dtDynSpec;
+
+        dtArray<dtDynBodySpec> m_bodies;
+        dtArray<dtDynJointSpec> m_joints;
+        dtArray<dtDynSiteSpec> m_sites;
+        dtArray<dtDynActuatorSpec> m_actuators;
     };
 
     void EnsureNotEditing();
@@ -317,10 +339,7 @@ private:
 
     // This must remain first so defaulted outer assignment checks it before inline storage.
     EditTransaction m_editTransaction;
-    dtArray<dtDynBodySpec> m_bodies;
-    dtArray<dtDynJointSpec> m_joints;
-    dtArray<dtDynSiteSpec> m_sites;
-    dtArray<dtDynActuatorSpec> m_actuators;
+    SpecStorage m_storage;
 };
 
 /*! \brief Swap specification storage when neither instance is inside an edit callback. */
