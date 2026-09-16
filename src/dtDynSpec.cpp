@@ -683,14 +683,16 @@ dtDynSpec::dtDynSpec(dtDynSpec &&other)
 
 dtDynSpec &dtDynSpec::operator=(const dtDynSpec &other)
 {
-    EnsureNotEditing();
-    if (this == &other)
+    if (this != &other)
     {
-        return *this;
+        EnsureNotEditing();
+        dtDynSpec copy(other);
+        SwapStorage(copy);
     }
-
-    dtDynSpec copy(other);
-    SwapStorage(copy);
+    else
+    {
+        EnsureNotEditing();
+    }
     return *this;
 }
 
