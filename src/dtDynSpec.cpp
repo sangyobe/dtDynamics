@@ -719,7 +719,7 @@ void dtDynSpec::EditTransaction::Abort() const noexcept
 }
 
 void dtDynSpec::EditTransaction::RejectAssignment(const EditTransaction &other,
-                                                   const char *const message)
+                                                  const char *const message)
 {
     const bool thisEditing = IsActive();
     const bool otherEditing = other.IsActive();
