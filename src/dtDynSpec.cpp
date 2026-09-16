@@ -683,22 +683,21 @@ dtDynSpec::dtDynSpec(dtDynSpec &&other)
 
 dtDynSpec &dtDynSpec::operator=(const dtDynSpec &other)
 {
-    if (this != &other)
+    if (this == &other)
     {
         EnsureNotEditing();
-        dtArray<dtDynBodySpec> bodies(other.m_bodies);
-        dtArray<dtDynJointSpec> joints(other.m_joints);
-        dtArray<dtDynSiteSpec> sites(other.m_sites);
-        dtArray<dtDynActuatorSpec> actuators(other.m_actuators);
-        m_bodies = std::move(bodies);
-        m_joints = std::move(joints);
-        m_sites = std::move(sites);
-        m_actuators = std::move(actuators);
+        return *this;
     }
-    else
-    {
-        EnsureNotEditing();
-    }
+
+    EnsureNotEditing();
+    dtArray<dtDynBodySpec> bodies(other.m_bodies);
+    dtArray<dtDynJointSpec> joints(other.m_joints);
+    dtArray<dtDynSiteSpec> sites(other.m_sites);
+    dtArray<dtDynActuatorSpec> actuators(other.m_actuators);
+    m_bodies = std::move(bodies);
+    m_joints = std::move(joints);
+    m_sites = std::move(sites);
+    m_actuators = std::move(actuators);
     return *this;
 }
 
