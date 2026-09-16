@@ -898,6 +898,226 @@ void TestSpecEditorsRejectReentrantStructuralMutation()
     assert(spec.Bodies()[body].name == "base");
 }
 
+void TestSpecEditorsRejectReentrantAssignment()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("base", 0);
+    const dtDynReal originalMass = spec.Bodies()[body].inertial.mass;
+    dtDynSpec replacement;
+    replacement.AddBody("replacement", 0);
+
+    const auto expectLogicError = [](const auto &operation)
+    {
+        bool rejected = false;
+        try
+        {
+            operation();
+        }
+        catch (const std::logic_error &)
+        {
+            rejected = true;
+        }
+        assert(rejected);
+    };
+
+    expectLogicError([&]
+                     { spec.EditBody(body, [&](dtDynBodySpec &draft)
+                                     {
+            draft.inertial.mass = 1.0;
+            spec = replacement; }); });
+    assert(spec.Bodies()[body].inertial.mass == originalMass);
+
+    expectLogicError([&]
+                     { spec.EditBody(body, [&](dtDynBodySpec &draft)
+                                     {
+            draft.inertial.mass = 2.0;
+            try
+            {
+                spec = spec;
+            }
+            catch (const std::logic_error &)
+            {
+            } }); });
+    assert(spec.Bodies()[body].inertial.mass == originalMass);
+
+    expectLogicError([&]
+                     { spec.EditBody(body, [&](dtDynBodySpec &draft)
+                                     {
+            draft.inertial.mass = 3.0;
+            spec = std::move(spec); }); });
+    assert(spec.Bodies()[body].inertial.mass == originalMass);
+
+    expectLogicError([&]
+                     { spec.EditBody(body, [&](dtDynBodySpec &draft)
+                                     {
+            draft.inertial.mass = 4.0;
+            try
+            {
+                spec = std::move(spec);
+            }
+            catch (const std::logic_error &)
+            {
+            } }); });
+    assert(spec.Bodies()[body].inertial.mass == originalMass);
+}
+
+void TestSpecEditorsAbortReentrantMoveAssignmentTransactions()
+{
+    const auto seed = [](dtDynSpec &first,
+                         const dtDynIndex firstBody,
+                         dtDynSpec &second,
+                         const dtDynIndex secondBody)
+    {
+        first.EditBody(firstBody, [](dtDynBodySpec &draft)
+                       { draft.inertial.mass = 1.25; });
+        second.EditBody(secondBody, [](dtDynBodySpec &draft)
+                        { draft.inertial.mass = 2.5; });
+    };
+    const auto assertUnchanged = [](const dtDynSpec &first,
+                                    const dtDynIndex firstBody,
+                                    const dtDynReal firstMass,
+                                    const dtDynSpec &second,
+                                    const dtDynIndex secondBody,
+                                    const dtDynReal secondMass)
+    {
+        assert(first.Bodies().size() == 2);
+        assert(second.Bodies().size() == 2);
+        assert(first.Bodies()[firstBody].name == "first");
+        assert(second.Bodies()[secondBody].name == "second");
+        assert(first.Bodies()[firstBody].inertial.mass == firstMass);
+        assert(second.Bodies()[secondBody].inertial.mass == secondMass);
+    };
+    const auto expectSourceAbort = [&](const bool reverseOperands)
+    {
+        dtDynSpec first;
+        dtDynSpec second;
+        const dtDynIndex firstBody = first.AddBody("first", 0);
+        const dtDynIndex secondBody = second.AddBody("second", 0);
+        seed(first, firstBody, second, secondBody);
+        const dtDynReal firstMass = first.Bodies()[firstBody].inertial.mass;
+        const dtDynReal secondMass = second.Bodies()[secondBody].inertial.mass;
+        bool sourceRejected = false;
+
+        dtDynSpec &source = reverseOperands ? second : first;
+        dtDynSpec &destination = reverseOperands ? first : second;
+        const dtDynIndex sourceBody = reverseOperands ? secondBody : firstBody;
+        try
+        {
+            source.EditBody(sourceBody, [&](dtDynBodySpec &draft)
+                            {
+                draft.inertial.mass = 7.0;
+                try
+                {
+                    destination = std::move(source);
+                }
+                catch (const std::logic_error &)
+                {
+                } });
+        }
+        catch (const std::logic_error &)
+        {
+            sourceRejected = true;
+        }
+
+        assert(sourceRejected);
+        assertUnchanged(first, firstBody, firstMass, second, secondBody, secondMass);
+    };
+    const auto expectDestinationAbort = [&](const bool reverseOperands)
+    {
+        dtDynSpec first;
+        dtDynSpec second;
+        const dtDynIndex firstBody = first.AddBody("first", 0);
+        const dtDynIndex secondBody = second.AddBody("second", 0);
+        seed(first, firstBody, second, secondBody);
+        const dtDynReal firstMass = first.Bodies()[firstBody].inertial.mass;
+        const dtDynReal secondMass = second.Bodies()[secondBody].inertial.mass;
+        bool destinationRejected = false;
+
+        dtDynSpec &destination = reverseOperands ? first : second;
+        dtDynSpec &source = reverseOperands ? second : first;
+        const dtDynIndex destinationBody = reverseOperands ? firstBody : secondBody;
+        try
+        {
+            destination.EditBody(destinationBody, [&](dtDynBodySpec &draft)
+                                 {
+                draft.inertial.mass = 9.0;
+                try
+                {
+                    destination = std::move(source);
+                }
+                catch (const std::logic_error &)
+                {
+                } });
+        }
+        catch (const std::logic_error &)
+        {
+            destinationRejected = true;
+        }
+
+        assert(destinationRejected);
+        assertUnchanged(first, firstBody, firstMass, second, secondBody, secondMass);
+    };
+    const auto expectBothAborted = [&](const bool reverseOperands)
+    {
+        dtDynSpec first;
+        dtDynSpec second;
+        const dtDynIndex firstBody = first.AddBody("first", 0);
+        const dtDynIndex secondBody = second.AddBody("second", 0);
+        seed(first, firstBody, second, secondBody);
+        const dtDynReal firstMass = first.Bodies()[firstBody].inertial.mass;
+        const dtDynReal secondMass = second.Bodies()[secondBody].inertial.mass;
+        bool firstRejected = false;
+        bool secondRejected = false;
+
+        try
+        {
+            first.EditBody(firstBody, [&](dtDynBodySpec &firstDraft)
+                           {
+                firstDraft.inertial.mass = 11.0;
+                try
+                {
+                    second.EditBody(secondBody, [&](dtDynBodySpec &secondDraft)
+                                    {
+                        secondDraft.inertial.mass = 13.0;
+                        try
+                        {
+                            if (reverseOperands)
+                            {
+                                first = std::move(second);
+                            }
+                            else
+                            {
+                                second = std::move(first);
+                            }
+                        }
+                        catch (const std::logic_error &)
+                        {
+                        }
+                    });
+                }
+                catch (const std::logic_error &)
+                {
+                    secondRejected = true;
+                } });
+        }
+        catch (const std::logic_error &)
+        {
+            firstRejected = true;
+        }
+
+        assert(firstRejected);
+        assert(secondRejected);
+        assertUnchanged(first, firstBody, firstMass, second, secondBody, secondMass);
+    };
+
+    expectSourceAbort(false);
+    expectSourceAbort(true);
+    expectDestinationAbort(false);
+    expectDestinationAbort(true);
+    expectBothAborted(false);
+    expectBothAborted(true);
+}
+
 void TestSpecEditorsAbortBothReentrantSwapTransactions()
 {
     const auto expectBothAborted = [](const bool reverseOperands)
@@ -3298,6 +3518,8 @@ int main()
     TestSpecEditorsRejectReentrantMutation();
     TestSpecEditorsDiscardCaughtReentrantAttempt();
     TestSpecEditorsRejectReentrantStructuralMutation();
+    TestSpecEditorsRejectReentrantAssignment();
+    TestSpecEditorsAbortReentrantMoveAssignmentTransactions();
     TestSpecEditorsAbortBothReentrantSwapTransactions();
     TestSpecNameLookupReflectsEditorMutations();
     TestModelActuatorNameLookupUsesRebuiltCache();

@@ -3,7 +3,7 @@
  \brief     Editable native dtDynamics model specification definitions.
  \author    Joonhee Jo, joonhee.jo@hyundai.com
  \date      2026. 07. 16
- \version   0.1.1
+ \version   0.1.2
  \copyright RoboticsLab ART All rights reserved.
 */
 
@@ -679,6 +679,47 @@ dtDynSpec::dtDynSpec(dtDynSpec &&other)
     m_joints = std::move(other.m_joints);
     m_sites = std::move(other.m_sites);
     m_actuators = std::move(other.m_actuators);
+}
+
+dtDynSpec &dtDynSpec::operator=(const dtDynSpec &other)
+{
+    EnsureNotEditing();
+    if (this == &other)
+    {
+        return *this;
+    }
+
+    dtDynSpec copy(other);
+    SwapStorage(copy);
+    return *this;
+}
+
+dtDynSpec &dtDynSpec::operator=(dtDynSpec &&other)
+{
+    const bool thisEditing = m_editDepth != 0;
+    const bool otherEditing = other.m_editDepth != 0;
+    if (thisEditing || otherEditing)
+    {
+        if (thisEditing)
+        {
+            m_editAborted = true;
+        }
+        if (otherEditing)
+        {
+            other.m_editAborted = true;
+        }
+        throw std::logic_error("dtDynSpec: move assignment during Edit* callback");
+    }
+    if (this == &other)
+    {
+        return *this;
+    }
+
+    m_bodies = std::move(other.m_bodies);
+    m_joints = std::move(other.m_joints);
+    m_sites = std::move(other.m_sites);
+    m_actuators = std::move(other.m_actuators);
+    return *this;
 }
 
 void swap(dtDynSpec &left, dtDynSpec &right)

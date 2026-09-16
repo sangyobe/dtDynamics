@@ -2,7 +2,7 @@
 
 Author: Joonhee Jo
 
-- `dtDynamics 0.1.1` 범위: tree/forest rigid-body model의 setup 검증과 controller-facing dynamics ingredient
+- `dtDynamics 0.1.2` 범위: tree/forest rigid-body model의 setup 검증과 controller-facing dynamics ingredient
 
 ## 10-1. 지원하는 범위
 
@@ -49,6 +49,7 @@ Author: Joonhee Jo
 ## 10-5. Compatibility 영향
 
 - 0.1.1의 checked path·XML loader 영향: 이전에 silent default/partial parse로 통과하던 malformed numeric, wrong arity, duplicate name, invalid reference 거부 가능
+- 0.1.2의 `dtDynSpec` encapsulation 영향: public mutable collection reference를 사용하는 source는 build failure. immutable `Bodies()`/`Joints()`/`Sites()`/`Actuators()` read view와 callback-scoped `Edit*` transaction으로 이행 필요
 - 성격: fail-closed setup contract → real robot XML을 release gate에서 확인 필요
 - raw `CompileSpec()`: trusted backward-compatible path로 유지
 

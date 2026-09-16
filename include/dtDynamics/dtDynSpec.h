@@ -3,7 +3,7 @@
  \brief     Editable native dtDynamics model specification.
  \author    Joonhee Jo, joonhee.jo@hyundai.com
  \date      2026. 07. 16
- \version   0.1.1
+ \version   0.1.2
  \copyright RoboticsLab ART All rights reserved.
 */
 
@@ -157,8 +157,8 @@ public:
     /*! \brief Move specification storage when the source is not being edited. */
     dtDynSpec(dtDynSpec &&other);
     /*! \brief Assignment is supported outside active scoped edits. */
-    dtDynSpec &operator=(const dtDynSpec &other) = default;
-    dtDynSpec &operator=(dtDynSpec &&other) = default;
+    dtDynSpec &operator=(const dtDynSpec &other);
+    dtDynSpec &operator=(dtDynSpec &&other);
 
     /*! \brief Add a body under parent and return its index.
         \details If parent is not a valid existing body index, the new body remains detached

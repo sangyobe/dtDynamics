@@ -62,7 +62,15 @@ Author: Joonhee Jo
 - 검사 항목: median/p95/p99 ordering, finite value, raw summary와 promoted CSV의 exact value agreement
 - 실행 명령: `docs/manual.md` 6장 "검증 실행 방법" 참고
 
-## 6-6. Current package gate
+## 6-6. Static-analysis gate
+
+- authoritative evidence: GitLab `Polyspace` job artifact의 canonical `result_list.txt`
+- analysis scope: production `dtDynamics` library의 compile database. test, benchmark, MuJoCo/Pinocchio reference target은 이 static-analysis scope에 포함하지 않음
+- checker profile: Bug Finder + MISRA C++:2023 `6.8.2`, `8.18.1`, `11.6.2`, `25.5.2`, `25.5.3`
+- acceptance: 모든 row가 `Color=Green` 및 blank/`Unreviewed` status여야 한다. reviewed `Justified` row도 raw defect가 남은 것이므로 허용하지 않는다.
+- fail-closed: non-Green, reviewed status, malformed TSV, missing field, `File does not compile`은 모두 job failure
+
+## 6-7. Current package gate
 
 - 문서에 적은 pass snapshot 성격: rerun을 미대체
 - 재실행 조건: compiler, dependency, model, benchmark source 변경 시 같은 semantic gate 재실행
