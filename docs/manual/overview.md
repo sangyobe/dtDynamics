@@ -7,7 +7,7 @@ Author: Joonhee Jo
 
 ## 1-1. 제공하는 것
 
-- `dtDynSpec`: XML subset 또는 programmatic API로 만드는 mutable specification
+- `dtDynSpec`: XML subset 또는 programmatic API로 만드는 setup-time editable specification. collection view는 immutable이고 field update는 callback-scoped `Edit*` transaction으로 commit
 - `ValidateSpec`, `CompileSpecChecked`: 외부/editable setup input의 fail-closed boundary
 - `dtDynModel`: body/joint/site/actuator ID와 coordinate address를 고정한 compiled topology
 - `dtDynData`: state, kinematics, dynamics, Jacobian, scratch를 위한 preallocated storage

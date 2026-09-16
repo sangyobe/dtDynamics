@@ -21,14 +21,14 @@ Author: Joonhee Jo
 
 ## 1. Package boundary와 최소 사용법
 
-- `dtDynamics 0.1.1`: `dtMath` 기반 dynamics ingredient engine
+- `dtDynamics 0.1.2`: `dtMath` 기반 dynamics ingredient engine
 
 > **주의 — production dependency vs validation dependency**
 >
 > `MuJoCo 3.8.0`, `Pinocchio 3.9.0`: validation/benchmark reference (production target `dt::Dynamics`에 link되지 않음).
 
 ```cmake
-find_package(dtDynamics 0.1.1 EXACT CONFIG REQUIRED)
+find_package(dtDynamics 0.1.2 EXACT CONFIG REQUIRED)
 target_link_libraries(my_controller PRIVATE dt::Dynamics)
 ```
 
@@ -84,7 +84,14 @@ if (!ValidateSpec(spec, &error))
 const dtDynModel model = CompileSpecChecked(spec);
 ```
 
-### 2-4. ID lookup과 cache
+### 2-4. Programmatic spec edit
+
+- `Bodies()`, `Joints()`, `Sites()`, `Actuators()`는 immutable collection view이다.
+- setup-time field 변경은 `EditBody`, `EditJoint`, `EditSite`, `EditActuator` callback으로만 수행한다. callback이 정상 반환할 때만 item copy가 commit된다.
+- callback 안에서 같은 spec의 nested `Edit*`, `Add*`, `Clear`, assignment 또는 `swap`을 시도하면 transaction은 abort되며, callback이 inner exception을 잡아도 outer edit는 commit되지 않는다.
+- committed edit도 외부 input과 같으므로 `ValidateSpec()`/`CompileSpecChecked()` 이전에 realtime으로 전달하지 않는다.
+
+### 2-5. ID lookup과 cache
 
 ```cpp
 const dtDynIndex body = spec.BodyId("base");
@@ -101,14 +108,15 @@ if (body == DTDYN_INVALID_INDEX ||
 }
 ```
 
-### 2-5. Setup checklist
+### 2-6. Setup checklist
 
 1. `LoadXmlFile()` 또는 `DecodeXml()`로 `dtDynSpec` 생성
-2. `ValidateSpec()`/`CompileSpecChecked()`로 외부 입력을 fail-closed 검증
-3. expected dimensions와 body/joint/site/actuator name 확인
-4. `DTDYN_INVALID_INDEX` 확인 후 numeric ID와 state-address mapping cache
-5. 동시 평가 instance마다 하나의 `dtDynData` 생성, `Resize(model)` 실행
-6. 이후 realtime state update와 compute 시작
+2. programmatic field 변경은 callback-scoped `Edit*`로 완료하고, collection view reference를 보관하지 않음
+3. `ValidateSpec()`/`CompileSpecChecked()`로 외부 입력과 committed edit를 fail-closed 검증
+4. expected dimensions와 body/joint/site/actuator name 확인
+5. `DTDYN_INVALID_INDEX` 확인 후 numeric ID와 state-address mapping cache
+6. 동시 평가 instance마다 하나의 `dtDynData` 생성, `Resize(model)` 실행
+7. 이후 realtime state update와 compute 시작
 
 - 개념(lifecycle, address 규칙, `dtDynSpec`/`dtDynModel` 설계 근거): [modeling.md](manual/modeling.md)
 
@@ -326,6 +334,19 @@ tools/validate_package.sh --skip-benchmarks
 python3 tools/validate_docs.py
 ```
 
+### 6-3. GitLab static-analysis gate
+
+- authoritative execution: GitLab `polyspace` job와 job artifact `reports/polyspace/polyspace/result_list.txt`
+- analysis scope: test/benchmark/reference target을 끈 production `dtDynamics` compile database
+- checker profile: Bug Finder + MISRA C++:2023 `6.8.2`, `8.18.1`, `11.6.2`, `25.5.2`, `25.5.3`
+- raw-defect-zero policy: 모든 canonical export row는 `Color=Green`이고 status가 blank 또는 `Unreviewed`여야 한다. `Justified`, `No action planned`, `Not a defect`, non-Green row, malformed TSV, `File does not compile`은 모두 gate 실패다.
+
+```bash
+python3 tools/test_polyspace_checker_profile.py
+python3 tools/test_polyspace_result_gate.py
+python3 tools/test_polyspace_export_contract.py
+```
+
 - 개념(setup/native/external validation 의미, artifact 판정 기준): [validation.md](manual/validation.md)
 
 ## 7. Benchmark 재현 방법
@@ -395,6 +416,7 @@ ctest --preset validation --output-on-failure
 
 tools/validate_package.sh --skip-benchmarks
 tools/validate_install_export.sh
+python3 tools/validate_documentation_content.py
 python3 tools/validate_docs.py
 tools/audit_release_readiness.sh
 ```
@@ -415,7 +437,8 @@ tools/audit_release_readiness.sh
 | lookup이 `DTDYN_INVALID_INDEX` 반환              | 이름 오타, 아직 compile 안 된 spec에서 조회, 모델에 실제로 없는 body/joint/site/actuator              | 예외 대신 반환값이므로 반드시 확인 후 indexing — [modeling.md](manual/modeling.md)              |
 | `IsCompatible(model)`이 `true`인데 결과가 이상함       | `IsCompatible()`은 storage dimension만 확인, model identity/topology/inertia 동일성 미보장  | model 교체 시 ID/address cache 재생성 — [modeling.md](manual/modeling.md)             |
 | model 재compile 후 이상 동작                        | 차원이 같아도 cached ID/address가 stale할 수 있음                                            | `Resize()` 재검토 및 lookup 재수행 — [modeling.md](manual/modeling.md)                 |
-| `find_package(dtDynamics 0.1.1 EXACT ...)` 실패 | installed package identity가 0.1.1이 아니거나 EXACT 불일치                                 | `tools/validate_install_export.sh` 재실행 — [release.md](manual/release.md)        |
+| `find_package(dtDynamics 0.1.2 EXACT ...)` 실패 | installed package identity가 0.1.2이 아니거나 EXACT 불일치                                 | `tools/validate_install_export.sh` 재실행 — [release.md](manual/release.md)        |
+| `Edit*` callback이 `logic_error`로 종료 | active edit 중 같은 spec의 nested edit/add/clear/assignment/swap을 시도함 | inner exception을 잡아도 outer transaction은 abort됨 — [modeling.md](manual/modeling.md) |
 | 검증에서 external row가 `skipped`                  | 해당 quantity에 대응하는 Pinocchio/MuJoCo contract가 없음 (equivalent contract 없음)          | 정상 동작 (실패 아님) — [validation.md](manual/validation.md)                           |
 | `qpos`를 0으로 초기화했더니 이상함                        | free/ball joint quaternion이 invalid할 수 있음 (package-level neutral initializer 없음)  | 명시적 초기화 필요 — [modeling.md](manual/modeling.md), [example.md](manual/example.md) |
 
@@ -449,6 +472,6 @@ tools/audit_release_readiness.sh
 - model guide: `docs/guides/model_guide/`
 - usage/migration guide: `docs/guides/usage_guide/`
 - benchmark evidence: [docs/benchmark-results.md](benchmark-results.md)
-- release note: `docs/release-notes/v0.1.1.md`
+- release note: `docs/release-notes/v0.1.2.md`
 - Markdown 문서 gate: Python 3. Diagram source 변경 시 `tools/render_diagrams.sh`와 Graphviz `dot` 사용
-- `v0.1.0-rc1`~`rc3` release note: 과거 기준 보존 (현재 `0.1.1`의 근거로 소급 해석 금지)
+- `v0.1.0-rc1`~`v0.1.1` release note: 과거 기준 보존 (현재 `0.1.2`의 근거로 소급 해석 금지)

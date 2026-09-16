@@ -3,7 +3,7 @@
  \brief     Editable native dtDynamics model specification.
  \author    Joonhee Jo, joonhee.jo@hyundai.com
  \date      2026. 07. 16
- \version   0.1.1
+ \version   0.1.2
  \copyright RoboticsLab ART All rights reserved.
 */
 
@@ -153,10 +153,15 @@ public:
     /*! \brief Construct a specification containing only the world body. */
     dtDynSpec();
     /*! \brief Copy only specification storage; active edit state is never copied. */
-    dtDynSpec(const dtDynSpec &other);
+    dtDynSpec(const dtDynSpec &other) = default;
     /*! \brief Move specification storage when the source is not being edited. */
-    dtDynSpec(dtDynSpec &&other);
-    /*! \brief Assignment is supported outside active scoped edits. */
+    dtDynSpec(dtDynSpec &&other) = default;
+    /*! \brief Assign inline specification storage transactionally when both
+        specifications are outside scoped edits.
+        \details The first-member edit transaction hook rejects an active source or destination
+                 before storage assignment starts and poisons every active transaction. The nested
+                 inline storage completes a full copy before noexcept-swapping its arrays, leaving
+                 this specification unchanged if copying throws. */
     dtDynSpec &operator=(const dtDynSpec &other) = default;
     dtDynSpec &operator=(dtDynSpec &&other) = default;
 
@@ -229,32 +234,77 @@ public:
     template <typename Editor>
     void EditBody(const dtDynIndex bodyId, Editor &&editor)
     {
-        EditItem(m_bodies, bodyId, std::forward<Editor>(editor), "body");
+        EditItem(m_storage.m_bodies, bodyId, std::forward<Editor>(editor), "body");
     }
     /*! \brief Edit one joint through a callback-scoped copy and commit it on return. */
     template <typename Editor>
     void EditJoint(const dtDynIndex jointId, Editor &&editor)
     {
-        EditItem(m_joints, jointId, std::forward<Editor>(editor), "joint");
+        EditItem(m_storage.m_joints, jointId, std::forward<Editor>(editor), "joint");
     }
     /*! \brief Edit one site through a callback-scoped copy and commit it on return. */
     template <typename Editor>
     void EditSite(const dtDynIndex siteId, Editor &&editor)
     {
-        EditItem(m_sites, siteId, std::forward<Editor>(editor), "site");
+        EditItem(m_storage.m_sites, siteId, std::forward<Editor>(editor), "site");
     }
     /*! \brief Edit one actuator through a callback-scoped copy and commit it on return. */
     template <typename Editor>
     void EditActuator(const dtDynIndex actuatorId, Editor &&editor)
     {
-        EditItem(m_actuators, actuatorId, std::forward<Editor>(editor), "actuator");
+        EditItem(m_storage.m_actuators, actuatorId, std::forward<Editor>(editor), "actuator");
     }
 
 private:
     friend void swap(dtDynSpec &left, dtDynSpec &right);
 
+    class EditTransaction
+    {
+    public:
+        EditTransaction() = default;
+        EditTransaction(const EditTransaction &other) noexcept;
+        EditTransaction(EditTransaction &&other);
+        EditTransaction &operator=(const EditTransaction &other);
+        EditTransaction &operator=(EditTransaction &&other);
+
+        void Begin() noexcept;
+        void Cancel() noexcept;
+        bool Finish() noexcept;
+        void EnsureInactive();
+        void RejectSwap(EditTransaction &other);
+
+    private:
+        bool IsActive() const noexcept;
+        void Abort() const noexcept;
+        void RejectAssignment(const EditTransaction &other, const char *message);
+
+        std::size_t m_depth = 0;
+        mutable bool m_aborted = false;
+    };
+
+    /*! \brief Inline collection storage with transactional copy assignment. */
+    class SpecStorage
+    {
+    public:
+        SpecStorage() = default;
+        SpecStorage(const SpecStorage &other) = default;
+        SpecStorage(SpecStorage &&other) = default;
+        SpecStorage &operator=(const SpecStorage &other);
+        SpecStorage &operator=(SpecStorage &&other) = default;
+
+        void Swap(SpecStorage &other) noexcept;
+
+    private:
+        friend class dtDynSpec;
+
+        dtArray<dtDynBodySpec> m_bodies;
+        dtArray<dtDynJointSpec> m_joints;
+        dtArray<dtDynSiteSpec> m_sites;
+        dtArray<dtDynActuatorSpec> m_actuators;
+    };
+
     void EnsureNotEditing();
-    void SwapStorage(dtDynSpec &other) noexcept;
+    void SwapStorage(dtDynSpec &other);
 
     template <typename Item, typename Editor>
     void EditItem(dtArray<Item> &items,
@@ -269,21 +319,17 @@ private:
         }
 
         Item draft = items[static_cast<std::size_t>(itemId)];
-        m_editAborted = false;
-        ++m_editDepth;
+        m_editTransaction.Begin();
         try
         {
             std::forward<Editor>(editor)(draft);
         }
         catch (...)
         {
-            --m_editDepth;
-            m_editAborted = false;
+            m_editTransaction.Cancel();
             throw;
         }
-        const bool aborted = m_editAborted;
-        --m_editDepth;
-        m_editAborted = false;
+        const bool aborted = m_editTransaction.Finish();
         if (aborted)
         {
             throw std::logic_error("dtDynSpec: reentrant mutation aborted Edit* callback");
@@ -291,12 +337,9 @@ private:
         items[static_cast<std::size_t>(itemId)] = std::move(draft);
     }
 
-    dtArray<dtDynBodySpec> m_bodies;
-    dtArray<dtDynJointSpec> m_joints;
-    dtArray<dtDynSiteSpec> m_sites;
-    dtArray<dtDynActuatorSpec> m_actuators;
-    std::size_t m_editDepth = 0;
-    bool m_editAborted = false;
+    // This must remain first so defaulted outer assignment checks it before inline storage.
+    EditTransaction m_editTransaction;
+    SpecStorage m_storage;
 };
 
 /*! \brief Swap specification storage when neither instance is inside an edit callback. */

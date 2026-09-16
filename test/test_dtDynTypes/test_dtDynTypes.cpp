@@ -15,9 +15,13 @@
 #include <cassert>
 #include <chrono>
 #include <cmath>
+#include <cstddef>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <limits>
+#include <memory>
+#include <new>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -36,6 +40,160 @@ static_assert(std::is_same_v<decltype(std::declval<dtDynSpec &>().Bodies()), con
 static_assert(std::is_same_v<decltype(std::declval<dtDynSpec &>().Joints()), const dtArray<dtDynJointSpec> &>);
 static_assert(std::is_same_v<decltype(std::declval<dtDynSpec &>().Sites()), const dtArray<dtDynSiteSpec> &>);
 static_assert(std::is_same_v<decltype(std::declval<dtDynSpec &>().Actuators()), const dtArray<dtDynActuatorSpec> &>);
+
+namespace
+{
+
+// Test-only allocation failpoint for transactional dtArray copy coverage.
+constexpr std::size_t kNoAllocationFailure = std::numeric_limits<std::size_t>::max();
+constexpr std::size_t kMaximumAllocationFailuresToTest = 64;
+std::size_t g_allocationsBeforeFailure = kNoAllocationFailure;
+std::size_t g_outstandingTestAllocations = 0;
+
+void *AllocateForTest(const std::size_t size)
+{
+    if (g_allocationsBeforeFailure != kNoAllocationFailure)
+    {
+        if (g_allocationsBeforeFailure == 0)
+        {
+            throw std::bad_alloc();
+        }
+        --g_allocationsBeforeFailure;
+    }
+
+    void *const allocation = std::malloc(size == 0 ? 1 : size);
+    if (allocation == nullptr)
+    {
+        throw std::bad_alloc();
+    }
+    ++g_outstandingTestAllocations;
+    return allocation;
+}
+
+class ScopedAllocationFailure
+{
+public:
+    explicit ScopedAllocationFailure(const std::size_t allocationsBeforeFailure)
+        : m_previous(g_allocationsBeforeFailure)
+    {
+        g_allocationsBeforeFailure = allocationsBeforeFailure;
+    }
+
+    ~ScopedAllocationFailure()
+    {
+        g_allocationsBeforeFailure = m_previous;
+    }
+
+private:
+    std::size_t m_previous;
+};
+
+struct ThrowingTransfer
+{
+    inline static int liveCount = 0;
+    inline static bool throwOnCopy = false;
+    inline static bool throwOnMove = false;
+
+    int value = 0;
+
+    ThrowingTransfer()
+    {
+        ++liveCount;
+    }
+
+    explicit ThrowingTransfer(const int initialValue)
+        : value(initialValue)
+    {
+        ++liveCount;
+    }
+
+    ThrowingTransfer(const ThrowingTransfer &other)
+        : value(other.value)
+    {
+        ++liveCount;
+    }
+
+    ThrowingTransfer(ThrowingTransfer &&other) noexcept
+        : value(other.value)
+    {
+        ++liveCount;
+        other.value = 0;
+    }
+
+    ~ThrowingTransfer()
+    {
+        --liveCount;
+    }
+
+    ThrowingTransfer &operator=(const ThrowingTransfer &other)
+    {
+        if (throwOnCopy)
+        {
+            throw std::runtime_error("ThrowingTransfer copy assignment");
+        }
+        value = other.value;
+        return *this;
+    }
+
+    ThrowingTransfer &operator=(ThrowingTransfer &&other)
+    {
+        if (throwOnMove)
+        {
+            throw std::runtime_error("ThrowingTransfer move assignment");
+        }
+        value = other.value;
+        other.value = 0;
+        return *this;
+    }
+};
+
+} // namespace
+
+void *operator new(const std::size_t size)
+{
+    return AllocateForTest(size);
+}
+
+void *operator new[](const std::size_t size)
+{
+    return AllocateForTest(size);
+}
+
+void operator delete(void *const allocation) noexcept
+{
+    if (allocation != nullptr)
+    {
+        --g_outstandingTestAllocations;
+    }
+    std::free(allocation);
+}
+
+void operator delete[](void *const allocation) noexcept
+{
+    if (allocation != nullptr)
+    {
+        --g_outstandingTestAllocations;
+    }
+    std::free(allocation);
+}
+
+void operator delete(void *const allocation, const std::size_t) noexcept
+{
+    if (allocation != nullptr)
+    {
+        --g_outstandingTestAllocations;
+    }
+    std::free(allocation);
+}
+
+void operator delete[](void *const allocation, const std::size_t) noexcept
+{
+    if (allocation != nullptr)
+    {
+        --g_outstandingTestAllocations;
+    }
+    std::free(allocation);
+}
 
 namespace
 {
@@ -658,6 +816,91 @@ void TestDtArrayDirectHeader()
     assert(copied[1] == 20);
 }
 
+void TestDtArrayCopyConstructorReleasesFailedPartialCopy()
+{
+    dtArray<dtDynBodySpec> source;
+    dtDynBodySpec body;
+    body.name.assign(256, 'x');
+    source.push_back(body);
+    const std::size_t baselineAllocations = g_outstandingTestAllocations;
+    bool observedFailure = false;
+
+    for (std::size_t allocationsBeforeFailure = 0;
+         allocationsBeforeFailure < kMaximumAllocationFailuresToTest;
+         ++allocationsBeforeFailure)
+    {
+        bool rejected = false;
+        {
+            ScopedAllocationFailure allocationFailure(allocationsBeforeFailure);
+            try
+            {
+                const dtArray<dtDynBodySpec> copy(source);
+                assert(copy.size() == source.size());
+            }
+            catch (const std::bad_alloc &)
+            {
+                rejected = true;
+            }
+        }
+        if (rejected)
+        {
+            observedFailure = true;
+            assert(g_outstandingTestAllocations == baselineAllocations);
+        }
+    }
+
+    assert(observedFailure);
+}
+
+void TestDtArrayReserveCopiesWithoutLeakingOrMutatingOnThrow()
+{
+    ThrowingTransfer::throwOnCopy = false;
+    ThrowingTransfer::throwOnMove = false;
+    ThrowingTransfer first(1);
+    ThrowingTransfer second(2);
+
+    dtArray<ThrowingTransfer> moveSensitive;
+    moveSensitive.push_back(first);
+    ThrowingTransfer::throwOnMove = true;
+    moveSensitive.push_back(second);
+    assert(moveSensitive.size() == 2);
+    assert(moveSensitive[0].value == 1);
+    assert(moveSensitive[1].value == 2);
+    ThrowingTransfer::throwOnMove = false;
+
+    dtArray<ThrowingTransfer> copySensitive;
+    copySensitive.push_back(first);
+    const int liveBeforeFailure = ThrowingTransfer::liveCount;
+    ThrowingTransfer::throwOnCopy = true;
+    bool rejected = false;
+    try
+    {
+        copySensitive.push_back(second);
+    }
+    catch (const std::runtime_error &)
+    {
+        rejected = true;
+    }
+    ThrowingTransfer::throwOnCopy = false;
+
+    assert(rejected);
+    assert(copySensitive.size() == 1);
+    assert(copySensitive[0].value == 1);
+    assert(ThrowingTransfer::liveCount == liveBeforeFailure);
+}
+
+void TestDtArrayReserveSupportsMoveOnlyElements()
+{
+    dtArray<std::unique_ptr<int>> values;
+    values.resize(1);
+    values[0] = std::make_unique<int>(7);
+    values.resize(2);
+
+    assert(values.size() == 2);
+    assert(values[0] != nullptr);
+    assert(*values[0] == 7);
+}
+
 void TestSpecWorldAndFixedBody()
 {
     dtDynSpec spec;
@@ -896,6 +1139,569 @@ void TestSpecEditorsRejectReentrantStructuralMutation()
             {
             } }); });
     assert(spec.Bodies()[body].name == "base");
+}
+
+void TestSpecEditorsRejectReentrantAssignment()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("base", 0);
+    const dtDynReal originalMass = spec.Bodies()[body].inertial.mass;
+    dtDynSpec replacement;
+    replacement.AddBody("replacement", 0);
+
+    const auto expectLogicError = [](const auto &operation)
+    {
+        bool rejected = false;
+        try
+        {
+            operation();
+        }
+        catch (const std::logic_error &)
+        {
+            rejected = true;
+        }
+        assert(rejected);
+    };
+
+    expectLogicError([&]
+                     { spec.EditBody(body, [&](dtDynBodySpec &draft)
+                                     {
+            draft.inertial.mass = 1.0;
+            spec = replacement; }); });
+    assert(spec.Bodies()[body].inertial.mass == originalMass);
+
+    expectLogicError([&]
+                     { spec.EditBody(body, [&](dtDynBodySpec &draft)
+                                     {
+            draft.inertial.mass = 2.0;
+            try
+            {
+                spec = spec;
+            }
+            catch (const std::logic_error &)
+            {
+            } }); });
+    assert(spec.Bodies()[body].inertial.mass == originalMass);
+
+    expectLogicError([&]
+                     { spec.EditBody(body, [&](dtDynBodySpec &draft)
+                                     {
+            draft.inertial.mass = 3.0;
+            spec = std::move(spec); }); });
+    assert(spec.Bodies()[body].inertial.mass == originalMass);
+
+    expectLogicError([&]
+                     { spec.EditBody(body, [&](dtDynBodySpec &draft)
+                                     {
+            draft.inertial.mass = 4.0;
+            try
+            {
+                spec = std::move(spec);
+            }
+            catch (const std::logic_error &)
+            {
+            } }); });
+    assert(spec.Bodies()[body].inertial.mass == originalMass);
+}
+
+void TestSpecEditorsAbortReentrantCopyAssignmentTransactions()
+{
+    const auto seed = [](dtDynSpec &first,
+                         const dtDynIndex firstBody,
+                         dtDynSpec &second,
+                         const dtDynIndex secondBody)
+    {
+        first.EditBody(firstBody, [](dtDynBodySpec &draft)
+                       { draft.inertial.mass = 1.25; });
+        second.EditBody(secondBody, [](dtDynBodySpec &draft)
+                        { draft.inertial.mass = 2.5; });
+    };
+    const auto assertUnchanged = [](const dtDynSpec &first,
+                                    const dtDynIndex firstBody,
+                                    const dtDynReal firstMass,
+                                    const dtDynSpec &second,
+                                    const dtDynIndex secondBody,
+                                    const dtDynReal secondMass)
+    {
+        assert(first.Bodies().size() == 2);
+        assert(second.Bodies().size() == 2);
+        assert(first.Bodies()[firstBody].name == "first");
+        assert(second.Bodies()[secondBody].name == "second");
+        assert(first.Bodies()[firstBody].inertial.mass == firstMass);
+        assert(second.Bodies()[secondBody].inertial.mass == secondMass);
+    };
+
+    {
+        dtDynSpec source;
+        dtDynSpec destination;
+        const dtDynIndex sourceBody = source.AddBody("first", 0);
+        const dtDynIndex destinationBody = destination.AddBody("second", 0);
+        seed(source, sourceBody, destination, destinationBody);
+        const dtDynReal sourceMass = source.Bodies()[sourceBody].inertial.mass;
+        const dtDynReal destinationMass = destination.Bodies()[destinationBody].inertial.mass;
+        bool assignmentCaught = false;
+        bool sourceRejected = false;
+
+        try
+        {
+            source.EditBody(sourceBody, [&](dtDynBodySpec &draft)
+                            {
+                draft.inertial.mass = 7.0;
+                try
+                {
+                    destination = source;
+                }
+                catch (const std::logic_error &)
+                {
+                    assignmentCaught = true;
+                } });
+        }
+        catch (const std::logic_error &)
+        {
+            sourceRejected = true;
+        }
+
+        assert(assignmentCaught);
+        assert(sourceRejected);
+        assertUnchanged(source, sourceBody, sourceMass,
+                        destination, destinationBody, destinationMass);
+    }
+
+    {
+        dtDynSpec source;
+        dtDynSpec destination;
+        const dtDynIndex sourceBody = source.AddBody("first", 0);
+        const dtDynIndex destinationBody = destination.AddBody("second", 0);
+        seed(source, sourceBody, destination, destinationBody);
+        const dtDynReal sourceMass = source.Bodies()[sourceBody].inertial.mass;
+        const dtDynReal destinationMass = destination.Bodies()[destinationBody].inertial.mass;
+        bool assignmentCaught = false;
+        bool destinationRejected = false;
+
+        try
+        {
+            destination.EditBody(destinationBody, [&](dtDynBodySpec &draft)
+                                 {
+                draft.inertial.mass = 9.0;
+                try
+                {
+                    destination = source;
+                }
+                catch (const std::logic_error &)
+                {
+                    assignmentCaught = true;
+                } });
+        }
+        catch (const std::logic_error &)
+        {
+            destinationRejected = true;
+        }
+
+        assert(assignmentCaught);
+        assert(destinationRejected);
+        assertUnchanged(source, sourceBody, sourceMass,
+                        destination, destinationBody, destinationMass);
+    }
+
+    for (const bool reverseOperands : {false, true})
+    {
+        dtDynSpec first;
+        dtDynSpec second;
+        const dtDynIndex firstBody = first.AddBody("first", 0);
+        const dtDynIndex secondBody = second.AddBody("second", 0);
+        seed(first, firstBody, second, secondBody);
+        const dtDynReal firstMass = first.Bodies()[firstBody].inertial.mass;
+        const dtDynReal secondMass = second.Bodies()[secondBody].inertial.mass;
+        bool assignmentCaught = false;
+        bool firstRejected = false;
+        bool secondRejected = false;
+
+        try
+        {
+            first.EditBody(firstBody, [&](dtDynBodySpec &firstDraft)
+                           {
+                firstDraft.inertial.mass = 11.0;
+                try
+                {
+                    second.EditBody(secondBody, [&](dtDynBodySpec &secondDraft)
+                                    {
+                        secondDraft.inertial.mass = 13.0;
+                        try
+                        {
+                            if (reverseOperands)
+                            {
+                                first = second;
+                            }
+                            else
+                            {
+                                second = first;
+                            }
+                        }
+                        catch (const std::logic_error &)
+                        {
+                            assignmentCaught = true;
+                        }
+                    });
+                }
+                catch (const std::logic_error &)
+                {
+                    secondRejected = true;
+                } });
+        }
+        catch (const std::logic_error &)
+        {
+            firstRejected = true;
+        }
+
+        assert(assignmentCaught);
+        assert(firstRejected);
+        assert(secondRejected);
+        assertUnchanged(first, firstBody, firstMass, second, secondBody, secondMass);
+    }
+}
+
+void TestSpecOutsideEditSelfAssignmentRemainsUsable()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("base", 0);
+    spec.EditBody(body, [](dtDynBodySpec &draft)
+                  { draft.inertial.mass = 4.0; });
+
+    spec = spec;
+    assert(spec.Bodies().size() == 2);
+    assert(spec.Bodies()[body].name == "base");
+    assert(spec.Bodies()[body].inertial.mass == 4.0);
+
+    spec = std::move(spec);
+    assert(spec.Bodies().size() == 2);
+    assert(spec.Bodies()[body].name == "base");
+    assert(spec.Bodies()[body].inertial.mass == 4.0);
+}
+
+void TestSpecCopyAssignmentKeepsTargetUnchangedWhenStorageCopyThrows()
+{
+    dtDynSpec source;
+    const dtDynIndex sourceBody = source.AddBody("sbody", 0);
+    const dtDynIndex sourceJoint = source.AddJoint(sourceBody, "sjoint", dtDynJointType::Hinge);
+    const dtDynIndex sourceSite = source.AddSite(sourceBody, "ssite");
+    const dtDynIndex sourceActuator = source.AddActuator(sourceJoint, "sact");
+
+    bool observedSuccessfulAssignment = false;
+    for (std::size_t allocationsBeforeFailure = 0;
+         allocationsBeforeFailure < kMaximumAllocationFailuresToTest;
+         ++allocationsBeforeFailure)
+    {
+        dtDynSpec destination;
+        const dtDynIndex destinationBody = destination.AddBody("tbody", 0);
+        const dtDynIndex destinationJoint = destination.AddJoint(destinationBody, "tjoint", dtDynJointType::Hinge);
+        const dtDynIndex destinationSite = destination.AddSite(destinationBody, "tsite");
+        const dtDynIndex destinationActuator = destination.AddActuator(destinationJoint, "tact");
+        const dtArray<dtDynBodySpec> &retainedBodies = destination.Bodies();
+        const dtArray<dtDynJointSpec> &retainedJoints = destination.Joints();
+        const dtArray<dtDynSiteSpec> &retainedSites = destination.Sites();
+        const dtArray<dtDynActuatorSpec> &retainedActuators = destination.Actuators();
+
+        bool rejected = false;
+        {
+            ScopedAllocationFailure allocationFailure(allocationsBeforeFailure);
+            try
+            {
+                destination = source;
+            }
+            catch (const std::bad_alloc &)
+            {
+                rejected = true;
+            }
+        }
+
+        if (!rejected)
+        {
+            assert(retainedBodies[sourceBody].name == "sbody");
+            assert(retainedJoints[sourceJoint].name == "sjoint");
+            assert(retainedSites[sourceSite].name == "ssite");
+            assert(retainedActuators[sourceActuator].name == "sact");
+            observedSuccessfulAssignment = true;
+            break;
+        }
+
+        assert(&destination.Bodies() == &retainedBodies);
+        assert(&destination.Joints() == &retainedJoints);
+        assert(&destination.Sites() == &retainedSites);
+        assert(&destination.Actuators() == &retainedActuators);
+        assert(retainedBodies.size() == 2);
+        assert(retainedBodies[destinationBody].name == "tbody");
+        assert(retainedJoints.size() == 1);
+        assert(retainedJoints[destinationJoint].name == "tjoint");
+        assert(retainedSites.size() == 1);
+        assert(retainedSites[destinationSite].name == "tsite");
+        assert(retainedActuators.size() == 1);
+        assert(retainedActuators[destinationActuator].name == "tact");
+    }
+
+    assert(observedSuccessfulAssignment);
+}
+
+void TestSpecCollectionViewsSurviveCopyAssignmentAndMutations()
+{
+    dtDynSpec source;
+    const dtDynIndex sourceBody = source.AddBody("source_body", 0);
+    const dtDynIndex sourceJoint = source.AddJoint(sourceBody, "source_joint", dtDynJointType::Hinge);
+    const dtDynIndex sourceSite = source.AddSite(sourceBody, "source_site");
+    const dtDynIndex sourceActuator = source.AddActuator(sourceJoint, "source_actuator");
+
+    dtDynSpec destination;
+    const dtDynIndex targetBody = destination.AddBody("target_body", 0);
+    const dtDynIndex targetJoint = destination.AddJoint(targetBody, "target_joint", dtDynJointType::Hinge);
+    destination.AddSite(targetBody, "target_site");
+    destination.AddActuator(targetJoint, "target_actuator");
+    const dtArray<dtDynBodySpec> &retainedBodies = destination.Bodies();
+    const dtArray<dtDynJointSpec> &retainedJoints = destination.Joints();
+    const dtArray<dtDynSiteSpec> &retainedSites = destination.Sites();
+    const dtArray<dtDynActuatorSpec> &retainedActuators = destination.Actuators();
+
+    destination = source;
+    assert(&destination.Bodies() == &retainedBodies);
+    assert(&destination.Joints() == &retainedJoints);
+    assert(&destination.Sites() == &retainedSites);
+    assert(&destination.Actuators() == &retainedActuators);
+    assert(retainedBodies[sourceBody].name == "source_body");
+    assert(retainedJoints[sourceJoint].name == "source_joint");
+    assert(retainedSites[sourceSite].name == "source_site");
+    assert(retainedActuators[sourceActuator].name == "source_actuator");
+
+    destination.EditBody(sourceBody, [](dtDynBodySpec &draft)
+                         { draft.name = "edited_body"; });
+    destination.EditJoint(sourceJoint, [](dtDynJointSpec &draft)
+                          { draft.name = "edited_joint"; });
+    destination.EditSite(sourceSite, [](dtDynSiteSpec &draft)
+                         { draft.name = "edited_site"; });
+    destination.EditActuator(sourceActuator, [](dtDynActuatorSpec &draft)
+                             { draft.name = "edited_actuator"; });
+    assert(retainedBodies[sourceBody].name == "edited_body");
+    assert(retainedJoints[sourceJoint].name == "edited_joint");
+    assert(retainedSites[sourceSite].name == "edited_site");
+    assert(retainedActuators[sourceActuator].name == "edited_actuator");
+
+    const dtDynModel compiled = CompileSpec(destination);
+    assert(compiled.nbody == 2);
+    assert(compiled.njnt == 1);
+    assert(compiled.nsite == 1);
+    assert(compiled.nu == 1);
+    const std::string encoded = destination.EncodeXml();
+    assert(encoded.find("edited_body") != std::string::npos);
+    assert(encoded.find("edited_joint") != std::string::npos);
+    assert(encoded.find("edited_site") != std::string::npos);
+    assert(encoded.find("edited_actuator") != std::string::npos);
+
+    const dtDynIndex addedBody = destination.AddBody("added_body", 0);
+    const dtDynIndex addedJoint = destination.AddJoint(addedBody, "added_joint", dtDynJointType::Hinge);
+    const dtDynIndex addedSite = destination.AddSite(addedBody, "added_site");
+    const dtDynIndex addedActuator = destination.AddActuator(addedJoint, "added_actuator");
+    assert(retainedBodies[addedBody].name == "added_body");
+    assert(retainedJoints[addedJoint].name == "added_joint");
+    assert(retainedSites[addedSite].name == "added_site");
+    assert(retainedActuators[addedActuator].name == "added_actuator");
+
+    destination.Clear();
+    assert(&destination.Bodies() == &retainedBodies);
+    assert(&destination.Joints() == &retainedJoints);
+    assert(&destination.Sites() == &retainedSites);
+    assert(&destination.Actuators() == &retainedActuators);
+    assert(retainedBodies.size() == 1);
+    assert(retainedBodies[0].name == "world");
+    assert(retainedJoints.empty());
+    assert(retainedSites.empty());
+    assert(retainedActuators.empty());
+}
+
+void TestSpecCollectionViewsSurviveMoveAssignment()
+{
+    dtDynSpec source;
+    const dtDynIndex sourceBody = source.AddBody("source_body", 0);
+    const dtDynIndex sourceJoint = source.AddJoint(sourceBody, "source_joint", dtDynJointType::Hinge);
+    const dtDynIndex sourceSite = source.AddSite(sourceBody, "source_site");
+    const dtDynIndex sourceActuator = source.AddActuator(sourceJoint, "source_actuator");
+
+    dtDynSpec destination;
+    const dtDynIndex targetBody = destination.AddBody("target_body", 0);
+    const dtDynIndex targetJoint = destination.AddJoint(targetBody, "target_joint", dtDynJointType::Hinge);
+    destination.AddSite(targetBody, "target_site");
+    destination.AddActuator(targetJoint, "target_actuator");
+    const dtArray<dtDynBodySpec> &retainedBodies = destination.Bodies();
+    const dtArray<dtDynJointSpec> &retainedJoints = destination.Joints();
+    const dtArray<dtDynSiteSpec> &retainedSites = destination.Sites();
+    const dtArray<dtDynActuatorSpec> &retainedActuators = destination.Actuators();
+
+    destination = std::move(source);
+    assert(&destination.Bodies() == &retainedBodies);
+    assert(&destination.Joints() == &retainedJoints);
+    assert(&destination.Sites() == &retainedSites);
+    assert(&destination.Actuators() == &retainedActuators);
+    assert(retainedBodies[sourceBody].name == "source_body");
+    assert(retainedJoints[sourceJoint].name == "source_joint");
+    assert(retainedSites[sourceSite].name == "source_site");
+    assert(retainedActuators[sourceActuator].name == "source_actuator");
+    assert(source.Bodies().empty());
+    assert(source.Joints().empty());
+    assert(source.Sites().empty());
+    assert(source.Actuators().empty());
+}
+
+void TestSpecEditorsAbortReentrantMoveAssignmentTransactions()
+{
+    const auto seed = [](dtDynSpec &first,
+                         const dtDynIndex firstBody,
+                         dtDynSpec &second,
+                         const dtDynIndex secondBody)
+    {
+        first.EditBody(firstBody, [](dtDynBodySpec &draft)
+                       { draft.inertial.mass = 1.25; });
+        second.EditBody(secondBody, [](dtDynBodySpec &draft)
+                        { draft.inertial.mass = 2.5; });
+    };
+    const auto assertUnchanged = [](const dtDynSpec &first,
+                                    const dtDynIndex firstBody,
+                                    const dtDynReal firstMass,
+                                    const dtDynSpec &second,
+                                    const dtDynIndex secondBody,
+                                    const dtDynReal secondMass)
+    {
+        assert(first.Bodies().size() == 2);
+        assert(second.Bodies().size() == 2);
+        assert(first.Bodies()[firstBody].name == "first");
+        assert(second.Bodies()[secondBody].name == "second");
+        assert(first.Bodies()[firstBody].inertial.mass == firstMass);
+        assert(second.Bodies()[secondBody].inertial.mass == secondMass);
+    };
+    const auto expectSourceAbort = [&](const bool reverseOperands)
+    {
+        dtDynSpec first;
+        dtDynSpec second;
+        const dtDynIndex firstBody = first.AddBody("first", 0);
+        const dtDynIndex secondBody = second.AddBody("second", 0);
+        seed(first, firstBody, second, secondBody);
+        const dtDynReal firstMass = first.Bodies()[firstBody].inertial.mass;
+        const dtDynReal secondMass = second.Bodies()[secondBody].inertial.mass;
+        bool sourceRejected = false;
+
+        dtDynSpec &source = reverseOperands ? second : first;
+        dtDynSpec &destination = reverseOperands ? first : second;
+        const dtDynIndex sourceBody = reverseOperands ? secondBody : firstBody;
+        try
+        {
+            source.EditBody(sourceBody, [&](dtDynBodySpec &draft)
+                            {
+                draft.inertial.mass = 7.0;
+                try
+                {
+                    destination = std::move(source);
+                }
+                catch (const std::logic_error &)
+                {
+                } });
+        }
+        catch (const std::logic_error &)
+        {
+            sourceRejected = true;
+        }
+
+        assert(sourceRejected);
+        assertUnchanged(first, firstBody, firstMass, second, secondBody, secondMass);
+    };
+    const auto expectDestinationAbort = [&](const bool reverseOperands)
+    {
+        dtDynSpec first;
+        dtDynSpec second;
+        const dtDynIndex firstBody = first.AddBody("first", 0);
+        const dtDynIndex secondBody = second.AddBody("second", 0);
+        seed(first, firstBody, second, secondBody);
+        const dtDynReal firstMass = first.Bodies()[firstBody].inertial.mass;
+        const dtDynReal secondMass = second.Bodies()[secondBody].inertial.mass;
+        bool destinationRejected = false;
+
+        dtDynSpec &destination = reverseOperands ? first : second;
+        dtDynSpec &source = reverseOperands ? second : first;
+        const dtDynIndex destinationBody = reverseOperands ? firstBody : secondBody;
+        try
+        {
+            destination.EditBody(destinationBody, [&](dtDynBodySpec &draft)
+                                 {
+                draft.inertial.mass = 9.0;
+                try
+                {
+                    destination = std::move(source);
+                }
+                catch (const std::logic_error &)
+                {
+                } });
+        }
+        catch (const std::logic_error &)
+        {
+            destinationRejected = true;
+        }
+
+        assert(destinationRejected);
+        assertUnchanged(first, firstBody, firstMass, second, secondBody, secondMass);
+    };
+    const auto expectBothAborted = [&](const bool reverseOperands)
+    {
+        dtDynSpec first;
+        dtDynSpec second;
+        const dtDynIndex firstBody = first.AddBody("first", 0);
+        const dtDynIndex secondBody = second.AddBody("second", 0);
+        seed(first, firstBody, second, secondBody);
+        const dtDynReal firstMass = first.Bodies()[firstBody].inertial.mass;
+        const dtDynReal secondMass = second.Bodies()[secondBody].inertial.mass;
+        bool firstRejected = false;
+        bool secondRejected = false;
+
+        try
+        {
+            first.EditBody(firstBody, [&](dtDynBodySpec &firstDraft)
+                           {
+                firstDraft.inertial.mass = 11.0;
+                try
+                {
+                    second.EditBody(secondBody, [&](dtDynBodySpec &secondDraft)
+                                    {
+                        secondDraft.inertial.mass = 13.0;
+                        try
+                        {
+                            if (reverseOperands)
+                            {
+                                first = std::move(second);
+                            }
+                            else
+                            {
+                                second = std::move(first);
+                            }
+                        }
+                        catch (const std::logic_error &)
+                        {
+                        }
+                    });
+                }
+                catch (const std::logic_error &)
+                {
+                    secondRejected = true;
+                } });
+        }
+        catch (const std::logic_error &)
+        {
+            firstRejected = true;
+        }
+
+        assert(firstRejected);
+        assert(secondRejected);
+        assertUnchanged(first, firstBody, firstMass, second, secondBody, secondMass);
+    };
+
+    expectSourceAbort(false);
+    expectSourceAbort(true);
+    expectDestinationAbort(false);
+    expectDestinationAbort(true);
+    expectBothAborted(false);
+    expectBothAborted(true);
 }
 
 void TestSpecEditorsAbortBothReentrantSwapTransactions()
@@ -3292,12 +4098,22 @@ int main()
     TestCompileSpecSupportsMaximumRootMappingWithoutNestedLookup();
     TestJointSizes();
     TestDtArrayDirectHeader();
+    TestDtArrayCopyConstructorReleasesFailedPartialCopy();
+    TestDtArrayReserveCopiesWithoutLeakingOrMutatingOnThrow();
+    TestDtArrayReserveSupportsMoveOnlyElements();
     TestSpecWorldAndFixedBody();
     TestSpecEditorsCommitScopedCopies();
     TestSpecEditorsDiscardFailedDrafts();
     TestSpecEditorsRejectReentrantMutation();
     TestSpecEditorsDiscardCaughtReentrantAttempt();
     TestSpecEditorsRejectReentrantStructuralMutation();
+    TestSpecEditorsRejectReentrantAssignment();
+    TestSpecEditorsAbortReentrantCopyAssignmentTransactions();
+    TestSpecOutsideEditSelfAssignmentRemainsUsable();
+    TestSpecCopyAssignmentKeepsTargetUnchangedWhenStorageCopyThrows();
+    TestSpecCollectionViewsSurviveCopyAssignmentAndMutations();
+    TestSpecCollectionViewsSurviveMoveAssignment();
+    TestSpecEditorsAbortReentrantMoveAssignmentTransactions();
     TestSpecEditorsAbortBothReentrantSwapTransactions();
     TestSpecNameLookupReflectsEditorMutations();
     TestModelActuatorNameLookupUsesRebuiltCache();
