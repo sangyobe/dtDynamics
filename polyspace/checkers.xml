@@ -268,23 +268,513 @@
   </standard>
   <standard name="CUSTOM RULES" state="off"></standard>
   <standard name="Guidelines" state="off"></standard>
-  <standard name="MISRA C:2023" state="off"></standard>
+  <standard name="MISRA C:2023">
+    <section name="Dir 2 Compilation and build">
+      <check id="D2.1" state="on"></check>
+    </section>
+    <section name="Dir 4 Code design">
+      <check id="D4.1" state="on"></check>
+      <check id="D4.3" state="on"></check>
+      <check id="D4.4" state="on"></check>
+      <check id="D4.5" state="on"></check>
+      <check id="D4.7" state="on"></check>
+      <check id="D4.8" state="on"></check>
+      <check id="D4.9" state="on"></check>
+      <check id="D4.10" state="on"></check>
+      <check id="D4.12" state="on"></check>
+      <check id="D4.13" state="on"></check>
+      <check id="D4.14" state="on"></check>
+      <check id="D4.15" state="on"></check>
+      <check id="D4.6" state="on"></check>
+      <check id="D4.11" state="on"></check>
+    </section>
+    <section name="Dir 5 Concurrency considerations">
+      <check id="D5.1" state="on"></check>
+      <check id="D5.2" state="on"></check>
+      <check id="D5.3" state="on"></check>
+    </section>
+    <section name="1 A standard C environment">
+      <check id="1.2" state="on"></check>
+      <check id="1.3" state="on"></check>
+      <check id="1.5" state="on"></check>
+      <check id="1.1" state="on"></check>
+      <check id="1.4" state="on"></check>
+    </section>
+    <section name="2 Unused code">
+      <check id="2.1" state="on"></check>
+      <check id="2.2" state="on"></check>
+      <check id="2.3" state="on"></check>
+      <check id="2.4" state="on"></check>
+      <check id="2.5" state="on"></check>
+      <check id="2.6" state="on"></check>
+      <check id="2.7" state="on"></check>
+      <check id="2.8" state="on"></check>
+    </section>
+    <section name="9 Initialization">
+      <check id="9.1" state="on"></check>
+      <check id="9.7" state="on"></check>
+      <check id="9.4" state="on"></check>
+      <check id="9.5" state="on"></check>
+      <check id="9.6" state="on"></check>
+      <check id="9.2" state="on"></check>
+      <check id="9.3" state="on"></check>
+    </section>
+    <section name="12 Expressions">
+      <check id="12.2" state="on"></check>
+      <check id="12.4" state="on"></check>
+      <check id="12.5" state="on"></check>
+      <check id="12.6" state="on"></check>
+      <check id="12.1" state="on"></check>
+      <check id="12.3" state="on"></check>
+    </section>
+    <section name="13 Side effects">
+      <check id="13.1" state="on"></check>
+      <check id="13.5" state="on"></check>
+      <check id="13.3" state="on"></check>
+      <check id="13.6" state="on"></check>
+      <check id="13.2" state="on"></check>
+      <check id="13.4" state="on"></check>
+    </section>
+    <section name="14 Control statement expressions">
+      <check id="14.3" state="on"></check>
+      <check id="14.1" state="on"></check>
+      <check id="14.2" state="on"></check>
+      <check id="14.4" state="on"></check>
+    </section>
+    <section name="17 Functions">
+      <check id="17.5" state="on"></check>
+      <check id="17.8" state="on"></check>
+      <check id="17.9" state="on"></check>
+      <check id="17.11" state="on"></check>
+      <check id="17.3" state="on"></check>
+      <check id="17.6" state="on"></check>
+      <check id="17.7" state="on"></check>
+      <check id="17.10" state="on"></check>
+      <check id="17.12" state="on"></check>
+      <check id="17.13" state="on"></check>
+      <check id="17.1" state="on"></check>
+      <check id="17.2" state="on"></check>
+      <check id="17.4" state="on"></check>
+    </section>
+    <section name="18 Pointers and arrays">
+      <check id="18.1" state="on"></check>
+      <check id="18.2" state="on"></check>
+      <check id="18.7" state="on"></check>
+      <check id="18.8" state="on"></check>
+      <check id="18.9" state="on"></check>
+      <check id="18.10" state="on"></check>
+      <check id="18.3" state="on"></check>
+      <check id="18.4" state="on"></check>
+      <check id="18.5" state="on"></check>
+      <check id="18.6" state="on"></check>
+    </section>
+    <section name="19 Overlapping storage">
+      <check id="19.1" state="on"></check>
+      <check id="19.2" state="on"></check>
+    </section>
+    <section name="21 Standard libraries">
+      <check id="21.13" state="on"></check>
+      <check id="21.14" state="on"></check>
+      <check id="21.17" state="on"></check>
+      <check id="21.18" state="on"></check>
+      <check id="21.19" state="on"></check>
+      <check id="21.20" state="on"></check>
+      <check id="21.26" state="on"></check>
+      <check id="21.1" state="on"></check>
+      <check id="21.2" state="on"></check>
+      <check id="21.4" state="on"></check>
+      <check id="21.5" state="on"></check>
+      <check id="21.6" state="on"></check>
+      <check id="21.7" state="on"></check>
+      <check id="21.8" state="on"></check>
+      <check id="21.9" state="on"></check>
+      <check id="21.10" state="on"></check>
+      <check id="21.11" state="on"></check>
+      <check id="21.12" state="on"></check>
+      <check id="21.15" state="on"></check>
+      <check id="21.16" state="on"></check>
+      <check id="21.21" state="on"></check>
+      <check id="21.22" state="on"></check>
+      <check id="21.23" state="on"></check>
+      <check id="21.24" state="on"></check>
+      <check id="21.25" state="on"></check>
+      <check id="21.3" state="on"></check>
+    </section>
+    <section name="22 Resources">
+      <check id="22.1" state="on"></check>
+      <check id="22.2" state="on"></check>
+      <check id="22.3" state="on"></check>
+      <check id="22.4" state="on"></check>
+      <check id="22.5" state="on"></check>
+      <check id="22.6" state="on"></check>
+      <check id="22.7" state="on"></check>
+      <check id="22.8" state="on"></check>
+      <check id="22.9" state="on"></check>
+      <check id="22.10" state="on"></check>
+      <check id="22.11" state="on"></check>
+      <check id="22.12" state="on"></check>
+      <check id="22.14" state="on"></check>
+      <check id="22.15" state="on"></check>
+      <check id="22.16" state="on"></check>
+      <check id="22.17" state="on"></check>
+      <check id="22.18" state="on"></check>
+      <check id="22.19" state="on"></check>
+      <check id="22.20" state="on"></check>
+      <check id="22.13" state="on"></check>
+    </section>
+    <section name="3 Comments">
+      <check id="3.1" state="on"></check>
+      <check id="3.2" state="on"></check>
+    </section>
+    <section name="4 Character sets and lexical conventions">
+      <check id="4.1" state="on"></check>
+      <check id="4.2" state="on"></check>
+    </section>
+    <section name="5 Identifiers">
+      <check id="5.1" state="on"></check>
+      <check id="5.2" state="on"></check>
+      <check id="5.4" state="on"></check>
+      <check id="5.5" state="on"></check>
+      <check id="5.6" state="on"></check>
+      <check id="5.7" state="on"></check>
+      <check id="5.8" state="on"></check>
+      <check id="5.9" state="on"></check>
+      <check id="5.3" state="on"></check>
+    </section>
+    <section name="6 Types">
+      <check id="6.1" state="on"></check>
+      <check id="6.2" state="on"></check>
+      <check id="6.3" state="on"></check>
+    </section>
+    <section name="7 Literals and constants">
+      <check id="7.1" state="on"></check>
+      <check id="7.2" state="on"></check>
+      <check id="7.3" state="on"></check>
+      <check id="7.4" state="on"></check>
+      <check id="7.5" state="on"></check>
+      <check id="7.6" state="on"></check>
+    </section>
+    <section name="8 Declarations and definitions">
+      <check id="8.1" state="on"></check>
+      <check id="8.3" state="on"></check>
+      <check id="8.4" state="on"></check>
+      <check id="8.5" state="on"></check>
+      <check id="8.6" state="on"></check>
+      <check id="8.7" state="on"></check>
+      <check id="8.10" state="on"></check>
+      <check id="8.14" state="on"></check>
+      <check id="8.15" state="on"></check>
+      <check id="8.16" state="on"></check>
+      <check id="8.17" state="on"></check>
+      <check id="8.8" state="on"></check>
+      <check id="8.11" state="on"></check>
+      <check id="8.13" state="on"></check>
+      <check id="8.2" state="on"></check>
+      <check id="8.9" state="on"></check>
+      <check id="8.12" state="on"></check>
+    </section>
+    <section name="10 The essential type model">
+      <check id="10.2" state="on"></check>
+      <check id="10.3" state="on"></check>
+      <check id="10.4" state="on"></check>
+      <check id="10.5" state="on"></check>
+      <check id="10.6" state="on"></check>
+      <check id="10.7" state="on"></check>
+      <check id="10.1" state="on"></check>
+      <check id="10.8" state="on"></check>
+    </section>
+    <section name="11 Pointer type conversions">
+      <check id="11.3" state="on"></check>
+      <check id="11.9" state="on"></check>
+      <check id="11.10" state="on"></check>
+      <check id="11.1" state="on"></check>
+      <check id="11.2" state="on"></check>
+      <check id="11.4" state="on"></check>
+      <check id="11.5" state="on"></check>
+      <check id="11.6" state="on"></check>
+      <check id="11.7" state="on"></check>
+      <check id="11.8" state="on"></check>
+    </section>
+    <section name="15 Control flow">
+      <check id="15.4" state="on"></check>
+      <check id="15.1" state="on"></check>
+      <check id="15.2" state="on"></check>
+      <check id="15.3" state="on"></check>
+      <check id="15.5" state="on"></check>
+      <check id="15.6" state="on"></check>
+      <check id="15.7" state="on"></check>
+    </section>
+    <section name="16 Switch statements">
+      <check id="16.1" state="on"></check>
+      <check id="16.2" state="on"></check>
+      <check id="16.3" state="on"></check>
+      <check id="16.6" state="on"></check>
+      <check id="16.7" state="on"></check>
+      <check id="16.4" state="on"></check>
+      <check id="16.5" state="on"></check>
+    </section>
+    <section name="20 Preprocessing directives">
+      <check id="20.1" state="on"></check>
+      <check id="20.2" state="on"></check>
+      <check id="20.3" state="on"></check>
+      <check id="20.5" state="on"></check>
+      <check id="20.8" state="on"></check>
+      <check id="20.10" state="on"></check>
+      <check id="20.12" state="on"></check>
+      <check id="20.13" state="on"></check>
+      <check id="20.14" state="on"></check>
+      <check id="20.4" state="on"></check>
+      <check id="20.6" state="on"></check>
+      <check id="20.7" state="on"></check>
+      <check id="20.9" state="on"></check>
+      <check id="20.11" state="on"></check>
+    </section>
+    <section name="23 Generic Selections">
+      <check id="23.1" state="on"></check>
+      <check id="23.2" state="on"></check>
+      <check id="23.3" state="on"></check>
+      <check id="23.4" state="on"></check>
+      <check id="23.5" state="on"></check>
+      <check id="23.6" state="on"></check>
+      <check id="23.7" state="on"></check>
+      <check id="23.8" state="on"></check>
+    </section>
+    <section name="Dir 1 The implementation">
+      <check id="D1.1" state="on"></check>
+    </section>
+  </standard>
   <standard name="MISRA C:2012" state="off"></standard>
   <standard name="MISRA C:2004" state="off"></standard>
   <standard name="MISRA AC AGC" state="off"></standard>
   <standard name="MISRA C++:2023">
+    <section name="0 Language independent issues">
+      <check id="0.0.1" state="on"></check>
+      <check id="0.0.2" state="on"></check>
+      <check id="0.1.1" state="on"></check>
+      <check id="0.1.2" state="on"></check>
+      <check id="0.2.1" state="on"></check>
+      <check id="0.2.2" state="on"></check>
+      <check id="0.2.3" state="on"></check>
+      <check id="0.2.4" state="on"></check>
+      <check id="D0.3.1" state="on"></check>
+      <check id="D0.3.2" state="on"></check>
+    </section>
+    <section name="4 General principles">
+      <check id="4.1.1" state="on"></check>
+      <check id="4.1.2" state="on"></check>
+      <check id="4.1.3" state="on"></check>
+      <check id="4.6.1" state="on"></check>
+    </section>
+    <section name="5 Lexical conventions">
+      <check id="5.0.1" state="on"></check>
+      <check id="5.7.1" state="on"></check>
+      <check id="D5.7.2" state="on"></check>
+      <check id="5.7.3" state="on"></check>
+      <check id="5.10.1" state="on"></check>
+      <check id="5.13.1" state="on"></check>
+      <check id="5.13.2" state="on"></check>
+      <check id="5.13.3" state="on"></check>
+      <check id="5.13.4" state="on"></check>
+      <check id="5.13.5" state="on"></check>
+      <check id="5.13.6" state="on"></check>
+      <check id="5.13.7" state="on"></check>
+    </section>
     <section name="6 Basic concepts">
+      <check id="6.0.1" state="on"></check>
+      <check id="6.0.2" state="on"></check>
+      <check id="6.0.3" state="on"></check>
+      <check id="6.0.4" state="on"></check>
+      <check id="6.2.1" state="on"></check>
+      <check id="6.2.2" state="on"></check>
+      <check id="6.2.3" state="on"></check>
+      <check id="6.2.4" state="on"></check>
+      <check id="6.4.1" state="on"></check>
+      <check id="6.4.2" state="on"></check>
+      <check id="6.4.3" state="on"></check>
+      <check id="6.5.1" state="on"></check>
+      <check id="6.5.2" state="on"></check>
+      <check id="6.7.1" state="on"></check>
+      <check id="6.7.2" state="on"></check>
+      <check id="6.8.1" state="on"></check>
       <check id="6.8.2" state="on"></check>
+      <check id="6.8.3" state="on"></check>
+      <check id="6.8.4" state="on"></check>
+      <check id="6.9.1" state="on"></check>
+      <check id="6.9.2" state="on"></check>
+    </section>
+    <section name="7 Standard conversions">
+      <check id="7.0.1" state="on"></check>
+      <check id="7.0.2" state="on"></check>
+      <check id="7.0.3" state="on"></check>
+      <check id="7.0.4" state="on"></check>
+      <check id="7.0.5" state="on"></check>
+      <check id="7.0.6" state="on"></check>
+      <check id="7.11.1" state="on"></check>
+      <check id="7.11.2" state="on"></check>
+      <check id="7.11.3" state="on"></check>
     </section>
     <section name="8 Expressions">
+      <check id="8.0.1" state="on"></check>
+      <check id="8.1.1" state="on"></check>
+      <check id="8.1.2" state="on"></check>
+      <check id="8.2.1" state="on"></check>
+      <check id="8.2.2" state="on"></check>
+      <check id="8.2.3" state="on"></check>
+      <check id="8.2.4" state="on"></check>
+      <check id="8.2.5" state="on"></check>
+      <check id="8.2.6" state="on"></check>
+      <check id="8.2.7" state="on"></check>
+      <check id="8.2.8" state="on"></check>
+      <check id="8.2.9" state="on"></check>
+      <check id="8.2.10" state="on"></check>
+      <check id="8.2.11" state="on"></check>
+      <check id="8.3.1" state="on"></check>
+      <check id="8.3.2" state="on"></check>
+      <check id="8.7.1" state="on"></check>
+      <check id="8.7.2" state="on"></check>
+      <check id="8.9.1" state="on"></check>
+      <check id="8.14.1" state="on"></check>
       <check id="8.18.1" state="on"></check>
+      <check id="8.18.2" state="on"></check>
+      <check id="8.19.1" state="on"></check>
+      <check id="8.20.1" state="on"></check>
+    </section>
+    <section name="9 Statements">
+      <check id="9.2.1" state="on"></check>
+      <check id="9.3.1" state="on"></check>
+      <check id="9.4.1" state="on"></check>
+      <check id="9.4.2" state="on"></check>
+      <check id="9.5.1" state="on"></check>
+      <check id="9.5.2" state="on"></check>
+      <check id="9.6.1" state="on"></check>
+      <check id="9.6.2" state="on"></check>
+      <check id="9.6.3" state="on"></check>
+      <check id="9.6.4" state="on"></check>
+      <check id="9.6.5" state="on"></check>
+    </section>
+    <section name="10 Declarations">
+      <check id="10.0.1" state="on"></check>
+      <check id="10.1.1" state="on"></check>
+      <check id="10.1.2" state="on"></check>
+      <check id="10.2.1" state="on"></check>
+      <check id="10.2.2" state="on"></check>
+      <check id="10.2.3" state="on"></check>
+      <check id="10.3.1" state="on"></check>
+      <check id="10.4.1" state="on"></check>
     </section>
     <section name="11 Declarators">
+      <check id="11.3.1" state="on"></check>
+      <check id="11.3.2" state="on"></check>
+      <check id="11.6.1" state="on"></check>
       <check id="11.6.2" state="on"></check>
+      <check id="11.6.3" state="on"></check>
+    </section>
+    <section name="12 Classes">
+      <check id="12.2.1" state="on"></check>
+      <check id="12.2.2" state="on"></check>
+      <check id="12.2.3" state="on"></check>
+      <check id="12.3.1" state="on"></check>
+    </section>
+    <section name="13 Derived classes">
+      <check id="13.1.1" state="on"></check>
+      <check id="13.1.2" state="on"></check>
+      <check id="13.3.1" state="on"></check>
+      <check id="13.3.2" state="on"></check>
+      <check id="13.3.3" state="on"></check>
+      <check id="13.3.4" state="on"></check>
+    </section>
+    <section name="14 Member access control">
+      <check id="14.1.1" state="on"></check>
+    </section>
+    <section name="15 Special member functions">
+      <check id="15.0.1" state="on"></check>
+      <check id="15.0.2" state="on"></check>
+      <check id="15.1.1" state="on"></check>
+      <check id="15.1.2" state="on"></check>
+      <check id="15.1.3" state="on"></check>
+      <check id="15.1.4" state="on"></check>
+      <check id="15.1.5" state="on"></check>
+      <check id="D15.8.1" state="on"></check>
+    </section>
+    <section name="16 Overloading">
+      <check id="16.5.1" state="on"></check>
+      <check id="16.5.2" state="on"></check>
+      <check id="16.6.1" state="on"></check>
+    </section>
+    <section name="17 Templates">
+      <check id="17.8.1" state="on"></check>
+    </section>
+    <section name="18 Exception handling">
+      <check id="18.1.1" state="on"></check>
+      <check id="18.1.2" state="on"></check>
+      <check id="18.3.1" state="on"></check>
+      <check id="18.3.2" state="on"></check>
+      <check id="18.3.3" state="on"></check>
+      <check id="18.4.1" state="on"></check>
+      <check id="18.5.1" state="on"></check>
+      <check id="18.5.2" state="on"></check>
+    </section>
+    <section name="19 Preprocessing directives">
+      <check id="19.0.1" state="on"></check>
+      <check id="19.0.2" state="on"></check>
+      <check id="19.0.3" state="on"></check>
+      <check id="19.0.4" state="on"></check>
+      <check id="19.1.1" state="on"></check>
+      <check id="19.1.2" state="on"></check>
+      <check id="19.1.3" state="on"></check>
+      <check id="19.2.1" state="on"></check>
+      <check id="19.2.2" state="on"></check>
+      <check id="19.2.3" state="on"></check>
+      <check id="19.3.1" state="on"></check>
+      <check id="19.3.2" state="on"></check>
+      <check id="19.3.3" state="on"></check>
+      <check id="19.3.4" state="on"></check>
+      <check id="19.3.5" state="on"></check>
+      <check id="19.6.1" state="on"></check>
+    </section>
+    <section name="21 Language support library">
+      <check id="21.2.1" state="on"></check>
+      <check id="21.2.2" state="on"></check>
+      <check id="21.2.3" state="on"></check>
+      <check id="21.2.4" state="on"></check>
+      <check id="21.6.1" state="on"></check>
+      <check id="21.6.2" state="on"></check>
+      <check id="21.6.3" state="on"></check>
+      <check id="21.6.4" state="on"></check>
+      <check id="21.6.5" state="on"></check>
+      <check id="21.10.1" state="on"></check>
+      <check id="21.10.2" state="on"></check>
+      <check id="21.10.3" state="on"></check>
+    </section>
+    <section name="22 Diagnostics library">
+      <check id="22.3.1" state="on"></check>
+      <check id="22.4.1" state="on"></check>
+    </section>
+    <section name="23 General utilities library">
+      <check id="23.11.1" state="on"></check>
+    </section>
+    <section name="24 Strings library">
+      <check id="24.5.1" state="on"></check>
+      <check id="24.5.2" state="on"></check>
     </section>
     <section name="25 Localization library">
+      <check id="25.5.1" state="on"></check>
       <check id="25.5.2" state="on"></check>
       <check id="25.5.3" state="on"></check>
+    </section>
+    <section name="26 Containers library">
+      <check id="26.3.1" state="on"></check>
+    </section>
+    <section name="28 Algorithms library">
+      <check id="28.3.1" state="on"></check>
+      <check id="28.6.1" state="on"></check>
+      <check id="28.6.2" state="on"></check>
+      <check id="28.6.3" state="on"></check>
+      <check id="28.6.4" state="on"></check>
+    </section>
+    <section name="30 Input/output library">
+      <check id="30.0.1" state="on"></check>
+      <check id="30.0.2" state="on"></check>
     </section>
   </standard>
   <standard name="MISRA C++:2008" state="off"></standard>
