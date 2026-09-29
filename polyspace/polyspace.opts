@@ -8,6 +8,12 @@
 # 순환 복잡도(Cyclomatic Complexity), 함수당 라인 수 등 코드 품질 지표 산출 (결함 검출과는 별개)
 # -code-metrics
 
-# ── 결과 범위 제한 ───────────────────────────────────────────────────────────
+# ── 결과 범위  ───────────────────────────────────────────────────────────
+# include/ 헤더도 결과에 포함.
+-generate-results-for all-headers
+
+# 시스템/표준 라이브러리 헤더(/usr/include, /usr/lib) 는 all-headers 범위에서 제외
+-do-not-generate-results-for custom=/usr/include,/usr/lib
+
 # 자동 생성 코드가 생기면 여기에 추가
 # 예: -do-not-generate-results-for custom=proto
