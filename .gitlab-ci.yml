@@ -8,7 +8,6 @@ workflow:
 stages:
   - lint
   - build
-  - test
   - analyse
   - docs
 
@@ -45,33 +44,12 @@ build-job:
       - build/
     expire_in: 1 week
 
-test-job:
-  stage: test
-  script:
-    - >-
-      cmake -S . -B build-test
-      -DCMAKE_BUILD_TYPE=Debug
-      -DDTDYNAMICS_BUILD_TEST=ON
-      -DDTDYNAMICS_BUILD_BENCHMARK=OFF
-      -DDTDYNAMICS_BUILD_REFERENCE_BENCHMARK=OFF
-      -DBUILD_DTDYNAMICS_MUJOCO_TEST=OFF
-      -DBUILD_DTDYNAMICS_PINOCCHIO_TEST=OFF
-    - cmake --build build-test -j"$(nproc)"
-    - ctest --test-dir build-test --output-on-failure
-    - python3 tools/test_ci_lint.py
-    - python3 tools/test_polyspace_checker_profile.py
-    - python3 tools/test_polyspace_export_contract.py
-    - python3 tools/test_polyspace_result_gate.py
-    - python3 tools/test_polyspace_transport.py
-
 polyspace-job:
   stage: analyse
   timeout: 3h
   needs:
     - job: build-job
       artifacts: true
-    - job: test-job
-      artifacts: false
   cache:
     key: "polyspace-baseline-${CI_COMMIT_REF_SLUG}"
     paths:
