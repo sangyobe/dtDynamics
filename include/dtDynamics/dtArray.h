@@ -215,10 +215,18 @@ public:
         }
         if constexpr (std::is_trivially_copyable<T>::value)
         {
+            /* polyspace<DEFECT:FREED_PTR:Not a defect:Justify with annotations> value is a
+             * by-value copy taken before reserve() can free/replace m_data, so m_data is a
+             * live pointer here; this is a path-sensitivity artifact, not dependent on
+             * input values. */
             m_data[m_size++] = value;
         }
         else
         {
+            /* polyspace<DEFECT:STD_MOVE_UNMOVABLE_TYPE:Not a defect:Justify with annotations>
+             * This branch is compiled only when T is not trivially copyable (see the
+             * if-constexpr guard above); Polyspace flags it at the template-source level
+             * without honoring that per-instantiation discrimination. */
             m_data[m_size++] = std::move(value);
         }
     }
