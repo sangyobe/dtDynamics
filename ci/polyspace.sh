@@ -45,7 +45,10 @@ mkdir -p "${REPORT_ROOT}" "${POLYSPACE_BUILD_DIR}"
 
 # cache(policy: pull-push, key가 브랜치 단위)가 직전 실행의 -results-dir를 그대로 복원해오므로,
 # 여기서 비우지 않으면 "풀스캔"이어도 이전 실행 결과가 섞인 상태로 재검증되어 실행마다 결함 집합이 달라진다
-rm -rf "${RESULTS_DIR}"
+rm -rf "${RESULTS_DIR}" || {
+    echo "ERROR: cannot clear prior Polyspace results"
+    exit 1
+}
 mkdir -p "${RESULTS_DIR}"
 
 # compile_commands.json → Polyspace 분석 옵션 추출
@@ -53,25 +56,35 @@ polyspace-configure \
     -compilation-database "${BUILD_DIR}/compile_commands.json" \
     -output-options-file "${CONFIG_OPTS}" \
     -allow-overwrite \
-    -prog "${PROG}"
+    -prog "${PROG}" || {
+    echo "ERROR: Polyspace configuration failed"
+    exit 1
+}
 
 polyspace-bug-finder-server \
     -options-file polyspace/polyspace.opts \
     -options-file "${CONFIG_OPTS}" \
     -checkers-activation-file polyspace/checkers.xml \
     -results-dir "${RESULTS_DIR}" \
-    -max-processes 4 || true
+    -max-processes 4 || {
+    echo "ERROR: Polyspace analysis command failed"
+    exit 1
+}
 
 test -f "${RESULTS_DIR}/ps_results.psbf" || {
     echo "ERROR: Polyspace 분석 실패 - ps_results.psbf 결과가 없습니다."
     exit 1
 }
 
-# CSV 결과 내보내기
+# CSV 결과 내보내기 — 실패 시 직전 실행의 REPORT(stale report_list.txt)가 남아있으면
+# 이후 요약 단계가 그 파일을 "이번 실행 결과"로 오독해 실패를 은폐하므로 즉시 종료한다
 polyspace-results-export \
     -format csv \
     -output-name "${REPORT_ROOT}/polyspace" \
-    -results-dir "${RESULTS_DIR}"
+    -results-dir "${RESULTS_DIR}" || {
+    echo "ERROR: Polyspace result export failed"
+    exit 1
+}
 
 # PDF 리포트 생성
 polyspace-report-generator \
