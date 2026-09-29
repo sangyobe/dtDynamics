@@ -205,14 +205,22 @@ public:
     /*! \brief Append one value, doubling capacity when the current allocation is full.
         \details Takes value by copy so that pushing an element already owned by this array
                  (e.g. push_back(arr[i])) copies it before reserve() can free the old storage
-                 that the argument would otherwise still be referencing. */
+                 that the argument would otherwise still be referencing. Trivially copyable T
+                 is assigned by copy since std::move on such types is a meaningless no-op. */
     void push_back(T value)
     {
         if (m_size == m_capacity)
         {
             reserve(m_capacity == 0 ? 1 : 2 * m_capacity);
         }
-        m_data[m_size++] = std::move(value);
+        if constexpr (std::is_trivially_copyable<T>::value)
+        {
+            m_data[m_size++] = value;
+        }
+        else
+        {
+            m_data[m_size++] = std::move(value);
+        }
     }
 
     /*! \brief Return true when size() is zero. */

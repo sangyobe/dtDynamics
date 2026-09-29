@@ -789,7 +789,7 @@ dtDynIndex dtDynSpec::AddBody(const std::string &name, const dtDynIndex parent)
     SetIdentityQuat(body.inertial.quat);
 
     const dtDynIndex id = static_cast<dtDynIndex>(m_storage.m_bodies.size());
-    m_storage.m_bodies.push_back(body);
+    m_storage.m_bodies.push_back(std::move(body));
 
     if (parent >= 0 && parent < id)
     {
@@ -812,7 +812,7 @@ dtDynIndex dtDynSpec::AddJoint(const dtDynIndex body, const std::string &name, c
     joint.axis(2) = 1.0;
 
     const dtDynIndex id = static_cast<dtDynIndex>(m_storage.m_joints.size());
-    m_storage.m_joints.push_back(joint);
+    m_storage.m_joints.push_back(std::move(joint));
 
     if (body >= 0 && body < static_cast<dtDynIndex>(m_storage.m_bodies.size()))
     {
@@ -831,7 +831,7 @@ dtDynIndex dtDynSpec::AddSite(const dtDynIndex body, const std::string &name)
     SetIdentityQuat(site.quat);
 
     const dtDynIndex id = static_cast<dtDynIndex>(m_storage.m_sites.size());
-    m_storage.m_sites.push_back(site);
+    m_storage.m_sites.push_back(std::move(site));
 
     if (body >= 0 && body < static_cast<dtDynIndex>(m_storage.m_bodies.size()))
     {
@@ -849,7 +849,7 @@ dtDynIndex dtDynSpec::AddActuator(const dtDynIndex joint, const std::string &nam
     actuator.joint = joint;
 
     const dtDynIndex id = static_cast<dtDynIndex>(m_storage.m_actuators.size());
-    m_storage.m_actuators.push_back(actuator);
+    m_storage.m_actuators.push_back(std::move(actuator));
     return id;
 }
 
