@@ -3,7 +3,7 @@
 - `dtDynamics`: 제어기와 WBC가 사용하는 강체 동역학 **재료(ingredient)** 계산 독립 패키지
 - 제공 항목: 질량행렬, 중력·코리올리·비선형 토크, body/site Jacobian과 시간미분 항, CoM, centroidal momentum 항
 - 미제공 항목: 접촉 해석, 시뮬레이션 적분, 최종 토크 결정
-- 현재 패키지 버전: **0.1.2**
+- 현재 패키지 버전: **0.1.3**
 - production library 의존성: `dtMath` 단일
 - MuJoCo 3.8.0, Pinocchio 3.9.0: `.validation_deps` 아래의 검증·benchmark 전용 참조 구현
 
@@ -48,7 +48,7 @@ cmake --install build/release --prefix "${ARTF_INSTALL_DIR}"
 - consumer 요구 사항: 정확한 package identity와 canonical target
 
 ```cmake
-find_package(dtDynamics 0.1.2 EXACT CONFIG REQUIRED)
+find_package(dtDynamics 0.1.3 EXACT CONFIG REQUIRED)
 target_link_libraries(my_controller PRIVATE dt::Dynamics)
 ```
 
@@ -75,10 +75,10 @@ tools/audit_release_readiness.sh
 ```
 
 - `validate_install_export.sh`의 fail-closed 확인 항목:
-  - `find_package(dtDynamics 0.1.2 EXACT CONFIG REQUIRED)` 성공
+  - `find_package(dtDynamics 0.1.3 EXACT CONFIG REQUIRED)` 성공
   - exported target이 `dt::Dynamics`이고 legacy target 없음
   - production CMake export에 MuJoCo/Pinocchio 없음
-  - installed public-header version과 current SVG package claim이 `0.1.2`
+  - installed public-header version과 current SVG package claim이 `0.1.3`
   - fresh downstream consumer의 configure, compile, link, run
 
 - benchmark 결과: wall-clock byte replay 비보장
@@ -97,11 +97,11 @@ tools/audit_release_readiness.sh
 
 - 시작점: `docs/manual.md`
 - 현재 benchmark evidence: `docs/benchmark-results.md`
-- 현재 release note: `docs/release-notes/v0.1.2.md`
+- 현재 release note: `docs/release-notes/v0.1.3.md`
 - model guide: `docs/guides/model_guide/`
 - usage/migration guide: `docs/guides/usage_guide/`
 - 문서 gate: `python3 tools/validate_docs.py` (Markdown 링크·수식 marker·SVG diagram 검증), `python3 tools/validate_documentation_content.py` (현재 narrative invariant 검증)
-- `v0.1.0-rc1`~`v0.1.1` release note: 과거 기준 보존 (현재 `0.1.2`의 근거로 소급 해석 금지)
+- `v0.1.0-rc1`~`v0.1.2` release note: 과거 기준 보존 (현재 `0.1.3`의 근거로 소급 해석 금지)
 
 ## 라이선스
 

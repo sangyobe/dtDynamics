@@ -3,7 +3,7 @@
  \brief     Compiled native dtDynamics model definitions.
  \author    Joonhee Jo, joonhee.jo@hyundai.com
  \date      2026. 07. 16
- \version   0.1.2
+ \version   0.1.3
  \copyright RoboticsLab ART All rights reserved.
 */
 
@@ -62,6 +62,7 @@ dtDynModel &dtDynModel::operator=(const dtDynModel &other)
 
     jnt_type = other.jnt_type;
     jnt_bodyid = other.jnt_bodyid;
+    jnt_specid = other.jnt_specid;
     jnt_qposadr = other.jnt_qposadr;
     jnt_dofadr = other.jnt_dofadr;
     jnt_limited = other.jnt_limited;

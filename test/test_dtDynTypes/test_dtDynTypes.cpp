@@ -49,6 +49,16 @@ constexpr std::size_t kNoAllocationFailure = std::numeric_limits<std::size_t>::m
 constexpr std::size_t kMaximumAllocationFailuresToTest = 64;
 std::size_t g_allocationsBeforeFailure = kNoAllocationFailure;
 std::size_t g_outstandingTestAllocations = 0;
+std::size_t g_totalTestAllocations = 0;
+
+bool IsDtMathNear(const dtDynReal actual,
+                  const dtDynReal expected,
+                  const dtDynReal tolerance = 1.0e-12)
+{
+    dt::Math::Vector<1, dtDynReal> difference;
+    difference(0) = actual - expected;
+    return difference.GetNorm() < tolerance;
+}
 
 void *AllocateForTest(const std::size_t size)
 {
@@ -67,6 +77,7 @@ void *AllocateForTest(const std::size_t size)
         throw std::bad_alloc();
     }
     ++g_outstandingTestAllocations;
+    ++g_totalTestAllocations;
     return allocation;
 }
 
@@ -146,6 +157,57 @@ struct ThrowingTransfer
         return *this;
     }
 };
+
+struct CopyOnlyTrivialTransfer
+{
+    int value = 0;
+
+    CopyOnlyTrivialTransfer() = default;
+    CopyOnlyTrivialTransfer(const CopyOnlyTrivialTransfer &) = default;
+    CopyOnlyTrivialTransfer(CopyOnlyTrivialTransfer &&) = delete;
+    CopyOnlyTrivialTransfer &operator=(const CopyOnlyTrivialTransfer &) = default;
+    CopyOnlyTrivialTransfer &operator=(CopyOnlyTrivialTransfer &&) = delete;
+};
+
+static_assert(std::is_trivially_copyable<CopyOnlyTrivialTransfer>::value);
+static_assert(std::is_copy_constructible<CopyOnlyTrivialTransfer>::value);
+static_assert(!std::is_move_constructible<CopyOnlyTrivialTransfer>::value);
+static_assert(std::is_copy_assignable<CopyOnlyTrivialTransfer>::value);
+static_assert(!std::is_move_assignable<CopyOnlyTrivialTransfer>::value);
+
+struct MoveOnlyTrivialTransfer
+{
+    int value = 0;
+
+    MoveOnlyTrivialTransfer() = default;
+    MoveOnlyTrivialTransfer(const MoveOnlyTrivialTransfer &) = delete;
+    MoveOnlyTrivialTransfer(MoveOnlyTrivialTransfer &&) = default;
+    MoveOnlyTrivialTransfer &operator=(const MoveOnlyTrivialTransfer &) = delete;
+    MoveOnlyTrivialTransfer &operator=(MoveOnlyTrivialTransfer &&) noexcept = default;
+};
+
+static_assert(std::is_trivially_copyable<MoveOnlyTrivialTransfer>::value);
+static_assert(!std::is_copy_assignable<MoveOnlyTrivialTransfer>::value);
+static_assert(std::is_nothrow_move_assignable<MoveOnlyTrivialTransfer>::value);
+
+struct CopyConstructibleMoveAssignableOnly
+{
+    int value = 0;
+
+    CopyConstructibleMoveAssignableOnly() = default;
+    CopyConstructibleMoveAssignableOnly(const CopyConstructibleMoveAssignableOnly &) = default;
+    CopyConstructibleMoveAssignableOnly(CopyConstructibleMoveAssignableOnly &&) = default;
+    CopyConstructibleMoveAssignableOnly &operator=(const CopyConstructibleMoveAssignableOnly &) = delete;
+    CopyConstructibleMoveAssignableOnly &operator=(CopyConstructibleMoveAssignableOnly &&other) noexcept
+    {
+        value = other.value;
+        other.value = 0;
+        return *this;
+    }
+};
+
+static_assert(!std::is_copy_assignable<CopyConstructibleMoveAssignableOnly>::value);
+static_assert(std::is_nothrow_move_assignable<CopyConstructibleMoveAssignableOnly>::value);
 
 } // namespace
 
@@ -471,6 +533,23 @@ void TestModelValidationRejectsInvalidAddressSegments()
     dtDynModel badType = valid;
     badType.jnt_type[0] = 99;
     assert(!ValidateModel(badType, &error));
+}
+
+void TestModelValidationRejectsInvalidJointSpecProvenance()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("base", 0);
+    spec.AddJoint(body, "joint_a", dtDynJointType::Hinge);
+    spec.AddJoint(body, "joint_b", dtDynJointType::Hinge);
+    const dtDynModel valid = CompileSpecChecked(spec);
+
+    dtDynModel duplicateSpecId = valid;
+    duplicateSpecId.jnt_specid[1] = duplicateSpecId.jnt_specid[0];
+
+    dtDynValidationError error;
+    assert(!ValidateModel(duplicateSpecId, &error));
+    assert(error.code == dtDynValidationCode::InvalidReference);
+    assert(error.object == dtDynObjectType::Joint);
 }
 
 void TestModelValidationRejectsInvalidRootMetadata()
@@ -887,6 +966,112 @@ void TestDtArrayReserveCopiesWithoutLeakingOrMutatingOnThrow()
     assert(copySensitive.size() == 1);
     assert(copySensitive[0].value == 1);
     assert(ThrowingTransfer::liveCount == liveBeforeFailure);
+}
+
+void TestDtArrayPushBackRetainsByValueSignature()
+{
+    void (dtArray<int>::*const append)(int) = &dtArray<int>::push_back;
+    dtArray<int> values;
+    (values.*append)(7);
+
+    assert(values.size() == 1);
+    assert(values[0] == 7);
+}
+
+void TestDtArrayPushBackMovesRvalue()
+{
+    ThrowingTransfer::throwOnCopy = false;
+    ThrowingTransfer::throwOnMove = false;
+    ThrowingTransfer source(9);
+    dtArray<ThrowingTransfer> values;
+
+    ThrowingTransfer::throwOnCopy = true;
+    values.push_back(std::move(source));
+    ThrowingTransfer::throwOnCopy = false;
+
+    assert(values.size() == 1);
+    assert(values[0].value == 9);
+    assert(source.value == 0);
+}
+
+void TestDtArrayPushBackSupportsTriviallyCopyableRvalueWithoutMoveConstructionOrAssignment()
+{
+    dtArray<CopyOnlyTrivialTransfer> values;
+    values.push_back(CopyOnlyTrivialTransfer{7});
+    values.push_back(CopyOnlyTrivialTransfer{9});
+
+    assert(values.size() == 2);
+    assert(values[0].value == 7);
+    assert(values[1].value == 9);
+}
+
+void TestDtArrayPushBackSupportsTriviallyCopyableMoveOnlyRvalue()
+{
+    MoveOnlyTrivialTransfer first;
+    first.value = 7;
+    MoveOnlyTrivialTransfer second;
+    second.value = 9;
+
+    dtArray<MoveOnlyTrivialTransfer> values;
+    values.push_back(std::move(first));
+    values.push_back(std::move(second));
+
+    assert(values.size() == 2);
+    assert(values[0].value == 7);
+    assert(values[1].value == 9);
+}
+
+void TestDtArrayPushBackSupportsCopyConstructibleMoveAssignableLvalue()
+{
+    CopyConstructibleMoveAssignableOnly source;
+    source.value = 11;
+    dtArray<CopyConstructibleMoveAssignableOnly> values;
+    values.push_back(source);
+    values.push_back(source);
+
+    assert(values.size() == 2);
+    assert(values[0].value == 11);
+    assert(values[1].value == 11);
+    assert(source.value == 11);
+}
+
+void TestDtArrayPushBackSupportsMoveOnlyElements()
+{
+    dtArray<std::unique_ptr<int>> values;
+    values.push_back(std::make_unique<int>(7));
+    values.push_back(std::make_unique<int>(9));
+
+    assert(values.size() == 2);
+    assert(*values[0] == 7);
+    assert(*values[1] == 9);
+}
+
+void TestDtArrayPushBackPreservesSelfRvalueTransferSemantics()
+{
+    ThrowingTransfer::throwOnCopy = false;
+    ThrowingTransfer::throwOnMove = false;
+    ThrowingTransfer value(5);
+    dtArray<ThrowingTransfer> values;
+    values.push_back(value);
+    values.push_back(std::move(values[0]));
+
+    assert(values.size() == 2);
+    assert(values[0].value == 0);
+    assert(values[1].value == 5);
+}
+
+void TestDtArrayPushBackPreservesAliasedLvalueOnGrowth()
+{
+    ThrowingTransfer::throwOnCopy = false;
+    ThrowingTransfer::throwOnMove = false;
+    ThrowingTransfer value(7);
+    dtArray<ThrowingTransfer> values;
+    values.push_back(value);
+    values.push_back(values[0]);
+
+    assert(values.size() == 2);
+    assert(values[0].value == 7);
+    assert(values[1].value == 7);
 }
 
 void TestDtArrayReserveSupportsMoveOnlyElements()
@@ -2626,6 +2811,11 @@ void TestCompiledModelCopiesIntoDefaultModel()
     assert(copied.jnt_range_min.GetDim() == compiled.jnt_range_min.GetDim());
     assert(copied.dof_armature.GetDim() == compiled.dof_armature.GetDim());
     assert(copied.body_mass.GetDim() == compiled.body_mass.GetDim());
+    assert(copied.jnt_specid.size() == compiled.jnt_specid.size());
+    for (std::size_t jointId = 0; jointId < compiled.jnt_specid.size(); ++jointId)
+    {
+        assert(copied.jnt_specid[jointId] == compiled.jnt_specid[jointId]);
+    }
     assert(std::fabs(copied.body_mass(link) - 2.0) < 1.0e-12);
     assert(std::fabs(copied.actuator_gear(0) - 120.0) < 1.0e-12);
 
@@ -2668,6 +2858,376 @@ void TestCompileSpecCanFillExistingModel()
     assert(model.nbody == 2);
     assert(model.nv == 1);
     assert(model.BodyId("link") == link);
+}
+
+void TestUpdateSpecRejectsSameDofJointTypeChangeWithoutWriting()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("link", 0);
+    const dtDynIndex joint = spec.AddJoint(body, "hinge", dtDynJointType::Hinge);
+    spec.EditBody(body, [](dtDynBodySpec &draft)
+                  { draft.inertial.mass = 1.0; });
+
+    dtDynModel model = CompileSpecChecked(spec);
+    const dtDynIndex nq = model.nq;
+    const dtDynIndex nv = model.nv;
+    const dtDynReal mass = model.body_mass(body);
+    const dtDynIndex jointType = model.jnt_type[0];
+
+    spec.EditJoint(joint, [](dtDynJointSpec &draft)
+                   { draft.type = dtDynJointType::Slide; });
+    spec.EditBody(body, [](dtDynBodySpec &draft)
+                  { draft.inertial.mass = 7.0; });
+
+    assert(!UpdateSpec(spec, model));
+    assert(model.nq == nq);
+    assert(model.nv == nv);
+    assert(model.body_mass(body) == mass);
+    assert(model.jnt_type[0] == jointType);
+}
+
+void TestUpdateSpecRejectsWorldParentMutationWithoutWriting()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("link", 0);
+    spec.AddJoint(body, "hinge", dtDynJointType::Hinge);
+    spec.EditBody(body, [](dtDynBodySpec &draft)
+                  { draft.inertial.mass = 1.0; });
+
+    dtDynModel model = CompileSpecChecked(spec);
+    const dtDynReal mass = model.body_mass(body);
+
+    spec.EditBody(0, [](dtDynBodySpec &draft)
+                  { draft.parent = 0; });
+    spec.EditBody(body, [](dtDynBodySpec &draft)
+                  { draft.inertial.mass = 7.0; });
+
+    assert(!UpdateSpec(spec, model));
+    assert(model.body_mass(body) == mass);
+}
+
+void TestUpdateSpecRejectsChildListMutationWithoutWriting()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("link", 0);
+    spec.AddJoint(body, "hinge", dtDynJointType::Hinge);
+    spec.EditBody(body, [](dtDynBodySpec &draft)
+                  { draft.inertial.mass = 1.0; });
+
+    dtDynModel model = CompileSpecChecked(spec);
+    const dtDynReal mass = model.body_mass(body);
+
+    spec.EditBody(0, [](dtDynBodySpec &draft)
+                  { draft.firstChild = DTDYN_INVALID_INDEX; });
+    spec.EditBody(body, [](dtDynBodySpec &draft)
+                  { draft.inertial.mass = 7.0; });
+
+    assert(!UpdateSpec(spec, model));
+    assert(model.body_mass(body) == mass);
+}
+
+void TestUpdateSpecRejectsSiteBacklinkMutationWithoutWriting()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("link", 0);
+    spec.AddJoint(body, "hinge", dtDynJointType::Hinge);
+    spec.AddSite(body, "tool");
+    spec.EditBody(body, [](dtDynBodySpec &draft)
+                  { draft.inertial.mass = 1.0; });
+
+    dtDynModel model = CompileSpecChecked(spec);
+    const dtDynReal mass = model.body_mass(body);
+
+    spec.EditBody(body, [](dtDynBodySpec &draft)
+                  {
+                      draft.sites.clear();
+                      draft.inertial.mass = 7.0;
+                  });
+
+    assert(!UpdateSpec(spec, model));
+    assert(model.body_mass(body) == mass);
+}
+
+void TestUpdateSpecMatchesPhysicalRecompile()
+{
+    dtDynSpec original;
+    const dtDynIndex root = original.AddBody("root", 0);
+    const dtDynIndex child = original.AddBody("child", root);
+    const dtDynIndex childJoint = original.AddJoint(child, "child_slide", dtDynJointType::Slide);
+    const dtDynIndex rootJoint = original.AddJoint(root, "root_hinge", dtDynJointType::Hinge);
+    const dtDynIndex site = original.AddSite(child, "tool");
+    const dtDynIndex actuator = original.AddActuator(childJoint, "child_motor");
+
+    original.EditBody(root, [](dtDynBodySpec &draft)
+                      {
+                          draft.inertial.mass = 2.0;
+                          draft.inertial.inertia(0) = 0.2;
+                          draft.inertial.inertia(1) = 0.3;
+                          draft.inertial.inertia(2) = 0.4;
+                      });
+    original.EditBody(child, [](dtDynBodySpec &draft)
+                      { draft.inertial.mass = 0.0; });
+
+    dtDynModel model = CompileSpecChecked(original);
+    assert(model.jnt_type[0] == static_cast<dtDynIndex>(dtDynJointType::Hinge));
+    assert(model.jnt_type[1] == static_cast<dtDynIndex>(dtDynJointType::Slide));
+    assert(model.jnt_specid[0] == rootJoint);
+    assert(model.jnt_specid[1] == childJoint);
+    assert(model.actuator_jointid[actuator] == 1);
+
+    const dtDynIndex *const bodyParentStorage = model.body_parentid.data();
+    const dtDynIndex *const jointTypeStorage = model.jnt_type.data();
+    const dtDynIndex *const jointSpecStorage = model.jnt_specid.data();
+    const dt::Math::Vector3<dtDynReal> *const bodyPosStorage = model.body_pos.data();
+    const dt::Math::Vector3<dtDynReal> *const jointPosStorage = model.jnt_pos.data();
+    const dt::Math::Vector3<dtDynReal> *const sitePosStorage = model.site_pos.data();
+    const dtDynIndex *const actuatorJointStorage = model.actuator_jointid.data();
+    const dtDynIndex *const rootBodyStorage = model.root_bodyid.data();
+
+    dtDynSpec updated = original;
+    dt::Math::Vector3<dtDynReal> xAxis;
+    dt::Math::Vector3<dtDynReal> yAxis;
+    dt::Math::Vector3<dtDynReal> zAxis;
+    xAxis.SetZero();
+    yAxis.SetZero();
+    zAxis.SetZero();
+    xAxis(0) = 1.0;
+    yAxis(1) = 1.0;
+    zAxis(2) = 1.0;
+
+    updated.EditBody(root, [&](dtDynBodySpec &draft)
+                     {
+                         draft.pos(0) = 0.2;
+                         draft.pos(1) = -0.1;
+                         draft.quat = math::AxisAngleQuat(zAxis, 0.4);
+                         draft.inertial.mass = 2.5;
+                         draft.inertial.pos(0) = 0.1;
+                         draft.inertial.pos(1) = 0.2;
+                         draft.inertial.quat = math::AxisAngleQuat(xAxis, 0.3);
+                         draft.inertial.inertia(0) = 0.25;
+                         draft.inertial.inertia(1) = 0.35;
+                         draft.inertial.inertia(2) = 0.45;
+                     });
+    updated.EditBody(child, [&](dtDynBodySpec &draft)
+                     {
+                         draft.pos(0) = 0.6;
+                         draft.pos(2) = -0.2;
+                         draft.quat = math::AxisAngleQuat(yAxis, -0.2);
+                         draft.inertial.mass = 1.75;
+                         draft.inertial.pos(0) = 0.3;
+                         draft.inertial.quat = math::AxisAngleQuat(zAxis, -0.5);
+                         draft.inertial.inertia(0) = 0.12;
+                         draft.inertial.inertia(1) = 0.18;
+                         draft.inertial.inertia(2) = 0.24;
+                     });
+    updated.EditJoint(rootJoint, [&](dtDynJointSpec &draft)
+                        {
+                            draft.pos(0) = 0.1;
+                            draft.axis = yAxis;
+                            draft.limited = true;
+                            draft.rangeMin = -0.7;
+                            draft.rangeMax = 0.8;
+                            draft.armature = 0.11;
+                        });
+    updated.EditJoint(childJoint, [&](dtDynJointSpec &draft)
+                        {
+                            draft.pos(2) = -0.3;
+                            draft.axis = xAxis;
+                            draft.limited = true;
+                            draft.rangeMin = -0.2;
+                            draft.rangeMax = 0.4;
+                            draft.armature = 0.23;
+                        });
+    updated.EditSite(site, [&](dtDynSiteSpec &draft)
+                     {
+                         draft.pos(0) = 0.4;
+                         draft.pos(2) = 0.1;
+                         draft.quat = math::AxisAngleQuat(yAxis, 0.6);
+                     });
+    updated.EditActuator(actuator, [](dtDynActuatorSpec &draft)
+                         { draft.gear = 42.0; });
+
+    const dtDynModel expected = CompileSpecChecked(updated);
+    const std::size_t allocationsBeforeUpdate = g_totalTestAllocations;
+    assert(UpdateSpec(updated, model));
+    assert(g_totalTestAllocations == allocationsBeforeUpdate);
+
+    assert(model.body_parentid.data() == bodyParentStorage);
+    assert(model.jnt_type.data() == jointTypeStorage);
+    assert(model.jnt_specid.data() == jointSpecStorage);
+    assert(model.body_pos.data() == bodyPosStorage);
+    assert(model.jnt_pos.data() == jointPosStorage);
+    assert(model.site_pos.data() == sitePosStorage);
+    assert(model.actuator_jointid.data() == actuatorJointStorage);
+    assert(model.root_bodyid.data() == rootBodyStorage);
+
+    for (dtDynIndex bodyId = 0; bodyId < model.nbody; ++bodyId)
+    {
+        const std::size_t index = static_cast<std::size_t>(bodyId);
+        assert(IsDtMathNear(model.body_mass(bodyId), expected.body_mass(bodyId)));
+        assert(IsDtMathNear(model.body_subtreemass(bodyId), expected.body_subtreemass(bodyId)));
+        for (dtDynIndex axis = 0; axis < 3; ++axis)
+        {
+            assert(IsDtMathNear(model.body_pos[index](axis), expected.body_pos[index](axis)));
+            assert(IsDtMathNear(model.body_ipos[index](axis), expected.body_ipos[index](axis)));
+            assert(IsDtMathNear(model.body_inertia[index](axis), expected.body_inertia[index](axis)));
+            for (dtDynIndex column = 0; column < 3; ++column)
+            {
+                assert(IsDtMathNear(model.body_mat[index](axis, column),
+                                    expected.body_mat[index](axis, column)));
+                assert(IsDtMathNear(model.body_imat[index](axis, column),
+                                    expected.body_imat[index](axis, column)));
+            }
+        }
+        for (dtDynIndex component = 0; component < 4; ++component)
+        {
+            assert(IsDtMathNear(model.body_quat[index](component),
+                                expected.body_quat[index](component)));
+            assert(IsDtMathNear(model.body_iquat[index](component),
+                                expected.body_iquat[index](component)));
+        }
+    }
+
+    for (dtDynIndex jointId = 0; jointId < model.njnt; ++jointId)
+    {
+        const std::size_t index = static_cast<std::size_t>(jointId);
+        assert(model.jnt_limited[index] == expected.jnt_limited[index]);
+        assert(IsDtMathNear(model.jnt_range_min(jointId), expected.jnt_range_min(jointId)));
+        assert(IsDtMathNear(model.jnt_range_max(jointId), expected.jnt_range_max(jointId)));
+        for (dtDynIndex axis = 0; axis < 3; ++axis)
+        {
+            assert(IsDtMathNear(model.jnt_pos[index](axis), expected.jnt_pos[index](axis)));
+            assert(IsDtMathNear(model.jnt_axis[index](axis), expected.jnt_axis[index](axis)));
+        }
+    }
+    for (dtDynIndex dofId = 0; dofId < model.nv; ++dofId)
+    {
+        assert(IsDtMathNear(model.dof_armature(dofId), expected.dof_armature(dofId)));
+    }
+    for (dtDynIndex siteId = 0; siteId < model.nsite; ++siteId)
+    {
+        const std::size_t index = static_cast<std::size_t>(siteId);
+        for (dtDynIndex axis = 0; axis < 3; ++axis)
+        {
+            assert(IsDtMathNear(model.site_pos[index](axis), expected.site_pos[index](axis)));
+            for (dtDynIndex column = 0; column < 3; ++column)
+            {
+                assert(IsDtMathNear(model.site_mat[index](axis, column),
+                                    expected.site_mat[index](axis, column)));
+            }
+        }
+        for (dtDynIndex component = 0; component < 4; ++component)
+        {
+            assert(IsDtMathNear(model.site_quat[index](component),
+                                expected.site_quat[index](component)));
+        }
+    }
+    for (dtDynIndex rootId = 0; rootId < model.nroot; ++rootId)
+    {
+        assert(IsDtMathNear(model.root_mass(rootId), expected.root_mass(rootId)));
+    }
+    for (dtDynIndex actuatorId = 0; actuatorId < model.nu; ++actuatorId)
+    {
+        assert(IsDtMathNear(model.actuator_gear(actuatorId), expected.actuator_gear(actuatorId)));
+    }
+
+    dtDynValidationError error;
+    assert(ValidateModel(model, &error));
+
+    dtDynData modelData;
+    dtDynData expectedData;
+    modelData.Resize(model);
+    expectedData.Resize(expected);
+    modelData.qpos(0) = 0.25;
+    modelData.qpos(1) = -0.1;
+    modelData.qvel(0) = 0.2;
+    modelData.qvel(1) = -0.3;
+    expectedData.qpos = modelData.qpos;
+    expectedData.qvel = modelData.qvel;
+
+    dt::Math::Vector3<dtDynReal> gravity;
+    gravity(0) = 0.0;
+    gravity(1) = -9.81;
+    gravity(2) = 0.0;
+    ComputeDynamicsCCRBA(model, modelData, gravity, DTDYN_CCRBA_TERM_ALL);
+    ComputeDynamicsCCRBA(expected, expectedData, gravity, DTDYN_CCRBA_TERM_ALL);
+    ForwardKinematics(model, modelData);
+    ForwardKinematics(expected, expectedData);
+
+    for (dtDynIndex row = 0; row < model.nv; ++row)
+    {
+        assert(IsDtMathNear(modelData.gravityTorq(row), expectedData.gravityTorq(row)));
+        assert(IsDtMathNear(modelData.nonlinTorq(row), expectedData.nonlinTorq(row)));
+        for (dtDynIndex column = 0; column < model.nv; ++column)
+        {
+            assert(IsDtMathNear(modelData.Mmat(row, column), expectedData.Mmat(row, column)));
+        }
+    }
+    for (dtDynIndex axis = 0; axis < 3; ++axis)
+    {
+        assert(IsDtMathNear(modelData.site_xpos[static_cast<std::size_t>(site)](axis),
+                            expectedData.site_xpos[static_cast<std::size_t>(site)](axis)));
+    }
+
+    const dtDynModel zeroMassExpected = CompileSpecChecked(original);
+    const std::size_t allocationsBeforeZeroMassUpdate = g_totalTestAllocations;
+    assert(UpdateSpec(original, model));
+    assert(g_totalTestAllocations == allocationsBeforeZeroMassUpdate);
+    const std::size_t childIndex = static_cast<std::size_t>(child);
+    for (dtDynIndex axis = 0; axis < 3; ++axis)
+    {
+        assert(IsDtMathNear(model.body_ipos[childIndex](axis), zeroMassExpected.body_ipos[childIndex](axis)));
+    }
+    for (dtDynIndex component = 0; component < 4; ++component)
+    {
+        assert(IsDtMathNear(model.body_iquat[childIndex](component),
+                            zeroMassExpected.body_iquat[childIndex](component)));
+    }
+}
+
+void TestUpdateSpecRefreshesMultiRootMultiDofCaches()
+{
+    dtDynSpec original;
+    const dtDynIndex freeBody = original.AddBody("free_root", 0);
+    const dtDynIndex ballBody = original.AddBody("ball_root", 0);
+    const dtDynIndex freeJoint = original.AddJoint(freeBody, "free_joint", dtDynJointType::Free);
+    const dtDynIndex ballJoint = original.AddJoint(ballBody, "ball_joint", dtDynJointType::Ball);
+    original.EditBody(freeBody, [](dtDynBodySpec &draft)
+                      { draft.inertial.mass = 2.0; });
+    original.EditBody(ballBody, [](dtDynBodySpec &draft)
+                      { draft.inertial.mass = 3.0; });
+    original.EditJoint(freeJoint, [](dtDynJointSpec &draft)
+                       { draft.armature = 0.1; });
+    original.EditJoint(ballJoint, [](dtDynJointSpec &draft)
+                       { draft.armature = 0.2; });
+
+    dtDynModel model = CompileSpecChecked(original);
+    dtDynSpec updated = original;
+    updated.EditBody(freeBody, [](dtDynBodySpec &draft)
+                     { draft.inertial.mass = 5.0; });
+    updated.EditBody(ballBody, [](dtDynBodySpec &draft)
+                     { draft.inertial.mass = 7.0; });
+    updated.EditJoint(freeJoint, [](dtDynJointSpec &draft)
+                      { draft.armature = 0.4; });
+    updated.EditJoint(ballJoint, [](dtDynJointSpec &draft)
+                      { draft.armature = 0.6; });
+
+    const dtDynModel expected = CompileSpecChecked(updated);
+    const std::size_t allocationsBeforeUpdate = g_totalTestAllocations;
+    assert(UpdateSpec(updated, model));
+    assert(g_totalTestAllocations == allocationsBeforeUpdate);
+    assert(model.nroot == 2);
+    for (dtDynIndex dofId = 0; dofId < model.nv; ++dofId)
+    {
+        assert(IsDtMathNear(model.dof_armature(dofId), expected.dof_armature(dofId)));
+    }
+    for (dtDynIndex rootId = 0; rootId < model.nroot; ++rootId)
+    {
+        assert(IsDtMathNear(model.root_mass(rootId), expected.root_mass(rootId)));
+    }
+
+    dtDynValidationError error;
+    assert(ValidateModel(model, &error));
 }
 
 void TestDtMathDynamicResizeHelpers()
@@ -4084,6 +4644,7 @@ int main()
     TestModelValidationRejectsNonFiniteValues();
     TestModelValidationRejectsInvalidDofReferences();
     TestModelValidationRejectsInvalidAddressSegments();
+    TestModelValidationRejectsInvalidJointSpecProvenance();
     TestModelValidationRejectsInvalidRootMetadata();
     TestModelValidationRejectsDuplicateNames();
     TestModelValidationRejectsOverlappingJointSpans();
@@ -4100,6 +4661,14 @@ int main()
     TestDtArrayDirectHeader();
     TestDtArrayCopyConstructorReleasesFailedPartialCopy();
     TestDtArrayReserveCopiesWithoutLeakingOrMutatingOnThrow();
+    TestDtArrayPushBackRetainsByValueSignature();
+    TestDtArrayPushBackMovesRvalue();
+    TestDtArrayPushBackSupportsTriviallyCopyableRvalueWithoutMoveConstructionOrAssignment();
+    TestDtArrayPushBackSupportsTriviallyCopyableMoveOnlyRvalue();
+    TestDtArrayPushBackSupportsCopyConstructibleMoveAssignableLvalue();
+    TestDtArrayPushBackSupportsMoveOnlyElements();
+    TestDtArrayPushBackPreservesSelfRvalueTransferSemantics();
+    TestDtArrayPushBackPreservesAliasedLvalueOnGrowth();
     TestDtArrayReserveSupportsMoveOnlyElements();
     TestSpecWorldAndFixedBody();
     TestSpecEditorsCommitScopedCopies();
@@ -4152,6 +4721,12 @@ int main()
     TestCompiledModelCopiesIntoDefaultModel();
     TestCompiledModelCopiesZeroSizedOptionalDenseFields();
     TestCompileSpecCanFillExistingModel();
+    TestUpdateSpecRejectsSameDofJointTypeChangeWithoutWriting();
+    TestUpdateSpecRejectsWorldParentMutationWithoutWriting();
+    TestUpdateSpecRejectsChildListMutationWithoutWriting();
+    TestUpdateSpecRejectsSiteBacklinkMutationWithoutWriting();
+    TestUpdateSpecMatchesPhysicalRecompile();
+    TestUpdateSpecRefreshesMultiRootMultiDofCaches();
     TestDtMathDynamicResizeHelpers();
     TestDataResizeSeparatesBodyAndDofStorage();
     TestDataResizeSupportsFullyFixedZeroDofModel();

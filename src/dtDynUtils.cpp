@@ -3,7 +3,7 @@
  \brief     Reusable native dtDynamics model and data utility definitions.
  \author    Joonhee Jo, joonhee.jo@hyundai.com
  \date      2026. 07. 16
- \version   0.1.2
+ \version   0.1.3
  \copyright RoboticsLab ART All rights reserved.
 */
 

@@ -21,14 +21,14 @@ Author: Joonhee Jo
 
 ## 1. Package boundary와 최소 사용법
 
-- `dtDynamics 0.1.2`: `dtMath` 기반 dynamics ingredient engine
+- `dtDynamics 0.1.3`: `dtMath` 기반 dynamics ingredient engine
 
 > **주의 — production dependency vs validation dependency**
 >
 > `MuJoCo 3.8.0`, `Pinocchio 3.9.0`: validation/benchmark reference (production target `dt::Dynamics`에 link되지 않음).
 
 ```cmake
-find_package(dtDynamics 0.1.2 EXACT CONFIG REQUIRED)
+find_package(dtDynamics 0.1.3 EXACT CONFIG REQUIRED)
 target_link_libraries(my_controller PRIVATE dt::Dynamics)
 ```
 
@@ -302,9 +302,16 @@ SolveControllerProblem(data.Mmat, data.nonlinTorq,
 3. active task에 필요한 Jacobian만 계산
 4. 결과를 controller task structure에 전달
 
+### 5-3. Fixed-layout physical parameter update
+
+- `UpdateSpec(spec, model)`은 body inertial/pose, joint parameter, site pose, actuator gear처럼 compiled layout을 바꾸지 않는 physical parameter만 갱신한다.
+- editable spec 생성·`Edit*`·외부 입력 validation은 loop 밖에서 끝낸다. update는 reader가 없는 control-safe boundary에서만 실행하며, concurrent kinematics/dynamics reader와 model을 공유하지 않는다.
+- `false`는 topology 또는 address/mapping incompatibility를 뜻하며 model은 유지된다. 성공 후 기존 `dtDynData` output은 stale이므로 필요한 `ForwardKinematics`/`ComputeDynamics*()`를 다시 실행한다.
+- allocation-free update path는 regression으로 확인했지만, model 전체 preflight와 cache refresh의 worst-case time은 target CPU에서 별도로 계측한다. hard-realtime deadline proof를 대신하지 않는다.
+
 > **주의 — setup-time vs realtime 경계**
 >
-> loop 배제 대상: XML I/O, validation, compile, resize, name lookup, model hot-swap.
+> loop 배제 대상: XML I/O, validation, compile, resize, name lookup, model hot-swap. `UpdateSpec()`은 위 fixed-layout·exclusive-access·worst-case-time 조건을 만족하는 경우만 예외다.
 
 - 개념(allocation evidence, 여러 evaluation instance, timing 해석): [realtime.md](manual/realtime.md)
 
@@ -437,7 +444,7 @@ tools/audit_release_readiness.sh
 | lookup이 `DTDYN_INVALID_INDEX` 반환              | 이름 오타, 아직 compile 안 된 spec에서 조회, 모델에 실제로 없는 body/joint/site/actuator              | 예외 대신 반환값이므로 반드시 확인 후 indexing — [modeling.md](manual/modeling.md)              |
 | `IsCompatible(model)`이 `true`인데 결과가 이상함       | `IsCompatible()`은 storage dimension만 확인, model identity/topology/inertia 동일성 미보장  | model 교체 시 ID/address cache 재생성 — [modeling.md](manual/modeling.md)             |
 | model 재compile 후 이상 동작                        | 차원이 같아도 cached ID/address가 stale할 수 있음                                            | `Resize()` 재검토 및 lookup 재수행 — [modeling.md](manual/modeling.md)                 |
-| `find_package(dtDynamics 0.1.2 EXACT ...)` 실패 | installed package identity가 0.1.2이 아니거나 EXACT 불일치                                 | `tools/validate_install_export.sh` 재실행 — [release.md](manual/release.md)        |
+| `find_package(dtDynamics 0.1.3 EXACT ...)` 실패 | installed package identity가 0.1.3이 아니거나 EXACT 불일치                                 | `tools/validate_install_export.sh` 재실행 — [release.md](manual/release.md)        |
 | `Edit*` callback이 `logic_error`로 종료 | active edit 중 같은 spec의 nested edit/add/clear/assignment/swap을 시도함 | inner exception을 잡아도 outer transaction은 abort됨 — [modeling.md](manual/modeling.md) |
 | 검증에서 external row가 `skipped`                  | 해당 quantity에 대응하는 Pinocchio/MuJoCo contract가 없음 (equivalent contract 없음)          | 정상 동작 (실패 아님) — [validation.md](manual/validation.md)                           |
 | `qpos`를 0으로 초기화했더니 이상함                        | free/ball joint quaternion이 invalid할 수 있음 (package-level neutral initializer 없음)  | 명시적 초기화 필요 — [modeling.md](manual/modeling.md), [example.md](manual/example.md) |
@@ -472,6 +479,6 @@ tools/audit_release_readiness.sh
 - model guide: `docs/guides/model_guide/`
 - usage/migration guide: `docs/guides/usage_guide/`
 - benchmark evidence: [docs/benchmark-results.md](benchmark-results.md)
-- release note: `docs/release-notes/v0.1.2.md`
+- release note: `docs/release-notes/v0.1.3.md`
 - Markdown 문서 gate: Python 3. Diagram source 변경 시 `tools/render_diagrams.sh`와 Graphviz `dot` 사용
-- `v0.1.0-rc1`~`v0.1.1` release note: 과거 기준 보존 (현재 `0.1.2`의 근거로 소급 해석 금지)
+- `v0.1.0-rc1`~`v0.1.2` release note: 과거 기준 보존 (현재 `0.1.3`의 근거로 소급 해석 금지)

@@ -13,11 +13,32 @@ else()
         "as dtDynamics, or set DTDYNAMICS_DTMATH_INCLUDE_DIR before find_package(dtDynamics).")
 endif()
 
-include("${CMAKE_CURRENT_LIST_DIR}/dtDynamicsTargets.cmake")
+if(TARGET dt::Dynamics)
+    get_property(_DTDYNAMICS_CONFIG_TARGET_ORIGIN TARGET dt::Dynamics
+        PROPERTY DTDYNAMICS_CONFIG_TARGET_ORIGIN)
+    if(NOT "${_DTDYNAMICS_CONFIG_TARGET_ORIGIN}" STREQUAL "${CMAKE_CURRENT_LIST_FILE}")
+        message(FATAL_ERROR
+            "dtDynamics target collision: dt::Dynamics already exists before "
+            "find_package(dtDynamics). Refusing to bind to an unverified target.")
+    endif()
+else()
+    include("${CMAKE_CURRENT_LIST_DIR}/dtDynamicsTargets.cmake")
+    if(NOT TARGET dt::Dynamics)
+        message(FATAL_ERROR "dtDynamics export did not define dt::Dynamics.")
+    endif()
+    set_property(TARGET dt::Dynamics PROPERTY DTDYNAMICS_CONFIG_TARGET_ORIGIN
+        "${CMAKE_CURRENT_LIST_FILE}")
+endif()
 
 if(TARGET dt::Dynamics)
-    set_property(TARGET dt::Dynamics APPEND PROPERTY
-        INTERFACE_INCLUDE_DIRECTORIES "${_DTDYNAMICS_DTMATH_INCLUDE_DIR}")
+    get_property(_DTDYNAMICS_INTERFACE_INCLUDES TARGET dt::Dynamics
+        PROPERTY INTERFACE_INCLUDE_DIRECTORIES)
+    list(FIND _DTDYNAMICS_INTERFACE_INCLUDES "${_DTDYNAMICS_DTMATH_INCLUDE_DIR}"
+        _DTDYNAMICS_DTMATH_INCLUDE_INDEX)
+    if(_DTDYNAMICS_DTMATH_INCLUDE_INDEX EQUAL -1)
+        set_property(TARGET dt::Dynamics APPEND PROPERTY
+            INTERFACE_INCLUDE_DIRECTORIES "${_DTDYNAMICS_DTMATH_INCLUDE_DIR}")
+    endif()
 endif()
 
 check_required_components(dtDynamics)

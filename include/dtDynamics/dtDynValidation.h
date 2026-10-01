@@ -3,7 +3,7 @@
  \brief     Setup-time validation for editable specifications and compiled models.
  \author    Joonhee Jo, joonhee.jo@hyundai.com
  \date      2026. 07. 27
- \version   0.1.2
+ \version   0.1.3
  \copyright RoboticsLab ART All rights reserved.
 */
 

@@ -3,7 +3,7 @@
  \brief     Setup-time validation for editable specifications and compiled models.
  \author    Joonhee Jo, joonhee.jo@hyundai.com
  \date      2026. 07. 27
- \version   0.1.2
+ \version   0.1.3
  \copyright RoboticsLab ART All rights reserved.
 */
 
@@ -529,6 +529,7 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
     DTDYN_REQUIRE_ARRAY(joint_names, njnt);
     DTDYN_REQUIRE_ARRAY(jnt_type, njnt);
     DTDYN_REQUIRE_ARRAY(jnt_bodyid, njnt);
+    DTDYN_REQUIRE_ARRAY(jnt_specid, njnt);
     DTDYN_REQUIRE_ARRAY(jnt_qposadr, njnt);
     DTDYN_REQUIRE_ARRAY(jnt_dofadr, njnt);
     DTDYN_REQUIRE_ARRAY(jnt_limited, njnt);
@@ -588,9 +589,18 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
                         bodyId, "compiled body has invalid physical or frame-pair values");
         }
     }
+    dtArray<dtDynIndex> jointSpecCoverage;
+    jointSpecCoverage.assign(model.njnt, 0);
     for (dtDynIndex jointId = 0; jointId < model.njnt; ++jointId)
     {
         const std::size_t index = static_cast<std::size_t>(jointId);
+        const dtDynIndex specJointId = model.jnt_specid[index];
+        if (specJointId < 0 || specJointId >= model.njnt ||
+            ++jointSpecCoverage[static_cast<std::size_t>(specJointId)] != 1)
+        {
+            return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Joint,
+                        jointId, "compiled joint specification provenance is invalid");
+        }
         if (!std::isfinite(model.jnt_range_min(jointId)) ||
             !std::isfinite(model.jnt_range_max(jointId)) || !IsFinite(model.jnt_pos[index]) ||
             !IsFinite(model.jnt_axis[index]))

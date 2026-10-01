@@ -9,7 +9,7 @@ cmake_minimum_required(VERSION 3.16)
 project(
     dtDynamics
     LANGUAGES CXX
-    VERSION 0.1.2
+    VERSION 0.1.3
     DESCRIPTION "Standalone dynamics ingredient package for control and WBC"
 )
 set(PROJECT_NAMESPACE ${PROJECT_NAME})

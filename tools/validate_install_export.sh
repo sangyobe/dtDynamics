@@ -13,9 +13,11 @@ INSTALL_PREFIX="${WORK_ROOT}/install"
 CONSUMER_DIR="${WORK_ROOT}/consumer"
 CONSUMER_BUILD_DIR="${WORK_ROOT}/consumer-build"
 CONSUMER_FILE_BUILD_DIR="${WORK_ROOT}/consumer-file-build"
+CONSUMER_COLLISION_DIR="${WORK_ROOT}/consumer-collision"
+CONSUMER_COLLISION_BUILD_DIR="${WORK_ROOT}/consumer-collision-build"
 CONSUMER_XML_PATH="${DTDYNAMICS_INSTALL_VALIDATE_XML:-${CONSUMER_DIR}/install-consumer-model.xml}"
 CONSUMER_PREINCLUDE_CONFIG="${DTDYNAMICS_INSTALL_VALIDATE_PREINCLUDE_CONFIG:-}"
-EXPECTED_VERSION="${DTDYNAMICS_EXPECTED_VERSION:-0.1.2}"
+EXPECTED_VERSION="${DTDYNAMICS_EXPECTED_VERSION:-0.1.3}"
 
 if [[ ! -f "${DTMATH_INCLUDE_DIR}/dtMath/dtMath.h" ]]; then
     echo "dtMath headers not found at ${DTMATH_INCLUDE_DIR}" >&2
@@ -113,6 +115,21 @@ if(NOT DEFINED DTDYNAMICS_EXPECTED_VERSION)
     message(FATAL_ERROR "DTDYNAMICS_EXPECTED_VERSION must be provided by the validation driver")
 endif()
 find_package(dtDynamics ${DTDYNAMICS_EXPECTED_VERSION} EXACT CONFIG REQUIRED)
+set(_DTDYNAMICS_FIRST_PACKAGE_DIR "${dtDynamics_DIR}")
+get_target_property(_DTDYNAMICS_FIRST_INTERFACE_INCLUDES dt::Dynamics INTERFACE_INCLUDE_DIRECTORIES)
+# A consumer can resolve the package more than once; the package-owned target
+# marker must accept the already-imported target rather than treat it as a collision.
+find_package(dtDynamics ${DTDYNAMICS_EXPECTED_VERSION} EXACT CONFIG REQUIRED)
+if(NOT dtDynamics_DIR STREQUAL _DTDYNAMICS_FIRST_PACKAGE_DIR)
+    message(FATAL_ERROR "Repeated dtDynamics lookup changed the resolved package directory")
+endif()
+get_target_property(_DTDYNAMICS_SECOND_INTERFACE_INCLUDES dt::Dynamics INTERFACE_INCLUDE_DIRECTORIES)
+if(NOT "${_DTDYNAMICS_SECOND_INTERFACE_INCLUDES}" STREQUAL
+       "${_DTDYNAMICS_FIRST_INTERFACE_INCLUDES}")
+    message(FATAL_ERROR
+        "Repeated dtDynamics lookup changed INTERFACE_INCLUDE_DIRECTORIES: "
+        "${_DTDYNAMICS_FIRST_INTERFACE_INCLUDES} -> ${_DTDYNAMICS_SECOND_INTERFACE_INCLUDES}")
+endif()
 if(NOT dtDynamics_VERSION STREQUAL DTDYNAMICS_EXPECTED_VERSION)
     message(FATAL_ERROR
         "Installed dtDynamics version ${dtDynamics_VERSION} does not equal ${DTDYNAMICS_EXPECTED_VERSION}")
@@ -256,6 +273,32 @@ fi
 cmake --build "${CONSUMER_FILE_BUILD_DIR}" -- -j2
 "${CONSUMER_FILE_BUILD_DIR}/dtDynamicsInstallConsumer"
 echo "PASS: installed LoadXmlFile consumer executed: ${CONSUMER_XML_PATH}"
+
+# An existing unrelated target with the public exported name must not be
+# silently accepted, because it can bind the consumer to a different package.
+mkdir -p "${CONSUMER_COLLISION_DIR}"
+cat > "${CONSUMER_COLLISION_DIR}/CMakeLists.txt" <<'CONSUMER_COLLISION_CMAKE'
+cmake_minimum_required(VERSION 3.16)
+project(dtDynamicsInstallTargetCollision LANGUAGES CXX)
+
+add_library(dt::Dynamics INTERFACE IMPORTED GLOBAL)
+find_package(dtDynamics ${DTDYNAMICS_EXPECTED_VERSION} EXACT CONFIG REQUIRED)
+message(FATAL_ERROR "dtDynamics package accepted a pre-existing dt::Dynamics target")
+CONSUMER_COLLISION_CMAKE
+if cmake -S "${CONSUMER_COLLISION_DIR}" -B "${CONSUMER_COLLISION_BUILD_DIR}" \
+    -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" \
+    -DCMAKE_PREFIX_PATH="${INSTALL_PREFIX}" \
+    -DDTDYNAMICS_DTMATH_INCLUDE_DIR="${DTMATH_INCLUDE_DIR}" \
+    -DDTDYNAMICS_EXPECTED_VERSION="${EXPECTED_VERSION}" \
+    > "${WORK_ROOT}/consumer-collision.log" 2>&1; then
+    echo "Installed package accepted a pre-existing dt::Dynamics target." >&2
+    exit 1
+fi
+if ! grep -Fq "dtDynamics target collision" "${WORK_ROOT}/consumer-collision.log"; then
+    echo "Installed package collision test failed for an unexpected reason." >&2
+    exit 1
+fi
+echo "PASS: installed dt::Dynamics target collision rejected."
 
 echo "PASS: dtDynamics install/export validation succeeded."
 echo "Install prefix: ${INSTALL_PREFIX}"

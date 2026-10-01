@@ -142,6 +142,7 @@ require_file include/dtDynamics/dtDynDynamics.h
 require_file docs/manual.md
 require_file docs/benchmark-results.md
 require_file tools/validate_docs.py
+require_file tools/validate_documentation_content.py
 require_dir docs/manual
 require_dir test/test_dtDynTypes
 require_dir test/test_dtDynamicsMujocoRef
@@ -177,6 +178,7 @@ cache_bool_must_be_off BUILD_DTDYNAMICS_PINOCCHIO_TEST "${cache_file}"
 
 if [[ "${RUN_DOCS_VALIDATION}" == "ON" ]]; then
     python3 "${SCRIPT_DIR}/validate_docs.py"
+    python3 "${SCRIPT_DIR}/validate_documentation_content.py"
 fi
 
 if [[ "${RUN_PACKAGE_VALIDATION}" == "ON" ]]; then

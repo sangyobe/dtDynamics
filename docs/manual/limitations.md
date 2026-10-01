@@ -2,7 +2,7 @@
 
 Author: Joonhee Jo
 
-- `dtDynamics 0.1.2` 범위: tree/forest rigid-body model의 setup 검증과 controller-facing dynamics ingredient
+- `dtDynamics 0.1.3` 범위: tree/forest rigid-body model의 setup 검증과 controller-facing dynamics ingredient
 
 ## 10-1. 지원하는 범위
 
@@ -50,6 +50,7 @@ Author: Joonhee Jo
 
 - 0.1.1의 checked path·XML loader 영향: 이전에 silent default/partial parse로 통과하던 malformed numeric, wrong arity, duplicate name, invalid reference 거부 가능
 - 0.1.2의 `dtDynSpec` encapsulation 영향: public mutable collection reference를 사용하는 source는 build failure. immutable `Bodies()`/`Joints()`/`Sites()`/`Actuators()` read view와 callback-scoped `Edit*` transaction으로 이행 필요
+- 0.1.3의 `UpdateSpec()` 영향: fixed-layout model의 physical parameter만 갱신한다. topology/layout/name mapping이 다르면 model write 없이 `false`를 반환하며, 성공 뒤 stale `dtDynData`는 다시 계산해야 한다.
 - 성격: fail-closed setup contract → real robot XML을 release gate에서 확인 필요
 - raw `CompileSpec()`: trusted backward-compatible path로 유지
 
