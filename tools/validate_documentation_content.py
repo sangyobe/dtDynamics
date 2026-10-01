@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail-closed content checks for current dtDynamics v0.1.2 documentation."""
+"""Fail-closed content checks for current dtDynamics v0.1.3 documentation."""
 
 from pathlib import Path
 import re
@@ -30,7 +30,7 @@ targets = [
     "docs/manual/limitations.md",
     "docs/manual/benchmarks.md",
     "docs/manual/validation.md",
-    "docs/release-notes/v0.1.2.md",
+    "docs/release-notes/v0.1.3.md",
 ]
 contents = {path: text(path) for path in targets}
 for path, body in contents.items():
@@ -53,9 +53,9 @@ for path, body in guide_sources.items():
             f"current private guide narrative is not Korean: {path}")
 
 readme = contents["README.md"]
-require("find_package(dtDynamics 0.1.2 EXACT CONFIG REQUIRED)" in readme,
-        "README must require the exact installed v0.1.2 package")
-require("docs/release-notes/v0.1.2.md" in readme, "README must identify the current v0.1.2 release note")
+require("find_package(dtDynamics 0.1.3 EXACT CONFIG REQUIRED)" in readme,
+        "README must require the exact installed v0.1.3 package")
+require("docs/release-notes/v0.1.3.md" in readme, "README must identify the current v0.1.3 release note")
 
 workflow = "\n".join(contents[path] for path in (
     "docs/manual/modeling.md", "docs/manual/integration.md", "docs/manual/example.md"
@@ -75,9 +75,9 @@ for lookup in ("body", "joint", "site", "actuator"):
     require(f"{lookup} == DTDYN_INVALID_INDEX" in modeling,
             f"modeling lookup example does not check {lookup} sentinel")
 
-release = contents["docs/release-notes/v0.1.2.md"]
-for token in ("0.1.2", "EditBody", "CompileSpecChecked", "Polyspace", "raw defect 0"):
-    require(token in release, f"v0.1.2 release note is missing {token}")
+release = contents["docs/release-notes/v0.1.3.md"]
+for token in ("0.1.3", "UpdateSpec", "dtArray", "Polyspace", "raw defect 0"):
+    require(token in release, f"v0.1.3 release note is missing {token}")
 static_analysis = contents["docs/manual/validation.md"]
 for token in ("Polyspace", "MISRA C++:2023", "Justified", "File does not compile"):
     require(token in static_analysis, f"static-analysis manual is missing {token}")
@@ -109,16 +109,16 @@ for directory in (ROOT / "include/dtDynamics", ROOT / "src", ROOT / "benchmark")
         if not path.is_file() or path.suffix not in {".h", ".cpp"}:
             continue
         for match in re.finditer(r"\\version\s+(\S+)", path.read_text()):
-            require(match.group(1) == "0.1.2",
+            require(match.group(1) == "0.1.3",
                     f"nonhistorical public-header version is stale: {path.relative_to(ROOT)}={match.group(1)}")
 
 model_guide = guide_sources.get(guide_source_paths[0])
 if model_guide is not None:
-    require("find_package(dtDynamics 0.1.2 EXACT CONFIG REQUIRED)" in model_guide,
-            "model guide must require the exact v0.1.2 installed package")
+    require("find_package(dtDynamics 0.1.3 EXACT CONFIG REQUIRED)" in model_guide,
+            "model guide must require the exact v0.1.3 installed package")
     require("CompileSpecChecked" in model_guide, "model guide must teach checked compilation")
     require("DTDYN_INVALID_INDEX" in model_guide, "model guide must check lookup sentinels")
-    require("0.1.2" in model_guide, "model guide must identify package 0.1.2")
+    require("0.1.3" in model_guide, "model guide must identify package 0.1.3")
     require("EditBody" in model_guide and "immutable collection" in model_guide,
             "model guide must document callback-scoped immutable collection edits")
     require("ignored by native dynamics" not in model_guide,
@@ -136,12 +136,12 @@ if model_guide is not None:
             "model guide still makes an unscoped realtime allocation claim")
 usage_guide = guide_sources.get(guide_source_paths[1])
 if usage_guide is not None:
-    require("find_package(dtDynamics 0.1.2 EXACT CONFIG REQUIRED)" in usage_guide,
-            "usage guide must require exact package 0.1.2")
+    require("find_package(dtDynamics 0.1.3 EXACT CONFIG REQUIRED)" in usage_guide,
+            "usage guide must require exact package 0.1.3")
     require("Each cell is `median / p95`" in usage_guide,
             "usage guide reference-facing table must use median/p95")
     require("5.751 / 5.881" in usage_guide and "17.962 / 18.090" in usage_guide,
-            "usage guide quadruped snapshot is not promoted from the accepted v0.1.2 CSV")
+            "usage guide quadruped snapshot is not promoted from the accepted v0.1.3 CSV")
     require("`LoadXmlFile` → `CompileSpecChecked` → `dtDynData::Resize`" in usage_guide,
             "usage migration mapping must teach package-owned load and checked compilation")
     require("`LoadXmlFile` / `DecodeXml` → `CompileSpecChecked` → `Resize`" in usage_guide and
@@ -176,14 +176,14 @@ if pdftotext:
     pdf_requirements = {
         "docs/guides/model_guide/mjcf-xml-dtdynspec-dtdynmodel-guide.pdf":
             ("CompileSpecChecked", "DTDYN_INVALID_INDEX", "ForwardKinematics", "dt::Dynamics",
-             "find_package(dtDynamics 0.1.2 EXACT CONFIG REQUIRED)",
+             "find_package(dtDynamics 0.1.3 EXACT CONFIG REQUIRED)",
              "pre-sized dtDynData and caller-owned outputs on the documented benchmark path",
              "no XML parsing in the tick; zero counted C++ new is limited to the benchmark counter scope, not a whole-process",
              "or malloc-family heap guarantee",
-             "0.1.2"),
+             "0.1.3"),
         "docs/guides/usage_guide/dtdynamics-usage-migration-guide.pdf":
-            ("find_package(dtDynamics 0.1.2 EXACT CONFIG REQUIRED)",
-             "0.1.2", "dt::Dynamics", "p95", "5.751", "17.962"),
+            ("find_package(dtDynamics 0.1.3 EXACT CONFIG REQUIRED)",
+             "0.1.3", "dt::Dynamics", "p95", "5.751", "17.962"),
     }
     for rel, tokens in pdf_requirements.items():
         path = ROOT / rel
@@ -215,7 +215,7 @@ if pdfinfo and pdffonts:
             pages = next((int(line.split(":", 1)[1]) for line in info.stdout.splitlines()
                           if line.startswith("Pages:")), -1)
             require(pages == release_pages,
-                    f"v0.1.2 guide PDF page count changed: {pdf_rel}={pages}, expected={release_pages}")
+                    f"v0.1.3 guide PDF page count changed: {pdf_rel}={pages}, expected={release_pages}")
             if source_path.is_file():
                 source_pages = sum(line.strip() == "---" for line in source_path.read_text().splitlines()) - 1
                 require(pages == source_pages,
@@ -223,6 +223,10 @@ if pdfinfo and pdffonts:
             require(any("960 x 540 pts" in line for line in info.stdout.splitlines()
                         if line.startswith("Page size:")),
                     f"guide PDF is not 16:9 960x540 points: {pdf_rel}")
+            title = next((line.split(":", 1)[1].strip() for line in info.stdout.splitlines()
+                          if line.startswith("Title:")), "")
+            require("0.1.3" in title and "0.1.2" not in title,
+                    f"guide PDF metadata title is stale: {pdf_rel}: {title}")
         fonts = subprocess.run([pdffonts, str(pdf_path)], check=False, text=True,
                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         require(fonts.returncode == 0, f"pdffonts failed for {pdf_rel}: {fonts.stderr.strip()}")
@@ -230,7 +234,9 @@ if pdfinfo and pdffonts:
         require(bool(rows), f"guide PDF has no reported fonts: {pdf_rel}")
         for row in rows:
             columns = row.split()
-            require(len(columns) >= 7 and columns[4] == "yes" and columns[6] == "yes",
+            # Font names can contain spaces. The embedded/subset/Unicode flags are
+            # positioned relative to the trailing object and generation columns.
+            require(len(columns) >= 7 and columns[-5] == "yes" and columns[-3] == "yes",
                     f"guide PDF font is not embedded/Unicode-capable: {pdf_rel}: {row}")
 
 if failures:
@@ -238,4 +244,4 @@ if failures:
     for failure in failures:
         print(f" - {failure}", file=sys.stderr)
     raise SystemExit(1)
-print("PASS: current v0.1.2 documentation content validated")
+print("PASS: current v0.1.3 documentation content validated")

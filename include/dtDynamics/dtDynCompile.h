@@ -3,7 +3,7 @@
  \brief     Native dtDynamics spec-to-model compiler declaration.
  \author    Joonhee Jo, joonhee.jo@hyundai.com
  \date      2026. 07. 16
- \version   0.1.2
+ \version   0.1.3
  \copyright RoboticsLab ART All rights reserved.
 */
 
@@ -33,6 +33,20 @@ dtDynModel CompileSpec(const dtDynSpec &spec);
  \throws std::runtime_error with object/index context when validation fails.
 */
 dtDynModel CompileSpecChecked(const dtDynSpec &spec);
+
+/*!
+ \brief Update fixed-layout model physical parameters from an editable specification.
+ \details Performs an allocation-free compatibility preflight before modifying \p model.
+  Topology, coordinate addresses, storage, and name maps remain unchanged; an
+  incompatible specification returns false without changing \p model. Validate physical
+  values before entering the realtime path and call only with exclusive model access.
+  Existing dtDynData kinematic and dynamics outputs are stale after a successful update;
+  recompute them before consumption.
+ \param spec Editable parameter source with unchanged compiled layout.
+ \param model Compiled model with preallocated storage to update.
+ \return True when the fixed layout is compatible and all physical values were updated.
+*/
+bool UpdateSpec(const dtDynSpec &spec, dtDynModel &model) noexcept;
 
 /*!
  \brief Compile editable dtDynSpec into an existing fixed-index dtDynModel.

@@ -40,7 +40,9 @@ M(q)\dot{v}+h(q,v)=S^\mathsf{T}\tau+J_c(q)^\mathsf{T}f.
 - 공유 가능: 같은 immutable `dtDynModel`을 여러 worker가 공유 (mutable `dtDynData` 동시 공유는 금지)
 - 개별 보유 원칙: estimator copy, MPC rollout, controller thread마다 별도 `dtDynData`
 
-- robot description 변경 시 절차: realtime 정지 → setup 복귀 → 새 spec checked compile → data resize → lookup/address cache 재구성 후 loop 재개
+- fixed-layout physical parameter 갱신 절차: loop 밖에서 spec 생성·edit·입력 validation 완료 → reader가 없는 control-safe boundary에서 `UpdateSpec(spec, model)` 호출 → `false`면 기존 model 유지 → 성공 시 필요한 kinematics/dynamics를 다시 계산한 뒤 reader 재개
+- 이 경로에서 구조 변경은 금지: body/joint/site/actuator 수, hierarchy, joint type/address, root·actuator mapping, name이 바뀌면 새 model을 만들어야 한다.
+- robot description의 구조 변경 절차: realtime 정지 → setup 복귀 → 새 spec checked compile → data resize → lookup/address cache 재구성 후 loop 재개
 - package-level neutral/default state initializer: NO-GO → 새 state는 controller/estimator contract에 따라 명시적으로 채움
 
 ## 8-4. LeoQuad 경계

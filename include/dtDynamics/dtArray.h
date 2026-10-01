@@ -3,7 +3,7 @@
  \brief     Lightweight package-owned dynamic array container.
  \author    Joonhee Jo, joonhee.jo@hyundai.com
  \date      2026. 07. 16
- \version   0.1.2
+ \version   0.1.3
  \copyright RoboticsLab ART All rights reserved.
 */
 
@@ -12,6 +12,7 @@
 
 #include <cstddef>
 #include <initializer_list>
+#include <new>
 #include <type_traits>
 #include <utility>
 
@@ -202,33 +203,33 @@ public:
         assign(detail::ToArraySize(size), value);
     }
 
-    /*! \brief Append one value, doubling capacity when the current allocation is full.
-        \details Takes value by copy so that pushing an element already owned by this array
-                 (e.g. push_back(arr[i])) copies it before reserve() can free the old storage
-                 that the argument would otherwise still be referencing. Trivially copyable T
-                 is assigned by copy since std::move on such types is a meaningless no-op. */
+    /*! \brief Append a by-value capture before growth can invalidate aliased storage.
+        \details Retains the public by-value signature. A noexcept move constructor reconstructs
+                 the unused allocated slot; otherwise copy assignment or noexcept move assignment
+                 provides the destination transfer. */
     void push_back(T value)
     {
         if (m_size == m_capacity)
         {
             reserve(m_capacity == 0 ? 1 : 2 * m_capacity);
         }
-        if constexpr (std::is_trivially_copyable<T>::value)
+        if constexpr (std::is_nothrow_move_constructible<T>::value)
         {
-            /* polyspace<DEFECT:FREED_PTR:Not a defect:Justify with annotations> value is a
-             * by-value copy taken before reserve() can free/replace m_data, so m_data is a
-             * live pointer here; this is a path-sensitivity artifact, not dependent on
-             * input values. */
-            m_data[m_size++] = value;
+            m_data[m_size].~T();
+            ::new (static_cast<void *>(m_data + m_size)) T(std::move(value));
+        }
+        else if constexpr (std::is_copy_assignable<T>::value)
+        {
+            m_data[m_size] = value;
         }
         else
         {
-            /* polyspace<DEFECT:STD_MOVE_UNMOVABLE_TYPE:Not a defect:Justify with annotations>
-             * This branch is compiled only when T is not trivially copyable (see the
-             * if-constexpr guard above); Polyspace flags it at the template-source level
-             * without honoring that per-instantiation discrimination. */
-            m_data[m_size++] = std::move(value);
+            static_assert(std::is_nothrow_move_assignable<T>::value,
+                          "dtArray append requires a noexcept move constructor, copy assignment, "
+                          "or noexcept move assignment");
+            m_data[m_size] = std::move(value);
         }
+        ++m_size;
     }
 
     /*! \brief Return true when size() is zero. */

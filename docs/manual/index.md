@@ -5,7 +5,7 @@ Author: Joonhee Jo
 - 이 manual: generated API 목록보다 먼저 읽는 conceptual contract
 - 다루는 순서: model/data lifecycle → coordinate/frame → setup/realtime 경계 → validation scope → 각 함수 signature 연결
 
-현재 package identity: **0.1.2**
+현재 package identity: **0.1.3**
 
 ## Markdown 문서 검증
 
@@ -44,4 +44,4 @@ python3 tools/validate_docs.py
 - model guide: `docs/guides/model_guide/`
 - usage/migration guide: `docs/guides/usage_guide/`
 - benchmark evidence: [상세 benchmark report](../benchmark-results.md)
-- release note: `docs/release-notes/v0.1.2.md`
+- release note: `docs/release-notes/v0.1.3.md`

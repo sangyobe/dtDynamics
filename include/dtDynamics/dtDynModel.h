@@ -3,7 +3,7 @@
  \brief     Compiled native dtDynamics model.
  \author    Joonhee Jo, joonhee.jo@hyundai.com
  \date      2026. 07. 16
- \version   0.1.2
+ \version   0.1.3
  \copyright RoboticsLab ART All rights reserved.
 */
 
@@ -71,6 +71,7 @@ public:
 
     dtArray<dtDynIndex> jnt_type;    //!< dtDynJointType values (njnt).
     dtArray<dtDynIndex> jnt_bodyid;  //!< Owning body id for each joint (njnt).
+    dtArray<dtDynIndex> jnt_specid;  //!< Source dtDynSpec joint id in compiled-joint order (njnt).
     dtArray<dtDynIndex> jnt_qposadr; //!< First qpos address for each joint (njnt).
     dtArray<dtDynIndex> jnt_dofadr;  //!< First qvel/DOF address for each joint (njnt).
     dtArray<dtDynIndex> jnt_limited; //!< Binary joint-limit flags (njnt).
