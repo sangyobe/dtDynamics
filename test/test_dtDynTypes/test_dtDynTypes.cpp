@@ -3565,6 +3565,47 @@ void TestDtDynMathHelpersAreReusable()
     assert(transposed(5, 5) == 1.0);
 }
 
+void TestQuatToMatPreservesQuarterTurn()
+{
+    dt::Math::Vector3<dtDynReal> axis;
+    axis.SetZero();
+    axis(2) = 1.0;
+    const dt::Math::Vector4<dtDynReal> quarterTurn =
+        math::AxisAngleQuat(axis, 0.5 * 3.14159265358979323846);
+    const dt::Math::Matrix3<dtDynReal> matrix = math::QuatToMat(quarterTurn);
+
+    assert(std::fabs(matrix(0, 0)) < 1.0e-12);
+    assert(std::fabs(matrix(0, 1) + 1.0) < 1.0e-12);
+    assert(std::fabs(matrix(1, 0) - 1.0) < 1.0e-12);
+    assert(std::fabs(matrix(1, 1)) < 1.0e-12);
+    assert(std::fabs(matrix(2, 2) - 1.0) < 1.0e-12);
+}
+
+void TestSpatialInertiaAtWorldOriginUsesParallelAxisTheorem()
+{
+    dt::Math::Vector3<dtDynReal> com;
+    com(0) = 1.0;
+    com(1) = 2.0;
+    com(2) = 3.0;
+    dt::Math::Matrix3<dtDynReal> rotationalInertia;
+    rotationalInertia.SetZero();
+    rotationalInertia(0, 0) = 4.0;
+    rotationalInertia(1, 1) = 5.0;
+    rotationalInertia(2, 2) = 6.0;
+
+    const dt::Math::Matrix<6, 6, dtDynReal> inertia =
+        math::SpatialInertiaAtWorldOrigin(2.0, com, rotationalInertia);
+
+    assert(inertia(0, 0) == 30.0);
+    assert(inertia(1, 1) == 25.0);
+    assert(inertia(2, 2) == 16.0);
+    assert(inertia(0, 1) == -4.0);
+    assert(inertia(1, 2) == -12.0);
+    assert(inertia(3, 3) == 2.0);
+    assert(inertia(0, 4) == -6.0);
+    assert(inertia(3, 1) == 6.0);
+}
+
 void TestCompileSpecUsesNativeIndexLayout()
 {
     dtDynSpec spec;
@@ -4858,6 +4899,8 @@ int main()
     TestDataCompatibilityRejectsLateWorkspaceMismatch();
     TestDataResizeSupportsFullyFixedZeroDofModel();
     TestDtDynMathHelpersAreReusable();
+    TestQuatToMatPreservesQuarterTurn();
+    TestSpatialInertiaAtWorldOriginUsesParallelAxisTheorem();
     TestCompileSpecUsesNativeIndexLayout();
     TestCompileSpecSupportsMultipleMovableRoots();
     TestCompileSpecSupportsFloatingBaseQuadrupedTree();

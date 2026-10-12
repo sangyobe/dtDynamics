@@ -115,15 +115,15 @@ dt::Math::Matrix3<dtDynReal> QuatToMat(const dt::Math::Vector4<dtDynReal> &quat)
     const dtDynReal z = q(3);
 
     dt::Math::Matrix3<dtDynReal> out;
-    out(0, 0) = 1.0 - 2.0 * (y * y + z * z);
-    out(0, 1) = 2.0 * (x * y - z * w);
-    out(0, 2) = 2.0 * (x * z + y * w);
-    out(1, 0) = 2.0 * (x * y + z * w);
-    out(1, 1) = 1.0 - 2.0 * (x * x + z * z);
-    out(1, 2) = 2.0 * (y * z - x * w);
-    out(2, 0) = 2.0 * (x * z - y * w);
-    out(2, 1) = 2.0 * (y * z + x * w);
-    out(2, 2) = 1.0 - 2.0 * (x * x + y * y);
+    out(0, 0) = (1.0 - (2.0 * ((y * y) + (z * z))));
+    out(0, 1) = (2.0 * ((x * y) - (z * w)));
+    out(0, 2) = (2.0 * ((x * z) + (y * w)));
+    out(1, 0) = (2.0 * ((x * y) + (z * w)));
+    out(1, 1) = (1.0 - (2.0 * ((x * x) + (z * z))));
+    out(1, 2) = (2.0 * ((y * z) - (x * w)));
+    out(2, 0) = (2.0 * ((x * z) - (y * w)));
+    out(2, 1) = (2.0 * ((y * z) + (x * w)));
+    out(2, 2) = (1.0 - (2.0 * ((x * x) + (y * y))));
     return out;
 }
 
@@ -397,7 +397,7 @@ dt::Math::Matrix<6, 6, dtDynReal> SpatialInertiaAtWorldOrigin(const dtDynReal ma
     const dtDynReal c0 = com(0);
     const dtDynReal c1 = com(1);
     const dtDynReal c2 = com(2);
-    const dtDynReal c2sum = c0 * c0 + c1 * c1 + c2 * c2;
+    const dtDynReal c2sum = (((c0 * c0) + (c1 * c1)) + (c2 * c2));
 
     for (dtDynIndex row = 0; row < 3; ++row)
     {
@@ -408,8 +408,8 @@ dt::Math::Matrix<6, 6, dtDynReal> SpatialInertiaAtWorldOrigin(const dtDynReal ma
             {
                 out(row, col) += mass * c2sum;
             }
-            out(row, col) -= mass * com(row) * com(col);
-            out(row + 3, col + 3) = row == col ? mass : 0.0;
+            out(row, col) -= ((mass * com(row)) * com(col));
+            out(row + 3, col + 3) = ((row == col) ? mass : 0.0);
         }
     }
 
