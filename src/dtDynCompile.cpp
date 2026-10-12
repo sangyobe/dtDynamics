@@ -76,14 +76,14 @@ dtDynIndex GetJointSpecId(const dtDynBodySpec &body, const dtDynIndex jointIndex
     return body.joints[static_cast<std::size_t>(jointIndex)];
 }
 
-bool HasArraySize(const std::size_t actual, const dtDynIndex expected) noexcept
+constexpr bool HasArraySize(const std::size_t actual, const dtDynIndex expected) noexcept
 {
-    return expected >= 0 && actual == static_cast<std::size_t>(expected);
+    return (expected >= 0) && (actual == static_cast<std::size_t>(expected));
 }
 
 bool HasDenseSize(const dtDynDenseVector &value, const dtDynIndex expected) noexcept
 {
-    return expected >= 0 && value.GetDim() == expected;
+    return (expected >= 0) && (static_cast<dtDynIndex>(value.GetDim()) == expected);
 }
 
 } // namespace
