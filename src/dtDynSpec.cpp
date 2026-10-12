@@ -1152,23 +1152,52 @@ dtDynSpec DecodeXmlImpl(const std::string &xml, const std::string &sourcePath)
             const AttributeMap declarationAttrs =
                 ParseAttributes(declaration, tagOffset + 1, sourcePath);
             const auto version = declarationAttrs.find("version");
-            if (version == declarationAttrs.end() ||
-                (version->second.text != "1.0" && version->second.text != "1.1"))
+            bool invalidVersion = version == declarationAttrs.end();
+            if (!invalidVersion)
+            {
+                if (version->second.text != "1.0")
+                {
+                    invalidVersion = version->second.text != "1.1";
+                }
+            }
+            if (invalidVersion)
             {
                 throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath, begin,
                                     "XML declaration requires version 1.0 or 1.1");
             }
             for (const auto &entry : declarationAttrs)
             {
-                if (entry.first != "version" && entry.first != "encoding" &&
-                    entry.first != "standalone")
+                bool unsupportedDeclarationAttribute = entry.first != "version";
+                if (unsupportedDeclarationAttribute)
+                {
+                    if (entry.first != "encoding")
+                    {
+                        unsupportedDeclarationAttribute = entry.first != "standalone";
+                    }
+                    else
+                    {
+                        unsupportedDeclarationAttribute = false;
+                    }
+                }
+                if (unsupportedDeclarationAttribute)
                 {
                     throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath,
                                         entry.second.offset,
                                         "unsupported XML declaration attribute");
                 }
-                if (entry.first == "standalone" && entry.second.text != "yes" &&
-                    entry.second.text != "no")
+                bool invalidStandalone = entry.first == "standalone";
+                if (invalidStandalone)
+                {
+                    if (entry.second.text != "yes")
+                    {
+                        invalidStandalone = entry.second.text != "no";
+                    }
+                    else
+                    {
+                        invalidStandalone = false;
+                    }
+                }
+                if (invalidStandalone)
                 {
                     throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath,
                                         entry.second.offset,

@@ -3223,6 +3223,57 @@ void TestSpecXmlRejectsMalformedDeclarationGrammar()
     expectMalformed(unquoted, unquoted.find("version"));
 }
 
+void TestSpecXmlPreservesDeclarationVersionAndAttributeGrammar()
+{
+    const dtDynSpec version10 = dtDynSpec::DecodeXml(
+        "<?xml version=\"1.0\" encoding=\"utf-8\" standalone=\"yes\"?><mujoco/>");
+    assert(version10.Bodies().size() == 1);
+    const dtDynSpec version11 = dtDynSpec::DecodeXml(
+        "<?xml version=\"1.1\" standalone=\"no\" encoding=\"utf-8\"?><mujoco/>");
+    assert(version11.Bodies().size() == 1);
+
+    const std::string unsupportedAttribute = "<?xml version=\"1.0\" invalid=\"x\"?><mujoco/>";
+    bool unsupportedRejected = false;
+    try
+    {
+        (void)dtDynSpec::DecodeXml(unsupportedAttribute);
+    }
+    catch (const dtDynXmlError &error)
+    {
+        unsupportedRejected = error.Code() == dtDynXmlErrorCode::MalformedSyntax;
+        if (unsupportedRejected)
+        {
+            unsupportedRejected = error.Offset() == unsupportedAttribute.rfind("x");
+        }
+        if (unsupportedRejected)
+        {
+            unsupportedRejected = std::string(error.what()).find("unsupported XML declaration attribute") != std::string::npos;
+        }
+    }
+    assert(unsupportedRejected);
+
+    const std::string invalidStandalone =
+        "<?xml version=\"1.0\" standalone=\"maybe\"?><mujoco/>";
+    bool standaloneRejected = false;
+    try
+    {
+        (void)dtDynSpec::DecodeXml(invalidStandalone);
+    }
+    catch (const dtDynXmlError &error)
+    {
+        standaloneRejected = error.Code() == dtDynXmlErrorCode::MalformedSyntax;
+        if (standaloneRejected)
+        {
+            standaloneRejected = error.Offset() == invalidStandalone.find("maybe");
+        }
+        if (standaloneRejected)
+        {
+            standaloneRejected = std::string(error.what()).find("invalid XML standalone declaration value") != std::string::npos;
+        }
+    }
+    assert(standaloneRejected);
+}
+
 void TestSpecXmlRejectsDeclarationAfterLeadingWhitespace()
 {
     const std::string xml = "\n<?xml version=\"1.0\"?><mujoco/>";
@@ -5761,6 +5812,7 @@ int main()
     TestSpecXmlRejectsDuplicateDeclaration();
     TestSpecXmlRejectsRawLessThanInAttributeValue();
     TestSpecXmlRejectsMalformedDeclarationGrammar();
+    TestSpecXmlPreservesDeclarationVersionAndAttributeGrammar();
     TestSpecXmlRejectsDeclarationAfterLeadingWhitespace();
     TestSpecXmlDecodeEncodeRoundTrip();
     TestSpecXmlLoadsFromFile();
