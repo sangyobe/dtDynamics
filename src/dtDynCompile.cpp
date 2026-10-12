@@ -307,10 +307,10 @@ bool UpdateSpec(const dtDynSpec &spec, dtDynModel &model) noexcept
         const dtDynIndex expectedRootSlot =
             parent == 0 ? expectedRootIndex : model.body_rootidx[static_cast<std::size_t>(parent)];
         const dtDynIndex expectedWeld = model.body_jntnum[bodyIndex] > 0
-                                           ? bodyId
-                                           : (parent > 0
-                                                  ? model.body_weldid[static_cast<std::size_t>(parent)]
-                                                  : 0);
+                                            ? bodyId
+                                            : (parent > 0
+                                                   ? model.body_weldid[static_cast<std::size_t>(parent)]
+                                                   : 0);
         if (model.body_rootid[bodyIndex] != expectedRoot ||
             model.body_rootidx[bodyIndex] != expectedRootSlot ||
             model.body_weldid[bodyIndex] != expectedWeld)
@@ -397,8 +397,8 @@ bool UpdateSpec(const dtDynSpec &spec, dtDynModel &model) noexcept
         model.body_mat[bodyIndex] = math::QuatToMat(model.body_quat[bodyIndex]);
         model.body_ipos[bodyIndex] = body.inertial.mass == 0.0 ? body.pos : body.inertial.pos;
         model.body_iquat[bodyIndex] = body.inertial.mass == 0.0
-                                           ? model.body_quat[bodyIndex]
-                                           : math::NormalizeOrIdentity(body.inertial.quat);
+                                          ? model.body_quat[bodyIndex]
+                                          : math::NormalizeOrIdentity(body.inertial.quat);
         model.body_imat[bodyIndex] = math::QuatToMat(model.body_iquat[bodyIndex]);
         model.body_inertia[bodyIndex] = body.inertial.inertia;
         model.body_mass(bodyId) = body.inertial.mass;
