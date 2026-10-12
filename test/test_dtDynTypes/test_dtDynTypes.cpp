@@ -3166,6 +3166,22 @@ void TestSpecXmlRejectsMalformedSelfClosingSuffix()
     assert(rejected);
 }
 
+void TestSpecXmlPreservesSelfClosingTagDetection()
+{
+    const dtDynSpec rootSelfClosing = dtDynSpec::DecodeXml("<mujoco/>");
+    assert(rootSelfClosing.Bodies().size() == 1);
+
+    const dtDynSpec bodySelfClosing = dtDynSpec::DecodeXml(
+        "<mujoco><worldbody><body name=\"base\"/></worldbody></mujoco>");
+    assert(bodySelfClosing.Bodies().size() == 2);
+    assert(bodySelfClosing.Bodies()[1].name == "base");
+
+    const dtDynSpec explicitClosing = dtDynSpec::DecodeXml(
+        "<mujoco><worldbody><body name=\"base\"></body></worldbody></mujoco>");
+    assert(explicitClosing.Bodies().size() == 2);
+    assert(explicitClosing.Bodies()[1].name == "base");
+}
+
 void TestSpecXmlRejectsDuplicateDeclaration()
 {
     const std::string xml = "<?xml version=\"1.0\"?><?xml version=\"1.0\"?><mujoco/>";
@@ -5809,6 +5825,7 @@ int main()
     TestSpecXmlRunsSetupValidationAfterParsing();
     TestSpecXmlRejectsClosingTagAttributes();
     TestSpecXmlRejectsMalformedSelfClosingSuffix();
+    TestSpecXmlPreservesSelfClosingTagDetection();
     TestSpecXmlRejectsDuplicateDeclaration();
     TestSpecXmlRejectsRawLessThanInAttributeValue();
     TestSpecXmlRejectsMalformedDeclarationGrammar();

@@ -1233,10 +1233,13 @@ dtDynSpec DecodeXmlImpl(const std::string &xml, const std::string &sourcePath)
         }
 
         bool selfClosing = false;
-        if (!tag.empty() && tag.back() == '/')
+        if (!tag.empty())
         {
-            selfClosing = true;
-            tag = Trim(tag.substr(0, tag.size() - 1));
+            if (tag.back() == '/')
+            {
+                selfClosing = true;
+                tag = Trim(tag.substr(0, tag.size() - 1));
+            }
         }
 
         const std::string name = TagName(tag);
