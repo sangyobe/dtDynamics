@@ -836,6 +836,30 @@ void TestSpecValidationPreservesOrderedPhysicalAndNameFailures()
                                 dtDynObjectType::Body, massBody,
                                 "body[1] has a negative mass or physically invalid principal inertia");
 
+    dtDynSpec invalidPrincipalInertia;
+    const dtDynIndex inertiaBody = invalidPrincipalInertia.AddBody("invalid_inertia_body", 0);
+    invalidPrincipalInertia.EditBody(inertiaBody, [&](dtDynBodySpec &draft)
+                                     {
+                                        draft.inertial.mass = 1.0;
+                                        draft.inertial.inertia(0) = 3.0;
+                                        draft.inertial.inertia(1) = 1.0;
+                                        draft.inertial.inertia(2) = 1.0; });
+    AssertSpecValidationFailure(invalidPrincipalInertia, dtDynValidationCode::InvalidReference,
+                                dtDynObjectType::Body, inertiaBody,
+                                "body[1] has a negative mass or physically invalid principal inertia");
+
+    dtDynSpec boundaryPrincipalInertia;
+    const dtDynIndex boundaryBody = boundaryPrincipalInertia.AddBody("boundary_inertia_body", 0);
+    boundaryPrincipalInertia.EditBody(boundaryBody, [&](dtDynBodySpec &draft)
+                                      {
+                                         draft.inertial.mass = 1.0;
+                                         draft.inertial.inertia(0) = 2.0;
+                                         draft.inertial.inertia(1) = 1.0;
+                                         draft.inertial.inertia(2) = 1.0; });
+    dtDynValidationError boundaryError;
+    assert(ValidateSpec(boundaryPrincipalInertia, &boundaryError));
+    assert(boundaryError.code == dtDynValidationCode::None);
+
     dtDynSpec invalidQuaternion;
     const dtDynIndex quaternionBody = invalidQuaternion.AddBody("invalid_quaternion_body", 0);
     invalidQuaternion.EditBody(quaternionBody, [&](dtDynBodySpec &draft)

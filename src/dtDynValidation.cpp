@@ -273,9 +273,28 @@ bool IsPhysicalInertia(const dt::Math::Vector3<dtDynReal> &value)
     {
         return false;
     }
-    return (value.At(0) <= value.At(1) + value.At(2) || NearlyEqual(value.At(0), value.At(1) + value.At(2))) &&
-           (value.At(1) <= value.At(0) + value.At(2) || NearlyEqual(value.At(1), value.At(0) + value.At(2))) &&
-           (value.At(2) <= value.At(0) + value.At(1) || NearlyEqual(value.At(2), value.At(0) + value.At(1)));
+    if (!(value.At(0) <= value.At(1) + value.At(2)))
+    {
+        if (!NearlyEqual(value.At(0), value.At(1) + value.At(2)))
+        {
+            return false;
+        }
+    }
+    if (!(value.At(1) <= value.At(0) + value.At(2)))
+    {
+        if (!NearlyEqual(value.At(1), value.At(0) + value.At(2)))
+        {
+            return false;
+        }
+    }
+    if (!(value.At(2) <= value.At(0) + value.At(1)))
+    {
+        if (!NearlyEqual(value.At(2), value.At(0) + value.At(1)))
+        {
+            return false;
+        }
+    }
+    return true;
 }
 
 bool IsProperRotation(const dt::Math::Matrix3<dtDynReal> &value)
