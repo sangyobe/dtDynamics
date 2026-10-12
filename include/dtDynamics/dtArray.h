@@ -204,13 +204,13 @@ public:
     }
 
     /*! \brief Append a by-value capture before growth can invalidate aliased storage.
-        \details Retains the public by-value signature, then forwards the captured value into
-                 a private rvalue-reference implementation so the ownership transfer is explicit.
-                 A noexcept move constructor reconstructs the unused allocated slot; otherwise
-                 copy assignment or noexcept move assignment provides the destination transfer. */
+        \details Retains the public by-value signature, then hands the captured value to a
+                 private mutable-reference implementation. A noexcept move constructor
+                 reconstructs the unused allocated slot; otherwise copy assignment or noexcept
+                 move assignment provides the destination transfer. */
     void push_back(T value)
     {
-        AppendCaptured(std::move(value));
+        AppendCaptured(value);
     }
 
     /*! \brief Return true when size() is zero. */
@@ -247,7 +247,7 @@ private:
     }
 
     /*! \brief Complete append after push_back has captured any potentially aliased input. */
-    void AppendCaptured(T &&value)
+    void AppendCaptured(T &value)
     {
         if (m_size == m_capacity)
         {
