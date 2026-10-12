@@ -103,21 +103,35 @@ if [[ -n "${PSLOG}" ]] && grep -q "License error\|Licensing Error" "${PSLOG}"; t
 fi
 
 # 요약 출력 및 종료 코드 결정
+# CSV 컬럼: ID(1) Family(2) Group(3) Color(4) New(5) Check(6) Information(7)
+#            Class(8) Function(9) File(10) Status(11) Severity(12) ...
+# Color=Red 는 분석 결과이며 JUSTIFIED 후에도 변하지 않는다.
+# Status 로 검토 완료 여부를 판단해야 한다.
+REVIEWED_STATUSES='Justified|No action planned|Not a defect'
+
 POLYSPACE_EXIT=0
 if [[ -f "${REPORT}" ]]; then
-    NO_COMPILE="$(grep -c "File does not compile" "${REPORT}" || true)"
-    RED="$(grep $'\tRed\t' "${REPORT}" | grep -cv "File does not compile" || true)"
+    NO_COMPILE="$(awk -F'\t' 'NR>1 && $6=="File does not compile" {c++} END{print c+0}' "${REPORT}" || echo 0)"
+    JUSTIFIED="$(awk -F'\t' -v pat="${REVIEWED_STATUSES}" \
+        'NR>1 && $4=="Red" && $11 ~ pat && $6!="File does not compile" {c++} END{print c+0}' \
+        "${REPORT}" || echo 0)"
+    RED="$(awk -F'\t' -v pat="${REVIEWED_STATUSES}" \
+        'NR>1 && $4=="Red" && $11 !~ pat && $6!="File does not compile" {c++} END{print c+0}' \
+        "${REPORT}" || echo 0)"
 
     echo "=============================="
     echo "Polyspace 결과 요약"
-    echo "  Red (실제 결함): ${RED}개  (컴파일 불가 ${NO_COMPILE}개 제외)"
+    echo "  Red (미검토 결함): ${RED}개"
+    echo "  Red (검토 완료):   ${JUSTIFIED}개  (Justified / No action planned / Not a defect)"
+    echo "  컴파일 불가:       ${NO_COMPILE}개 제외"
     echo "  PDF: ${REPORT_ROOT}/polyspace-report.pdf"
     echo "=============================="
 
     if [[ "${RED}" -gt 0 ]]; then
-        grep $'\tRed\t' "${REPORT}" \
-            | grep -v "File does not compile" \
-            | awk -F'\t' '{printf "  %-50s | %s\n", $6, $9}'
+        awk -F'\t' -v pat="${REVIEWED_STATUSES}" \
+            'NR>1 && $4=="Red" && $11 !~ pat && $6!="File does not compile" \
+             {printf "  %-50s | %s\n", $6, $9}' \
+            "${REPORT}"
         POLYSPACE_EXIT=1
     fi
 else
