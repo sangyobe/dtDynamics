@@ -209,6 +209,41 @@ struct CopyConstructibleMoveAssignableOnly
 static_assert(!std::is_copy_assignable<CopyConstructibleMoveAssignableOnly>::value);
 static_assert(std::is_nothrow_move_assignable<CopyConstructibleMoveAssignableOnly>::value);
 
+struct OverloadedCopyAssignment
+{
+    enum class Selection
+    {
+        None,
+        Mutable,
+        Const,
+    };
+
+    int value = 0;
+    Selection selection = Selection::None;
+
+    OverloadedCopyAssignment() = default;
+    OverloadedCopyAssignment(const OverloadedCopyAssignment &other)
+        : value(other.value)
+    {
+    }
+
+    OverloadedCopyAssignment &operator=(OverloadedCopyAssignment &other)
+    {
+        value = other.value;
+        selection = Selection::Mutable;
+        return *this;
+    }
+
+    OverloadedCopyAssignment &operator=(const OverloadedCopyAssignment &other)
+    {
+        value = other.value;
+        selection = Selection::Const;
+        return *this;
+    }
+};
+
+static_assert(std::is_copy_assignable<OverloadedCopyAssignment>::value);
+
 } // namespace
 
 void *operator new(const std::size_t size)
@@ -1035,6 +1070,18 @@ void TestDtArrayPushBackSupportsCopyConstructibleMoveAssignableLvalue()
     assert(source.value == 11);
 }
 
+void TestDtArrayPushBackPreservesMutableCopyAssignmentSelection()
+{
+    OverloadedCopyAssignment source;
+    source.value = 13;
+    dtArray<OverloadedCopyAssignment> values;
+    values.push_back(source);
+
+    assert(values.size() == 1);
+    assert(values[0].value == 13);
+    assert(values[0].selection == OverloadedCopyAssignment::Selection::Mutable);
+}
+
 void TestDtArrayPushBackSupportsMoveOnlyElements()
 {
     dtArray<std::unique_ptr<int>> values;
@@ -1066,6 +1113,19 @@ void TestDtArrayPushBackPreservesAliasedLvalueOnGrowth()
     ThrowingTransfer::throwOnMove = false;
     ThrowingTransfer value(7);
     dtArray<ThrowingTransfer> values;
+    values.push_back(value);
+    values.push_back(values[0]);
+
+    assert(values.size() == 2);
+    assert(values[0].value == 7);
+    assert(values[1].value == 7);
+}
+
+void TestDtArrayPushBackPreservesCopyOnlyAliasedLvalueOnGrowth()
+{
+    CopyOnlyTrivialTransfer value;
+    value.value = 7;
+    dtArray<CopyOnlyTrivialTransfer> values;
     values.push_back(value);
     values.push_back(values[0]);
 
@@ -4666,9 +4726,11 @@ int main()
     TestDtArrayPushBackSupportsTriviallyCopyableRvalueWithoutMoveConstructionOrAssignment();
     TestDtArrayPushBackSupportsTriviallyCopyableMoveOnlyRvalue();
     TestDtArrayPushBackSupportsCopyConstructibleMoveAssignableLvalue();
+    TestDtArrayPushBackPreservesMutableCopyAssignmentSelection();
     TestDtArrayPushBackSupportsMoveOnlyElements();
     TestDtArrayPushBackPreservesSelfRvalueTransferSemantics();
     TestDtArrayPushBackPreservesAliasedLvalueOnGrowth();
+    TestDtArrayPushBackPreservesCopyOnlyAliasedLvalueOnGrowth();
     TestDtArrayReserveSupportsMoveOnlyElements();
     TestSpecWorldAndFixedBody();
     TestSpecEditorsCommitScopedCopies();
