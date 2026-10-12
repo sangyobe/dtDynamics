@@ -4790,6 +4790,15 @@ void SetRootHingeAxisForComProductRegression(dtDynJointSpec &draft)
     draft.axis(1) = 1.0;
 }
 
+void TestEffectiveRootCountPreservesFallback()
+{
+    dtDynModel model;
+    model.nroot = 0;
+    assert(utils::EffectiveRootCount(model) == 1);
+    model.nroot = 2;
+    assert(utils::EffectiveRootCount(model) == 2);
+}
+
 void TestCcrbaPreservesRootMassGuardedComProducts()
 {
     dtDynSpec spec;
@@ -5969,6 +5978,7 @@ int main()
     TestSpatialInertiaAtWorldOriginUsesParallelAxisTheorem();
     TestCompileSpecUsesNativeIndexLayout();
     TestCompileSpecSupportsMultipleMovableRoots();
+    TestEffectiveRootCountPreservesFallback();
     TestCcrbaPreservesRootMassGuardedComProducts();
     TestCompileSpecSupportsFloatingBaseQuadrupedTree();
     TestForwardKinematicsAndPointJacobianForFixedChain();

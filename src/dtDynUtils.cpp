@@ -18,7 +18,7 @@ namespace utils
 
 dtDynIndex EffectiveRootCount(const dtDynModel &model)
 {
-    return model.nroot > 0 ? model.nroot : 1;
+    return (model.nroot > 0) ? model.nroot : 1;
 }
 
 dtDynIndex RootIndex(const dtDynModel &model, const dtDynIndex bodyId)
