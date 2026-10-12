@@ -124,10 +124,47 @@ struct ElementFrame
 
 bool IsSupportedElement(const std::string &name)
 {
-    return name == "mujoco" || name == "compiler" || name == "option" ||
-           name == "worldbody" || name == "body" || name == "inertial" ||
-           name == "joint" || name == "freejoint" || name == "site" ||
-           name == "actuator" || name == "motor";
+    if (name == "mujoco")
+    {
+        return true;
+    }
+    if (name == "compiler")
+    {
+        return true;
+    }
+    if (name == "option")
+    {
+        return true;
+    }
+    if (name == "worldbody")
+    {
+        return true;
+    }
+    if (name == "body")
+    {
+        return true;
+    }
+    if (name == "inertial")
+    {
+        return true;
+    }
+    if (name == "joint")
+    {
+        return true;
+    }
+    if (name == "freejoint")
+    {
+        return true;
+    }
+    if (name == "site")
+    {
+        return true;
+    }
+    if (name == "actuator")
+    {
+        return true;
+    }
+    return name == "motor";
 }
 
 bool IsValidTagName(const std::string &name)
@@ -193,16 +230,43 @@ std::size_t FindTagEnd(const std::string &xml,
 
 bool HasSupportedElementParent(const std::string &name, const std::string &parent)
 {
-    if (name == "compiler" || name == "option" || name == "worldbody" ||
-        name == "actuator")
+    if (name == "compiler")
+    {
+        return parent == "mujoco";
+    }
+    if (name == "option")
+    {
+        return parent == "mujoco";
+    }
+    if (name == "worldbody")
+    {
+        return parent == "mujoco";
+    }
+    if (name == "actuator")
     {
         return parent == "mujoco";
     }
     if (name == "body")
     {
-        return parent == "worldbody" || parent == "body";
+        if (parent == "worldbody")
+        {
+            return true;
+        }
+        return parent == "body";
     }
-    if (name == "inertial" || name == "joint" || name == "freejoint" || name == "site")
+    if (name == "inertial")
+    {
+        return parent == "body";
+    }
+    if (name == "joint")
+    {
+        return parent == "body";
+    }
+    if (name == "freejoint")
+    {
+        return parent == "body";
+    }
+    if (name == "site")
     {
         return parent == "body";
     }

@@ -2833,6 +2833,32 @@ void TestSpecXmlRejectsSupportedElementInWrongContext()
     assert(rejected);
 }
 
+void TestSpecXmlAcceptsEverySupportedElementInItsDocumentedParent()
+{
+    const std::string xml =
+        "<mujoco><compiler angle=\"radian\"/><option/><worldbody>"
+        "<body name=\"base\"><body name=\"hinged\">"
+        "<inertial mass=\"1\" diaginertia=\"1 1 1\"/>"
+        "<joint name=\"hinge\"/><site name=\"tool\"/>"
+        "</body><body name=\"floating\"><freejoint name=\"free\"/>"
+        "</body></body></worldbody>"
+        "<actuator><motor name=\"drive\" joint=\"hinge\"/></actuator>"
+        "</mujoco>";
+
+    const dtDynSpec spec = dtDynSpec::DecodeXml(xml);
+    assert(spec.Bodies().size() == 4);
+    assert(spec.Joints().size() == 2);
+    assert(spec.Sites().size() == 1);
+    assert(spec.Actuators().size() == 1);
+    assert(spec.BodyId("base") >= 0);
+    assert(spec.BodyId("hinged") >= 0);
+    assert(spec.BodyId("floating") >= 0);
+    assert(spec.JointId("hinge") >= 0);
+    assert(spec.JointId("free") >= 0);
+    assert(spec.SiteId("tool") >= 0);
+    assert(spec.ActuatorId("drive") >= 0);
+}
+
 void TestSpecXmlScannerIsQuoteAwareAndFailClosed()
 {
     const std::string valid =
@@ -5510,6 +5536,7 @@ int main()
     TestSpecXmlRejectsInvalidBooleanValue();
     TestSpecXmlRequiresSingleRootElement();
     TestSpecXmlRejectsSupportedElementInWrongContext();
+    TestSpecXmlAcceptsEverySupportedElementInItsDocumentedParent();
     TestSpecXmlScannerIsQuoteAwareAndFailClosed();
     TestSpecXmlRunsSetupValidationAfterParsing();
     TestSpecXmlRejectsClosingTagAttributes();
