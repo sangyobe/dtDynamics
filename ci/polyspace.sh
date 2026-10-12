@@ -39,9 +39,19 @@ echo "Access run label     : ${RUN_LABEL}"
 echo "=================================================="
 
 # 바이너리/라이선스 서버 연결을 초반에 확인
-polyspace-bug-finder-server -version
+polyspace-bug-finder-server -version || {
+    echo "ERROR: Polyspace binary/license-server preflight failed"
+    exit 1
+}
 
 mkdir -p "${REPORT_ROOT}" "${POLYSPACE_BUILD_DIR}"
+
+# Cached configure options can target an obsolete compilation database. Remove them
+# before configuration and require this invocation to create a nonempty replacement.
+rm -f "${CONFIG_OPTS}" || {
+    echo "ERROR: cannot clear prior Polyspace configure options"
+    exit 1
+}
 
 # cache(policy: pull-push, key가 브랜치 단위)가 직전 실행의 -results-dir를 그대로 복원해오므로,
 # 여기서 비우지 않으면 "풀스캔"이어도 이전 실행 결과가 섞인 상태로 재검증되어 실행마다 결함 집합이 달라진다
@@ -58,6 +68,10 @@ polyspace-configure \
     -allow-overwrite \
     -prog "${PROG}" || {
     echo "ERROR: Polyspace configuration failed"
+    exit 1
+}
+test -s "${CONFIG_OPTS}" || {
+    echo "ERROR: Polyspace configuration did not produce fresh options"
     exit 1
 }
 

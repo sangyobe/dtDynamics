@@ -60,6 +60,9 @@ target_link_libraries(my_controller PRIVATE dt::Dynamics)
 - 전체 검증 의존성 준비
 
 ```bash
+# Pinocchio archive는 headers·library·CMake config와 그 config에 필요한 CMake dependency closure를 포함한 pinocchio-3.9.0/ prefix 및 SHA-256을 함께 지정한다. 기존 prefix도 같은 archive와 SHA-256으로 provenance를 확인한다.
+DTDYNAMICS_PINOCCHIO_ARCHIVE=/path/to/pinocchio-3.9.0.tar.gz \
+DTDYNAMICS_PINOCCHIO_SHA256=REPLACE_WITH_64_HEX_SHA256 \
 tools/install_validation_deps.sh --all
 cmake --preset validation
 cmake --build --preset validation -- -j2
@@ -88,8 +91,9 @@ tools/audit_release_readiness.sh
 - 채택된 raw run과 게시 artifact의 provenance: byte identity로 확인
 - 새 실행 확인 항목: schema, fixture/state/scope coverage, status, percentile ordering
 - GitLab Polyspace gate: production library compile database만 분석하고, `polyspace/checkers.xml`에 고정한 Bug Finder 237개와 MISRA C++:2023 179개 rule을 적용. exact profile은 `tools/test_polyspace_checker_profile.py`가 검증
-- static-analysis 실행 경로: `ci/polyspace.sh`가 cache 결과와 기존 report를 제거한 뒤 새 canonical `result_list.txt`만 `tools/polyspace_result_gate.py`에 전달하고, parser exit code를 GitLab job exit로 사용. Polyspace Access 업로드는 release pass/fail을 바꾸지 않음
+- static-analysis 실행 경로: `ci/polyspace.sh`가 cache 결과, 기존 configure options, 기존 report를 제거한 뒤 현재 compile database에서 nonempty configure options를 새로 만들고, 새 canonical `result_list.txt`만 `tools/polyspace_result_gate.py`에 전달한다. parser exit code를 GitLab job exit로 사용하며 Polyspace Access 업로드는 release pass/fail을 바꾸지 않음
 - canonical schema: TSV header는 `ID`부터 `Col`까지 정해진 16개 column을 같은 순서로 모두 포함해야 함. 축약·순서 변경·추가 column은 raw-defect-zero 증거가 아님
+- TSV field boundary: 필드 경계는 literal TAB만 사용한다. 큰따옴표(`"`)는 일반 데이터로 취급하며 따옴표 처리나 행 결합에 사용하지 않는다. 따라서 큰따옴표로 감싼 TAB도 추가 field로 거부한다.
 - static-analysis 통과 기준: canonical `result_list.txt`의 모든 row가 `Color=Green` 및 blank/`Unreviewed` status. `Justified`를 포함한 reviewed row, non-Green, malformed export, compile failure는 모두 실패
 
 ## Realtime 경계

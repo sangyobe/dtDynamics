@@ -67,8 +67,9 @@ Author: Joonhee Jo
 - authoritative evidence: GitLab `Polyspace` job artifact의 canonical `result_list.txt`
 - analysis scope: production `dtDynamics` library의 compile database. test, benchmark, MuJoCo/Pinocchio reference target은 이 static-analysis scope에 포함하지 않음
 - checker profile: `polyspace/checkers.xml`에 고정한 Bug Finder 237개와 MISRA C++:2023 179개 rule. full profile은 `tools/test_polyspace_checker_profile.py`가 검증
-- execution: `ci/polyspace.sh`는 cache 결과와 기존 report를 제거하고, 새 canonical `result_list.txt`만 `tools/polyspace_result_gate.py`에 전달한다. parser exit code가 GitLab job exit를 결정하며 Access upload는 이 판정을 바꾸지 않는다.
+- execution: `ci/polyspace.sh`는 cache 결과, 기존 configure options, 기존 report를 제거하고 현재 compile database에서 nonempty configure options를 새로 만든다. 이후 새 canonical `result_list.txt`만 `tools/polyspace_result_gate.py`에 전달한다. parser exit code가 GitLab job exit를 결정하며 Access upload는 이 판정을 바꾸지 않는다.
 - canonical schema: TSV header는 `ID`부터 `Col`까지 정해진 16개 column이 같은 순서로 있어야 한다. 축약·순서 변경·추가 column은 거부한다.
+- TSV field boundary: 필드 경계는 literal TAB만 사용한다. 큰따옴표(`"`)는 일반 데이터로 취급하며 따옴표 처리나 행 결합에 사용하지 않는다. 따라서 큰따옴표로 감싼 TAB도 추가 field로 거부한다.
 - acceptance: 모든 row가 `Color=Green` 및 blank/`Unreviewed` status여야 한다. reviewed `Justified` row도 raw defect가 남은 것이므로 허용하지 않는다.
 - fail-closed: non-Green, reviewed status, malformed TSV, missing field, `File does not compile`은 모두 job failure
 

@@ -32,10 +32,12 @@ def run_job(
     analyzer_exit: int = 0,
     exporter_exit: int = 9,
     configure_exit: int = 0,
+    configure_writes_options: bool = True,
     cleanup_exit: int = 0,
     report_content: str = HEADER + GREEN_ROW,
     exporter_writes_report: bool = True,
     report_generator_exit: int = 0,
+    server_version_exit: int = 0,
 ) -> subprocess.CompletedProcess[str]:
     temporary = tempfile.TemporaryDirectory()
     root = Path(temporary.name)
@@ -64,7 +66,11 @@ def run_job(
     if cleanup_exit:
         write_executable(
             root / "bin" / "rm",
-            "#!/usr/bin/env sh\nexit \"${FAKE_CLEANUP_EXIT}\"\n",
+            "#!/usr/bin/env sh\n"
+            "for argument in \"$@\"; do\n"
+            "  if [ \"${argument}\" = \"reports/polyspace/results\" ]; then exit \"${FAKE_CLEANUP_EXIT}\"; fi\n"
+            "done\n"
+            "exec /bin/rm \"$@\"\n",
         )
     write_executable(
         root / "bin" / "polyspace-configure",
@@ -74,13 +80,15 @@ def run_job(
         "  if [ \"$1\" = \"-output-options-file\" ]; then output=$2; shift 2; continue; fi\n"
         "  shift\n"
         "done\n"
-        "mkdir -p \"$(dirname \"$output\")\"\n"
-        "printf 'fixture' > \"$output\"\n",
+        "if [ \"${FAKE_CONFIGURE_WRITES_OPTIONS}\" = 1 ]; then\n"
+        "  mkdir -p \"$(dirname \"$output\")\"\n"
+        "  printf 'fixture' > \"$output\"\n"
+        "fi\n",
     )
     write_executable(
         root / "bin" / "polyspace-bug-finder-server",
         "#!/usr/bin/env sh\n"
-        "if [ \"${1:-}\" = \"-version\" ]; then exit 0; fi\n"
+        "if [ \"${1:-}\" = \"-version\" ]; then exit \"${FAKE_SERVER_VERSION_EXIT}\"; fi\n"
         "while [ $# -gt 0 ]; do\n"
         "  if [ \"$1\" = \"-results-dir\" ]; then results=$2; shift 2; continue; fi\n"
         "  shift\n"
@@ -124,10 +132,12 @@ def run_job(
         "FAKE_ANALYZER_EXIT": str(analyzer_exit),
         "FAKE_EXPORT_EXIT": str(exporter_exit),
         "FAKE_CONFIGURE_EXIT": str(configure_exit),
+        "FAKE_CONFIGURE_WRITES_OPTIONS": "1" if configure_writes_options else "0",
         "FAKE_CLEANUP_EXIT": str(cleanup_exit),
         "FAKE_REPORT_TEMPLATE": str(report_template),
         "FAKE_EXPORT_WRITES_REPORT": "1" if exporter_writes_report else "0",
         "FAKE_REPORT_GENERATOR_EXIT": str(report_generator_exit),
+        "FAKE_SERVER_VERSION_EXIT": str(server_version_exit),
     }
     result = subprocess.run(
         ["bash", str(POLYSPACE_JOB)],
@@ -210,11 +220,31 @@ def assert_failed_configuration_cannot_reuse_stale_options() -> None:
         result._polyspace_temporary_directory.cleanup()  # type: ignore[attr-defined]
 
 
+def assert_empty_configuration_cannot_reuse_stale_options() -> None:
+    result = run_job(configure_exit=0, configure_writes_options=False, exporter_exit=0)
+    try:
+        assert result.returncode != 0, result.stdout + result.stderr
+        assert "ERROR: Polyspace configuration did not produce fresh options" in result.stdout
+    finally:
+        result._polyspace_temporary_directory.cleanup()  # type: ignore[attr-defined]
+
+
 def assert_failed_cleanup_cannot_continue() -> None:
     result = run_job(cleanup_exit=29, exporter_exit=0)
     try:
         assert result.returncode != 0, result.stdout + result.stderr
         assert "ERROR: cannot clear prior Polyspace results" in result.stdout
+    finally:
+        result._polyspace_temporary_directory.cleanup()  # type: ignore[attr-defined]
+
+
+def assert_server_preflight_failure_cannot_continue() -> None:
+    result = run_job(server_version_exit=17, exporter_exit=0)
+    try:
+        assert result.returncode != 0, result.stdout + result.stderr
+        assert "ERROR: Polyspace binary/license-server preflight failed" in result.stdout
+        root = Path(result._polyspace_temporary_directory.name)  # type: ignore[attr-defined]
+        assert not (root / "reports" / "polyspace" / "results").exists()
     finally:
         result._polyspace_temporary_directory.cleanup()  # type: ignore[attr-defined]
 
@@ -227,7 +257,9 @@ def main() -> None:
     assert_reviewed_green_row_fails_raw_zero_gate()
     assert_truncated_schema_cannot_pass_the_ci_wrapper()
     assert_failed_configuration_cannot_reuse_stale_options()
+    assert_empty_configuration_cannot_reuse_stale_options()
     assert_failed_cleanup_cannot_continue()
+    assert_server_preflight_failure_cannot_continue()
     print("Polyspace cleanup, configuration, export, and analysis contracts: PASS")
 
 

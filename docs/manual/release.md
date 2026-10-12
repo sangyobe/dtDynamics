@@ -30,7 +30,8 @@ target_link_libraries(my_controller PRIVATE dt::Dynamics)
 
 - static-analysis release condition: GitLab Polyspace artifact가 raw defect 0 (Green + blank/`Unreviewed` only), `Justified` 포함 reviewed row 0, compile failure 0
 - canonical schema: TSV header는 `ID`부터 `Col`까지 정해진 16개 column을 같은 순서로 모두 포함해야 하며, 축약·순서 변경·추가 column은 release evidence가 아님
-- execution proof: `ci/polyspace.sh`가 새 canonical `result_list.txt`를 `tools/polyspace_result_gate.py`에 전달하고, parser exit code를 job exit로 사용한 GitLab artifact여야 함
+- TSV field boundary: 필드 경계는 literal TAB만 사용한다. 큰따옴표(`"`)는 일반 데이터로 취급하며 따옴표 처리나 행 결합에 사용하지 않는다. 따라서 큰따옴표로 감싼 TAB도 추가 field로 거부한다.
+- execution proof: `ci/polyspace.sh`가 기존 configure options를 제거하고 현재 compile database에서 nonempty options를 새로 만든 뒤, 새 canonical `result_list.txt`를 `tools/polyspace_result_gate.py`에 전달하고 parser exit code를 job exit로 사용한 GitLab artifact여야 함
 - Historical `v0.1.0`~`v0.1.2` release note: 보존
 - 일치 요구 대상: current package claim으로 검색되는 문구만 0.1.3와 일치
 

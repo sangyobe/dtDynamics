@@ -174,27 +174,24 @@ def assert_gate_fails_for_non_tsv_control_characters() -> None:
         assert "disallowed control character" in result.stderr
 
 
-def assert_gate_fails_for_bare_quote() -> None:
-    result = run_gate([result_row("NULL_PTR", "Green", "Unreviewed", comment="bare\"quote")])
+def assert_gate_accepts_literal_quote_field_data() -> None:
+    result = run_gate([result_row("NULL_PTR", "Green", "Unreviewed", comment='bare"quote')])
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "unresolved=0" in result.stdout
+
+
+def assert_gate_rejects_quoted_embedded_tab() -> None:
+    result = run_gate([result_row("NULL_PTR", "Green", "Unreviewed", comment='"embedded\ttab"')])
     assert result.returncode == 2, result.stdout + result.stderr
-    assert "invalid TSV quoting" in result.stderr
+    assert "unexpected extra TSV fields" in result.stderr
 
 
-def assert_gate_fails_for_unterminated_quote() -> None:
-    unterminated_green = result_row("NULL_PTR", "Green", "Unreviewed").replace(
-        "\t1\n", "\t\"unterminated\n"
-    )
-    result = run_raw_report(HEADER + unterminated_green + result_row("NULL_PTR", "Red", "Unreviewed"))
-    assert result.returncode == 2, result.stdout + result.stderr
-    assert "cannot evaluate Polyspace result list" in result.stderr
-
-
-def assert_gate_fails_when_green_row_absorbs_red_line() -> None:
-    open_green = result_row("NULL_PTR", "Green", "Unreviewed").replace("\t1\n", "\t\"open\n")
-    closing_red = result_row("NULL_PTR", "Red", "Unreviewed").removesuffix("\n") + "\"\n"
-    result = run_raw_report(HEADER + open_green + closing_red)
-    assert result.returncode == 2, result.stdout + result.stderr
-    assert "cannot evaluate Polyspace result list" in result.stderr
+def assert_gate_rejects_red_row_after_literal_quote() -> None:
+    quoted_green = result_row("NULL_PTR", "Green", "Unreviewed", comment='"open')
+    red = result_row("NULL_PTR", "Red", "Unreviewed", comment='close"')
+    result = run_raw_report(HEADER + quoted_green + red)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "unresolved=1" in result.stdout
 
 
 def assert_gate_fails_for_missing_declared_trailing_field() -> None:
@@ -259,9 +256,9 @@ def main() -> None:
     assert_gate_fails_for_whitespace_required_identity()
     assert_gate_fails_for_non_tsv_line_separator()
     assert_gate_fails_for_non_tsv_control_characters()
-    assert_gate_fails_for_bare_quote()
-    assert_gate_fails_for_unterminated_quote()
-    assert_gate_fails_when_green_row_absorbs_red_line()
+    assert_gate_accepts_literal_quote_field_data()
+    assert_gate_rejects_quoted_embedded_tab()
+    assert_gate_rejects_red_row_after_literal_quote()
     assert_gate_fails_for_missing_declared_trailing_field()
     assert_gate_fails_for_empty_header()
     assert_gate_fails_for_duplicate_header()

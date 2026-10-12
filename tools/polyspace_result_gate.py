@@ -4,8 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import csv
-import io
 import sys
 from pathlib import Path
 
@@ -61,19 +59,8 @@ def split_tsv_physical_lines(content: str) -> list[str]:
 
 
 def parse_tsv_record(line: str, line_number: int) -> list[str]:
-    try:
-        records = list(csv.reader([line], delimiter="\t", strict=True))
-    except csv.Error as error:
-        raise ValueError(f"result list row {line_number} has invalid TSV quoting: {error}") from error
-    if len(records) != 1:
-        raise ValueError(f"result list row {line_number} cannot be parsed as one TSV record")
-
-    values = records[0]
-    canonical = io.StringIO()
-    csv.writer(canonical, delimiter="\t", lineterminator="", quoting=csv.QUOTE_MINIMAL).writerow(values)
-    if canonical.getvalue() != line:
-        raise ValueError(f"result list row {line_number} has invalid TSV quoting")
-    return values
+    del line_number
+    return line.split("\t")
 
 
 def classify_results(report: Path) -> tuple[list[dict[str, str]], int, int]:
@@ -127,7 +114,7 @@ def main() -> int:
     arguments = parse_arguments()
     try:
         unresolved, justified, noncompiling = classify_results(arguments.input)
-    except (OSError, ValueError, csv.Error) as error:
+    except (OSError, ValueError) as error:
         print(f"ERROR: cannot evaluate Polyspace result list: {error}", file=sys.stderr)
         return 2
 
