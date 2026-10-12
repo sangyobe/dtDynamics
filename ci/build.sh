@@ -11,6 +11,11 @@ fi
 
 echo "========================="
 
+dtmath_cmake_args=()
+if [[ -n "${DTDYNAMICS_DTMATH_INCLUDE_DIR:-}" ]]; then
+    dtmath_cmake_args+=("-DDTDYNAMICS_DTMATH_INCLUDE_DIR=${DTDYNAMICS_DTMATH_INCLUDE_DIR}")
+fi
+
 cmake -S . -B build \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
@@ -18,7 +23,8 @@ cmake -S . -B build \
     -DDTDYNAMICS_BUILD_BENCHMARK=OFF \
     -DDTDYNAMICS_BUILD_REFERENCE_BENCHMARK=OFF \
     -DBUILD_DTDYNAMICS_MUJOCO_TEST=OFF \
-    -DBUILD_DTDYNAMICS_PINOCCHIO_TEST=OFF
+    -DBUILD_DTDYNAMICS_PINOCCHIO_TEST=OFF \
+    "${dtmath_cmake_args[@]}"
 
 cmake --build build -j"$(nproc)"
 

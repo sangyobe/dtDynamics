@@ -527,8 +527,8 @@ bool UpdateSpec(const dtDynSpec &spec, dtDynModel &model) noexcept
                                           : math::NormalizeOrIdentity(body.inertial.quat);
         model.body_imat[bodyIndex] = math::QuatToMat(model.body_iquat[bodyIndex]);
         model.body_inertia[bodyIndex] = body.inertial.inertia;
-        model.body_mass(bodyId) = body.inertial.mass;
-        model.body_subtreemass(bodyId) = body.inertial.mass;
+        model.body_mass.At(bodyId) = body.inertial.mass;
+        model.body_subtreemass.At(bodyId) = body.inertial.mass;
     }
 
     for (dtDynIndex modelJointId = 0; modelJointId < model.njnt; ++modelJointId)
@@ -538,13 +538,13 @@ bool UpdateSpec(const dtDynSpec &spec, dtDynModel &model) noexcept
         const dtDynJointSpec &joint = joints[static_cast<std::size_t>(specJointId)];
         const dtDynJointDofSize dofSize = GetJointDofSize(joint.type);
         model.jnt_limited[modelJointIndex] = joint.limited ? 1 : 0;
-        model.jnt_range_min(modelJointId) = joint.rangeMin;
-        model.jnt_range_max(modelJointId) = joint.rangeMax;
+        model.jnt_range_min.At(modelJointId) = joint.rangeMin;
+        model.jnt_range_max.At(modelJointId) = joint.rangeMax;
         model.jnt_pos[modelJointIndex] = joint.pos;
         model.jnt_axis[modelJointIndex] = joint.axis;
         for (dtDynIndex dofOffset = 0; dofOffset < dofSize.qvelSize; ++dofOffset)
         {
-            model.dof_armature(model.jnt_dofadr[modelJointIndex] + dofOffset) = joint.armature;
+            model.dof_armature.At(model.jnt_dofadr[modelJointIndex] + dofOffset) = joint.armature;
         }
     }
 
@@ -559,18 +559,18 @@ bool UpdateSpec(const dtDynSpec &spec, dtDynModel &model) noexcept
 
     for (dtDynIndex actuatorId = 0; actuatorId < model.nu; ++actuatorId)
     {
-        model.actuator_gear(actuatorId) = actuators[static_cast<std::size_t>(actuatorId)].gear;
+        model.actuator_gear.At(actuatorId) = actuators[static_cast<std::size_t>(actuatorId)].gear;
     }
 
     for (dtDynIndex bodyId = model.nbody - 1; bodyId > 0; --bodyId)
     {
         const dtDynIndex parent = model.body_parentid[static_cast<std::size_t>(bodyId)];
-        model.body_subtreemass(parent) += model.body_subtreemass(bodyId);
+        model.body_subtreemass.At(parent) += model.body_subtreemass.At(bodyId);
     }
     for (dtDynIndex rootIndex = 0; rootIndex < model.nroot; ++rootIndex)
     {
         const dtDynIndex rootBody = model.root_bodyid[static_cast<std::size_t>(rootIndex)];
-        model.root_mass(rootIndex) = model.body_subtreemass(rootBody);
+        model.root_mass.At(rootIndex) = model.body_subtreemass.At(rootBody);
     }
 
     return true;

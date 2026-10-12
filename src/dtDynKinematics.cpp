@@ -38,13 +38,13 @@ void ForwardKinematics(const dtDynModel &model, dtDynData &data)
             model.jnt_type[static_cast<std::size_t>(jntAdr)] == static_cast<dtDynIndex>(dtDynJointType::Free))
         {
             const dtDynIndex qadr = model.jnt_qposadr[static_cast<std::size_t>(jntAdr)];
-            xpos(0) = data.qpos(qadr + 0);
-            xpos(1) = data.qpos(qadr + 1);
-            xpos(2) = data.qpos(qadr + 2);
-            xquat(0) = data.qpos(qadr + 3);
-            xquat(1) = data.qpos(qadr + 4);
-            xquat(2) = data.qpos(qadr + 5);
-            xquat(3) = data.qpos(qadr + 6);
+            xpos.At(0) = data.qpos.At(qadr + 0);
+            xpos.At(1) = data.qpos.At(qadr + 1);
+            xpos.At(2) = data.qpos.At(qadr + 2);
+            xquat.At(0) = data.qpos.At(qadr + 3);
+            xquat.At(1) = data.qpos.At(qadr + 4);
+            xquat.At(2) = data.qpos.At(qadr + 5);
+            xquat.At(3) = data.qpos.At(qadr + 6);
             xquat = math::NormalizeOrIdentity(xquat);
             data.xanchor[static_cast<std::size_t>(jntAdr)] = xpos;
             data.xaxis[static_cast<std::size_t>(jntAdr)] = model.jnt_axis[static_cast<std::size_t>(jntAdr)];
@@ -82,22 +82,22 @@ void ForwardKinematics(const dtDynModel &model, dtDynData &data)
 
                 if (jointType == dtDynJointType::Slide)
                 {
-                    xpos = xpos + xaxis * data.qpos(qadr);
+                    xpos = xpos + xaxis * data.qpos.At(qadr);
                 }
                 else if (jointType == dtDynJointType::Hinge || jointType == dtDynJointType::Ball)
                 {
                     dt::Math::Vector4<dtDynReal> qloc;
                     if (jointType == dtDynJointType::Ball)
                     {
-                        qloc(0) = data.qpos(qadr + 0);
-                        qloc(1) = data.qpos(qadr + 1);
-                        qloc(2) = data.qpos(qadr + 2);
-                        qloc(3) = data.qpos(qadr + 3);
+                        qloc.At(0) = data.qpos.At(qadr + 0);
+                        qloc.At(1) = data.qpos.At(qadr + 1);
+                        qloc.At(2) = data.qpos.At(qadr + 2);
+                        qloc.At(3) = data.qpos.At(qadr + 3);
                         qloc = math::NormalizeOrIdentity(qloc);
                     }
                     else
                     {
-                        qloc = math::AxisAngleQuat(model.jnt_axis[static_cast<std::size_t>(jointId)], data.qpos(qadr));
+                        qloc = math::AxisAngleQuat(model.jnt_axis[static_cast<std::size_t>(jointId)], data.qpos.At(qadr));
                     }
 
                     xquat = math::MulQuat(xquat, qloc);
@@ -175,8 +175,8 @@ PointJacobianDotContext MakePointJacobianDotContext(const dtDynModel &model,
     dt::Math::Vector3<dtDynReal> bodyLinearVelocityAtRoot;
     for (dtDynIndex row = 0; row < 3; ++row)
     {
-        bodyAngularVelocity(row) = data.cvel[static_cast<std::size_t>(bodyId)](row);
-        bodyLinearVelocityAtRoot(row) = data.cvel[static_cast<std::size_t>(bodyId)](row + 3);
+        bodyAngularVelocity.At(row) = data.cvel[static_cast<std::size_t>(bodyId)].At(row);
+        bodyLinearVelocityAtRoot.At(row) = data.cvel[static_cast<std::size_t>(bodyId)].At(row + 3);
     }
     context.pointVelocity =
         bodyLinearVelocityAtRoot - (context.rootToPoint & bodyAngularVelocity);
@@ -211,9 +211,9 @@ void ComputePointJacobianDotColumn(const dtDynModel &model,
     dt::Math::Vector3<dtDynReal> linearDotAtRoot;
     for (dtDynIndex row = 0; row < 3; ++row)
     {
-        angularColumn(row) = data.cdof[static_cast<std::size_t>(dofId)](row);
-        angularDot(row) = cdofDot(row);
-        linearDotAtRoot(row) = cdofDot(row + 3);
+        angularColumn.At(row) = data.cdof[static_cast<std::size_t>(dofId)].At(row);
+        angularDot.At(row) = cdofDot.At(row);
+        linearDotAtRoot.At(row) = cdofDot.At(row + 3);
     }
 
     linearDot =
@@ -272,11 +272,11 @@ void ComputePointJacobianTermsImpl(const dtDynModel &model,
             {
                 if (jacp != nullptr)
                 {
-                    (*jacp)(row, dofId) = motion(row + 3);
+                    (*jacp).At(row, dofId) = motion.At(row + 3);
                 }
                 if (jacr != nullptr)
                 {
-                    (*jacr)(row, dofId) = motion(row);
+                    (*jacr).At(row, dofId) = motion.At(row);
                 }
             }
         }
@@ -286,24 +286,24 @@ void ComputePointJacobianTermsImpl(const dtDynModel &model,
             dt::Math::Vector3<dtDynReal> linearDot;
             dt::Math::Vector3<dtDynReal> angularDot;
             ComputePointJacobianDotColumn(model, data, dofId, dotContext, linearDot, angularDot);
-            const dtDynReal velocity = data.qvel(dofId);
+            const dtDynReal velocity = data.qvel.At(dofId);
             for (dtDynIndex row = 0; row < 3; ++row)
             {
                 if (jacpDot != nullptr)
                 {
-                    (*jacpDot)(row, dofId) = linearDot(row);
+                    (*jacpDot).At(row, dofId) = linearDot.At(row);
                 }
                 if (jacrDot != nullptr)
                 {
-                    (*jacrDot)(row, dofId) = angularDot(row);
+                    (*jacrDot).At(row, dofId) = angularDot.At(row);
                 }
                 if (linearJdotQvel != nullptr)
                 {
-                    (*linearJdotQvel)(row) += linearDot(row) * velocity;
+                    (*linearJdotQvel).At(row) += linearDot.At(row) * velocity;
                 }
                 if (angularJdotQvel != nullptr)
                 {
-                    (*angularJdotQvel)(row) += angularDot(row) * velocity;
+                    (*angularJdotQvel).At(row) += angularDot.At(row) * velocity;
                 }
             }
         }
@@ -494,8 +494,8 @@ void ComputePointJacobiansIntoData(const dtDynModel &model,
     dt::Math::Vector3<dtDynReal> bodyLinearVelocityAtRoot;
     for (dtDynIndex row = 0; row < 3; ++row)
     {
-        bodyAngularVelocity(row) = data.cvel[static_cast<std::size_t>(bodyId)](row);
-        bodyLinearVelocityAtRoot(row) = data.cvel[static_cast<std::size_t>(bodyId)](row + 3);
+        bodyAngularVelocity.At(row) = data.cvel[static_cast<std::size_t>(bodyId)].At(row);
+        bodyLinearVelocityAtRoot.At(row) = data.cvel[static_cast<std::size_t>(bodyId)].At(row + 3);
     }
     const dt::Math::Vector3<dtDynReal> pointVelocity =
         bodyLinearVelocityAtRoot - (rootToPoint & bodyAngularVelocity);
@@ -525,18 +525,18 @@ void ComputePointJacobiansIntoData(const dtDynModel &model,
         dt::Math::Vector3<dtDynReal> linearDotAtRoot;
         for (dtDynIndex row = 0; row < 3; ++row)
         {
-            angular(row) = data.cdof[static_cast<std::size_t>(dofId)](row);
-            angularDot(row) = cdofDot(row);
-            linearDotAtRoot(row) = cdofDot(row + 3);
+            angular.At(row) = data.cdof[static_cast<std::size_t>(dofId)].At(row);
+            angularDot.At(row) = cdofDot.At(row);
+            linearDotAtRoot.At(row) = cdofDot.At(row + 3);
         }
         linearDot = linearDotAtRoot + (angularDot & rootToPoint) + (angular & pointVelocity);
 
         for (dtDynIndex row = 0; row < 3; ++row)
         {
-            jacp(row, dofId) = motion(row + 3);
-            jacr(row, dofId) = motion(row);
-            jacpDot(row, dofId) = linearDot(row);
-            jacrDot(row, dofId) = angularDot(row);
+            jacp.At(row, dofId) = motion.At(row + 3);
+            jacr.At(row, dofId) = motion.At(row);
+            jacpDot.At(row, dofId) = linearDot.At(row);
+            jacrDot.At(row, dofId) = angularDot.At(row);
         }
 
         dofId = model.dof_parentid[static_cast<std::size_t>(dofId)];

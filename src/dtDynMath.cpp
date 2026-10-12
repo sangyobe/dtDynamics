@@ -19,10 +19,10 @@ namespace math
 
 void SetIdentityQuaternion(dt::Math::Vector4<dtDynReal> &q)
 {
-    q(0) = 1.0;
-    q(1) = 0.0;
-    q(2) = 0.0;
-    q(3) = 0.0;
+    q.At(0) = 1.0;
+    q.At(1) = 0.0;
+    q.At(2) = 0.0;
+    q.At(3) = 0.0;
 }
 
 dt::Math::Vector3<dtDynReal> NormalizeOrDefault(const dt::Math::Vector3<dtDynReal> &v)
@@ -31,9 +31,9 @@ dt::Math::Vector3<dtDynReal> NormalizeOrDefault(const dt::Math::Vector3<dtDynRea
     if (norm <= std::numeric_limits<dtDynReal>::epsilon())
     {
         dt::Math::Vector3<dtDynReal> out;
-        out(0) = 1.0;
-        out(1) = 0.0;
-        out(2) = 0.0;
+        out.At(0) = 1.0;
+        out.At(1) = 0.0;
+        out.At(2) = 0.0;
         return out;
     }
 
@@ -42,7 +42,7 @@ dt::Math::Vector3<dtDynReal> NormalizeOrDefault(const dt::Math::Vector3<dtDynRea
 
 dt::Math::Vector4<dtDynReal> NormalizeOrIdentity(const dt::Math::Vector4<dtDynReal> &q)
 {
-    const dtDynReal norm = std::sqrt(q(0) * q(0) + q(1) * q(1) + q(2) * q(2) + q(3) * q(3));
+    const dtDynReal norm = std::sqrt(q.At(0) * q.At(0) + q.At(1) * q.At(1) + q.At(2) * q.At(2) + q.At(3) * q.At(3));
     dt::Math::Vector4<dtDynReal> out;
     if (norm <= std::numeric_limits<dtDynReal>::epsilon())
     {
@@ -50,10 +50,10 @@ dt::Math::Vector4<dtDynReal> NormalizeOrIdentity(const dt::Math::Vector4<dtDynRe
         return out;
     }
 
-    out(0) = q(0) / norm;
-    out(1) = q(1) / norm;
-    out(2) = q(2) / norm;
-    out(3) = q(3) / norm;
+    out.At(0) = q.At(0) / norm;
+    out.At(1) = q.At(1) / norm;
+    out.At(2) = q.At(2) / norm;
+    out.At(3) = q.At(3) / norm;
     return out;
 }
 
@@ -61,10 +61,10 @@ dt::Math::Vector4<dtDynReal> MulQuat(const dt::Math::Vector4<dtDynReal> &a,
                                      const dt::Math::Vector4<dtDynReal> &b)
 {
     dt::Math::Vector4<dtDynReal> out;
-    out(0) = a(0) * b(0) - a(1) * b(1) - a(2) * b(2) - a(3) * b(3);
-    out(1) = a(0) * b(1) + a(1) * b(0) + a(2) * b(3) - a(3) * b(2);
-    out(2) = a(0) * b(2) - a(1) * b(3) + a(2) * b(0) + a(3) * b(1);
-    out(3) = a(0) * b(3) + a(1) * b(2) - a(2) * b(1) + a(3) * b(0);
+    out.At(0) = a.At(0) * b.At(0) - a.At(1) * b.At(1) - a.At(2) * b.At(2) - a.At(3) * b.At(3);
+    out.At(1) = a.At(0) * b.At(1) + a.At(1) * b.At(0) + a.At(2) * b.At(3) - a.At(3) * b.At(2);
+    out.At(2) = a.At(0) * b.At(2) - a.At(1) * b.At(3) + a.At(2) * b.At(0) + a.At(3) * b.At(1);
+    out.At(3) = a.At(0) * b.At(3) + a.At(1) * b.At(2) - a.At(2) * b.At(1) + a.At(3) * b.At(0);
     return NormalizeOrIdentity(out);
 }
 
@@ -76,10 +76,10 @@ dt::Math::Vector4<dtDynReal> AxisAngleQuat(const dt::Math::Vector3<dtDynReal> &a
     const dtDynReal s = std::sin(half);
 
     dt::Math::Vector4<dtDynReal> out;
-    out(0) = std::cos(half);
-    out(1) = s * unitAxis(0);
-    out(2) = s * unitAxis(1);
-    out(3) = s * unitAxis(2);
+    out.At(0) = std::cos(half);
+    out.At(1) = s * unitAxis.At(0);
+    out.At(2) = s * unitAxis.At(1);
+    out.At(3) = s * unitAxis.At(2);
     return NormalizeOrIdentity(out);
 }
 
@@ -87,43 +87,43 @@ dt::Math::Vector3<dtDynReal> Rotate(const dt::Math::Vector4<dtDynReal> &q,
                                     const dt::Math::Vector3<dtDynReal> &v)
 {
     dt::Math::Vector3<dtDynReal> qvec;
-    qvec(0) = q(1);
-    qvec(1) = q(2);
-    qvec(2) = q(3);
+    qvec.At(0) = q.At(1);
+    qvec.At(1) = q.At(2);
+    qvec.At(2) = q.At(3);
 
     const dt::Math::Vector3<dtDynReal> uv = qvec & v;
     const dt::Math::Vector3<dtDynReal> uuv = qvec & uv;
-    return v + uv * (2.0 * q(0)) + uuv * 2.0;
+    return v + uv * (2.0 * q.At(0)) + uuv * 2.0;
 }
 
 dt::Math::Vector3<dtDynReal> Rotate(const dt::Math::Matrix3<dtDynReal> &m,
                                     const dt::Math::Vector3<dtDynReal> &v)
 {
     dt::Math::Vector3<dtDynReal> out;
-    out(0) = m(0, 0) * v(0) + m(0, 1) * v(1) + m(0, 2) * v(2);
-    out(1) = m(1, 0) * v(0) + m(1, 1) * v(1) + m(1, 2) * v(2);
-    out(2) = m(2, 0) * v(0) + m(2, 1) * v(1) + m(2, 2) * v(2);
+    out.At(0) = m.At(0, 0) * v.At(0) + m.At(0, 1) * v.At(1) + m.At(0, 2) * v.At(2);
+    out.At(1) = m.At(1, 0) * v.At(0) + m.At(1, 1) * v.At(1) + m.At(1, 2) * v.At(2);
+    out.At(2) = m.At(2, 0) * v.At(0) + m.At(2, 1) * v.At(1) + m.At(2, 2) * v.At(2);
     return out;
 }
 
 dt::Math::Matrix3<dtDynReal> QuatToMat(const dt::Math::Vector4<dtDynReal> &quat)
 {
     const dt::Math::Vector4<dtDynReal> q = NormalizeOrIdentity(quat);
-    const dtDynReal w = q(0);
-    const dtDynReal x = q(1);
-    const dtDynReal y = q(2);
-    const dtDynReal z = q(3);
+    const dtDynReal w = q.At(0);
+    const dtDynReal x = q.At(1);
+    const dtDynReal y = q.At(2);
+    const dtDynReal z = q.At(3);
 
     dt::Math::Matrix3<dtDynReal> out;
-    out(0, 0) = (1.0 - (2.0 * ((y * y) + (z * z))));
-    out(0, 1) = (2.0 * ((x * y) - (z * w)));
-    out(0, 2) = (2.0 * ((x * z) + (y * w)));
-    out(1, 0) = (2.0 * ((x * y) + (z * w)));
-    out(1, 1) = (1.0 - (2.0 * ((x * x) + (z * z))));
-    out(1, 2) = (2.0 * ((y * z) - (x * w)));
-    out(2, 0) = (2.0 * ((x * z) - (y * w)));
-    out(2, 1) = (2.0 * ((y * z) + (x * w)));
-    out(2, 2) = (1.0 - (2.0 * ((x * x) + (y * y))));
+    out.At(0, 0) = (1.0 - (2.0 * ((y * y) + (z * z))));
+    out.At(0, 1) = (2.0 * ((x * y) - (z * w)));
+    out.At(0, 2) = (2.0 * ((x * z) + (y * w)));
+    out.At(1, 0) = (2.0 * ((x * y) + (z * w)));
+    out.At(1, 1) = (1.0 - (2.0 * ((x * x) + (z * z))));
+    out.At(1, 2) = (2.0 * ((y * z) - (x * w)));
+    out.At(2, 0) = (2.0 * ((x * z) - (y * w)));
+    out.At(2, 1) = (2.0 * ((y * z) + (x * w)));
+    out.At(2, 2) = (1.0 - (2.0 * ((x * x) + (y * y))));
     return out;
 }
 
@@ -131,25 +131,25 @@ dt::Math::Vector3<dtDynReal> UnitAxis(const dtDynIndex axis)
 {
     dt::Math::Vector3<dtDynReal> out;
     out.SetZero();
-    out(axis) = 1.0;
+    out.At(axis) = 1.0;
     return out;
 }
 
 dt::Math::Vector3<dtDynReal> MatrixColumn(const dt::Math::Matrix3<dtDynReal> &m, const dtDynIndex col)
 {
     dt::Math::Vector3<dtDynReal> out;
-    out(0) = m(0, col);
-    out(1) = m(1, col);
-    out(2) = m(2, col);
+    out.At(0) = m.At(0, col);
+    out.At(1) = m.At(1, col);
+    out.At(2) = m.At(2, col);
     return out;
 }
 
 dt::Math::Vector3<dtDynReal> DenseMatrixColumn3(const dtDynDenseMatrix &matrix, const dtDynIndex col)
 {
     dt::Math::Vector3<dtDynReal> out;
-    out(0) = matrix(0, col);
-    out(1) = matrix(1, col);
-    out(2) = matrix(2, col);
+    out.At(0) = matrix.At(0, col);
+    out.At(1) = matrix.At(1, col);
+    out.At(2) = matrix.At(2, col);
     return out;
 }
 
@@ -163,7 +163,7 @@ dt::Math::Matrix3<dtDynReal> DenseMatrixBlock3(const dtDynDenseMatrix &matrix,
     {
         for (dtDynIndex col = 0; col < 3; ++col)
         {
-            out(row, col) = matrix(rowOffset + row, colOffset + col);
+            out.At(row, col) = matrix.At(rowOffset + row, colOffset + col);
         }
     }
     return out;
@@ -173,12 +173,12 @@ dt::Math::Vector6<dtDynReal> SpatialMotionVector(const dt::Math::Vector3<dtDynRe
                                                  const dt::Math::Vector3<dtDynReal> &linear)
 {
     dt::Math::Vector6<dtDynReal> out;
-    out(0) = angular(0);
-    out(1) = angular(1);
-    out(2) = angular(2);
-    out(3) = linear(0);
-    out(4) = linear(1);
-    out(5) = linear(2);
+    out.At(0) = angular.At(0);
+    out.At(1) = angular.At(1);
+    out.At(2) = angular.At(2);
+    out.At(3) = linear.At(0);
+    out.At(4) = linear.At(1);
+    out.At(5) = linear.At(2);
     return out;
 }
 
@@ -187,7 +187,7 @@ dtDynReal SpatialDot(const dt::Math::Vector6<dtDynReal> &a, const dt::Math::Vect
     dtDynReal value = 0.0;
     for (dtDynIndex row = 0; row < 6; ++row)
     {
-        value += a(row) * b(row);
+        value += a.At(row) * b.At(row);
     }
     return value;
 }
@@ -199,7 +199,7 @@ dtDynReal SpatialDot3(const dt::Math::Vector6<dtDynReal> &left,
     dtDynReal value = 0.0;
     for (dtDynIndex row = 0; row < 6; ++row)
     {
-        value += left(row) * (a(row) + b(row));
+        value += left.At(row) * (a.At(row) + b.At(row));
     }
     return value;
 }
@@ -210,10 +210,10 @@ dt::Math::Vector6<dtDynReal> SpatialMul(const dt::Math::Matrix<6, 6, dtDynReal> 
     dt::Math::Vector6<dtDynReal> out;
     for (dtDynIndex row = 0; row < 6; ++row)
     {
-        out(row) = 0.0;
+        out.At(row) = 0.0;
         for (dtDynIndex col = 0; col < 6; ++col)
         {
-            out(row) += matrix(row, col) * vector(col);
+            out.At(row) += matrix.At(row, col) * vector.At(col);
         }
     }
     return out;
@@ -225,10 +225,10 @@ dt::Math::Vector6<dtDynReal> SpatialMulTranspose(const dt::Math::Matrix<6, 6, dt
     dt::Math::Vector6<dtDynReal> out;
     for (dtDynIndex row = 0; row < 6; ++row)
     {
-        out(row) = 0.0;
+        out.At(row) = 0.0;
         for (dtDynIndex col = 0; col < 6; ++col)
         {
-            out(row) += matrix(col, row) * vector(col);
+            out.At(row) += matrix.At(col, row) * vector.At(col);
         }
     }
     return out;
@@ -240,7 +240,7 @@ dt::Math::Vector6<dtDynReal> ScaleSpatial(const dt::Math::Vector6<dtDynReal> &sr
     dt::Math::Vector6<dtDynReal> out;
     for (dtDynIndex row = 0; row < 6; ++row)
     {
-        out(row) = scalar * src(row);
+        out.At(row) = scalar * src.At(row);
     }
     return out;
 }
@@ -250,7 +250,7 @@ void AddSpatialInPlace(dt::Math::Vector6<dtDynReal> &dst,
 {
     for (dtDynIndex row = 0; row < 6; ++row)
     {
-        dst(row) += src(row);
+        dst.At(row) += src.At(row);
     }
 }
 
@@ -264,10 +264,10 @@ dt::Math::Vector6<dtDynReal> CrossSpatialMotion(const dt::Math::Vector6<dtDynRea
 
     for (dtDynIndex row = 0; row < 3; ++row)
     {
-        omega(row) = velocity(row);
-        linear(row) = velocity(row + 3);
-        motionOmega(row) = motion(row);
-        motionLinear(row) = motion(row + 3);
+        omega.At(row) = velocity.At(row);
+        linear.At(row) = velocity.At(row + 3);
+        motionOmega.At(row) = motion.At(row);
+        motionLinear.At(row) = motion.At(row + 3);
     }
 
     const dt::Math::Vector3<dtDynReal> angularPart = omega & motionOmega;
@@ -281,33 +281,33 @@ dt::Math::Matrix<6, 6, dtDynReal> CrossSpatialMotionMatrix(const dt::Math::Vecto
     dt::Math::Matrix<6, 6, dtDynReal> out;
     out.SetZero();
 
-    const dtDynReal wx = velocity(0);
-    const dtDynReal wy = velocity(1);
-    const dtDynReal wz = velocity(2);
-    const dtDynReal vx = velocity(3);
-    const dtDynReal vy = velocity(4);
-    const dtDynReal vz = velocity(5);
+    const dtDynReal wx = velocity.At(0);
+    const dtDynReal wy = velocity.At(1);
+    const dtDynReal wz = velocity.At(2);
+    const dtDynReal vx = velocity.At(3);
+    const dtDynReal vy = velocity.At(4);
+    const dtDynReal vz = velocity.At(5);
 
-    out(0, 1) = -wz;
-    out(0, 2) = wy;
-    out(1, 0) = wz;
-    out(1, 2) = -wx;
-    out(2, 0) = -wy;
-    out(2, 1) = wx;
+    out.At(0, 1) = -wz;
+    out.At(0, 2) = wy;
+    out.At(1, 0) = wz;
+    out.At(1, 2) = -wx;
+    out.At(2, 0) = -wy;
+    out.At(2, 1) = wx;
 
-    out(3, 1) = -vz;
-    out(3, 2) = vy;
-    out(4, 0) = vz;
-    out(4, 2) = -vx;
-    out(5, 0) = -vy;
-    out(5, 1) = vx;
+    out.At(3, 1) = -vz;
+    out.At(3, 2) = vy;
+    out.At(4, 0) = vz;
+    out.At(4, 2) = -vx;
+    out.At(5, 0) = -vy;
+    out.At(5, 1) = vx;
 
-    out(3, 4) = -wz;
-    out(3, 5) = wy;
-    out(4, 3) = wz;
-    out(4, 5) = -wx;
-    out(5, 3) = -wy;
-    out(5, 4) = wx;
+    out.At(3, 4) = -wz;
+    out.At(3, 5) = wy;
+    out.At(4, 3) = wz;
+    out.At(4, 5) = -wx;
+    out.At(5, 3) = -wy;
+    out.At(5, 4) = wx;
     return out;
 }
 
@@ -321,33 +321,33 @@ dt::Math::Matrix<6, 6, dtDynReal> CrossSpatialMomentumMatrix(const dt::Math::Vec
     dt::Math::Matrix<6, 6, dtDynReal> out;
     out.SetZero();
 
-    const dtDynReal hwx = momentum(0);
-    const dtDynReal hwy = momentum(1);
-    const dtDynReal hwz = momentum(2);
-    const dtDynReal hvx = momentum(3);
-    const dtDynReal hvy = momentum(4);
-    const dtDynReal hvz = momentum(5);
+    const dtDynReal hwx = momentum.At(0);
+    const dtDynReal hwy = momentum.At(1);
+    const dtDynReal hwz = momentum.At(2);
+    const dtDynReal hvx = momentum.At(3);
+    const dtDynReal hvy = momentum.At(4);
+    const dtDynReal hvz = momentum.At(5);
 
-    out(0, 1) = hwz;
-    out(0, 2) = -hwy;
-    out(1, 0) = -hwz;
-    out(1, 2) = hwx;
-    out(2, 0) = hwy;
-    out(2, 1) = -hwx;
+    out.At(0, 1) = hwz;
+    out.At(0, 2) = -hwy;
+    out.At(1, 0) = -hwz;
+    out.At(1, 2) = hwx;
+    out.At(2, 0) = hwy;
+    out.At(2, 1) = -hwx;
 
-    out(0, 4) = hvz;
-    out(0, 5) = -hvy;
-    out(1, 3) = -hvz;
-    out(1, 5) = hvx;
-    out(2, 3) = hvy;
-    out(2, 4) = -hvx;
+    out.At(0, 4) = hvz;
+    out.At(0, 5) = -hvy;
+    out.At(1, 3) = -hvz;
+    out.At(1, 5) = hvx;
+    out.At(2, 3) = hvy;
+    out.At(2, 4) = -hvx;
 
-    out(3, 1) = hvz;
-    out(3, 2) = -hvy;
-    out(4, 0) = -hvz;
-    out(4, 2) = hvx;
-    out(5, 0) = hvy;
-    out(5, 1) = -hvx;
+    out.At(3, 1) = hvz;
+    out.At(3, 2) = -hvy;
+    out.At(4, 0) = -hvz;
+    out.At(4, 2) = hvx;
+    out.At(5, 0) = hvy;
+    out.At(5, 1) = -hvx;
     return out;
 }
 
@@ -378,9 +378,9 @@ dt::Math::Matrix3<dtDynReal> BodyInertiaInWorld(const dtDynModel &model,
     {
         for (dtDynIndex col = 0; col < 3; ++col)
         {
-            out(row, col) = rot(row, 0) * diag(0) * rot(col, 0) +
-                            rot(row, 1) * diag(1) * rot(col, 1) +
-                            rot(row, 2) * diag(2) * rot(col, 2);
+            out.At(row, col) = rot.At(row, 0) * diag.At(0) * rot.At(col, 0) +
+                               rot.At(row, 1) * diag.At(1) * rot.At(col, 1) +
+                               rot.At(row, 2) * diag.At(2) * rot.At(col, 2);
         }
     }
 
@@ -394,38 +394,38 @@ dt::Math::Matrix<6, 6, dtDynReal> SpatialInertiaAtWorldOrigin(const dtDynReal ma
     dt::Math::Matrix<6, 6, dtDynReal> out;
     out.SetZero();
 
-    const dtDynReal c0 = com(0);
-    const dtDynReal c1 = com(1);
-    const dtDynReal c2 = com(2);
+    const dtDynReal c0 = com.At(0);
+    const dtDynReal c1 = com.At(1);
+    const dtDynReal c2 = com.At(2);
     const dtDynReal c2sum = (((c0 * c0) + (c1 * c1)) + (c2 * c2));
 
     for (dtDynIndex row = 0; row < 3; ++row)
     {
         for (dtDynIndex col = 0; col < 3; ++col)
         {
-            out(row, col) = rotInertia(row, col);
+            out.At(row, col) = rotInertia.At(row, col);
             if (row == col)
             {
-                out(row, col) += mass * c2sum;
+                out.At(row, col) += mass * c2sum;
             }
-            out(row, col) -= ((mass * com(row)) * com(col));
-            out(row + 3, col + 3) = ((row == col) ? mass : 0.0);
+            out.At(row, col) -= ((mass * com.At(row)) * com.At(col));
+            out.At(row + 3, col + 3) = ((row == col) ? mass : 0.0);
         }
     }
 
-    out(0, 4) = -mass * c2;
-    out(0, 5) = mass * c1;
-    out(1, 3) = mass * c2;
-    out(1, 5) = -mass * c0;
-    out(2, 3) = -mass * c1;
-    out(2, 4) = mass * c0;
+    out.At(0, 4) = -mass * c2;
+    out.At(0, 5) = mass * c1;
+    out.At(1, 3) = mass * c2;
+    out.At(1, 5) = -mass * c0;
+    out.At(2, 3) = -mass * c1;
+    out.At(2, 4) = mass * c0;
 
-    out(3, 1) = mass * c2;
-    out(3, 2) = -mass * c1;
-    out(4, 0) = -mass * c2;
-    out(4, 2) = mass * c0;
-    out(5, 0) = mass * c1;
-    out(5, 1) = -mass * c0;
+    out.At(3, 1) = mass * c2;
+    out.At(3, 2) = -mass * c1;
+    out.At(4, 0) = -mass * c2;
+    out.At(4, 2) = mass * c0;
+    out.At(5, 0) = mass * c1;
+    out.At(5, 1) = -mass * c0;
 
     return out;
 }
@@ -447,7 +447,7 @@ dtDynReal QuadraticInertia(const dt::Math::Vector3<dtDynReal> &left,
     {
         for (dtDynIndex col = 0; col < 3; ++col)
         {
-            value += left(row) * inertia(row, col) * right(col);
+            value += left.At(row) * inertia.At(row, col) * right.At(col);
         }
     }
     return value;

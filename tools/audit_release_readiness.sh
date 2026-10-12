@@ -139,6 +139,7 @@ require_file tools/test_guide_install_contract.py
 require_file tools/install_validation_deps.sh
 require_file tools/test_validation_deps_installer.py
 require_file tools/test_dtdynamics_config_include_order.py
+require_file tools/test_ci_dtmath_dependency.py
 require_file tools/polyspace_result_gate.py
 require_file tools/test_polyspace_result_gate.py
 require_file tools/test_polyspace_export_contract.py
@@ -199,6 +200,7 @@ python3 "${SCRIPT_DIR}/test_guide_provenance_reference_contract.py"
 python3 "${SCRIPT_DIR}/test_guide_install_contract.py"
 python3 "${SCRIPT_DIR}/test_validation_deps_installer.py"
 python3 "${SCRIPT_DIR}/test_dtdynamics_config_include_order.py"
+python3 "${SCRIPT_DIR}/test_ci_dtmath_dependency.py"
 python3 "${SCRIPT_DIR}/test_polyspace_result_gate.py"
 python3 "${SCRIPT_DIR}/test_polyspace_export_contract.py"
 python3 "${SCRIPT_DIR}/test_polyspace_transport.py"
