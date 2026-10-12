@@ -1120,9 +1120,12 @@ dtDynSpec DecodeXmlImpl(const std::string &xml, const std::string &sourcePath)
 
         const std::string rawTag = xml.substr(begin + 1, end - begin - 1);
         std::size_t leadingWhitespace = 0;
-        while (leadingWhitespace < rawTag.size() &&
-               std::isspace(static_cast<unsigned char>(rawTag[leadingWhitespace])))
+        while (leadingWhitespace < rawTag.size())
         {
+            if (!std::isspace(static_cast<unsigned char>(rawTag[leadingWhitespace])))
+            {
+                break;
+            }
             ++leadingWhitespace;
         }
         std::size_t tagOffset = begin + 1 + leadingWhitespace;
@@ -1188,9 +1191,12 @@ dtDynSpec DecodeXmlImpl(const std::string &xml, const std::string &sourcePath)
             closing = true;
             const std::string closingTag = tag.substr(1);
             std::size_t closingWhitespace = 0;
-            while (closingWhitespace < closingTag.size() &&
-                   std::isspace(static_cast<unsigned char>(closingTag[closingWhitespace])))
+            while (closingWhitespace < closingTag.size())
             {
+                if (!std::isspace(static_cast<unsigned char>(closingTag[closingWhitespace])))
+                {
+                    break;
+                }
                 ++closingWhitespace;
             }
             tagOffset += 1 + closingWhitespace;
@@ -1219,9 +1225,12 @@ dtDynSpec DecodeXmlImpl(const std::string &xml, const std::string &sourcePath)
         if (closing)
         {
             std::size_t suffix = name.size();
-            while (suffix < tag.size() &&
-                   std::isspace(static_cast<unsigned char>(tag[suffix])))
+            while (suffix < tag.size())
             {
+                if (!std::isspace(static_cast<unsigned char>(tag[suffix])))
+                {
+                    break;
+                }
                 ++suffix;
             }
             if (suffix != tag.size())

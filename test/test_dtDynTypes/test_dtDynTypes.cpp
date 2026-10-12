@@ -2915,6 +2915,60 @@ void TestSpecXmlPreservesLimitedBooleanGrammar()
     assert(!decoded.Joints()[3].limited);
 }
 
+void TestSpecXmlPreservesTagWhitespaceAndClosingSuffixOffset()
+{
+    const std::string whitespaceXml =
+        "< \tmujoco>< \nworldbody>< \tbody name=\"base\"></ \tbody \n>"
+        "</ \nworldbody ></ \tmujoco >";
+    const dtDynSpec decoded = dtDynSpec::DecodeXml(whitespaceXml);
+    assert(decoded.Bodies().size() == 2);
+    assert(decoded.Bodies()[1].name == "base");
+
+    const std::string invalidNameXml = "< \t9invalid/>";
+    bool invalidNameRejected = false;
+    try
+    {
+        (void)dtDynSpec::DecodeXml(invalidNameXml);
+    }
+    catch (const dtDynXmlError &error)
+    {
+        invalidNameRejected = error.Code() == dtDynXmlErrorCode::MalformedSyntax;
+        if (invalidNameRejected)
+        {
+            invalidNameRejected = error.Offset() == invalidNameXml.find("9invalid");
+        }
+        if (invalidNameRejected)
+        {
+            invalidNameRejected = std::string(error.what()).find("invalid XML element name") !=
+                                  std::string::npos;
+        }
+    }
+    assert(invalidNameRejected);
+
+    const std::string suffixXml =
+        "<mujoco><worldbody><body name=\"base\"></body \ttrailing>"
+        "</worldbody></mujoco>";
+    bool suffixRejected = false;
+    try
+    {
+        (void)dtDynSpec::DecodeXml(suffixXml);
+    }
+    catch (const dtDynXmlError &error)
+    {
+        suffixRejected = error.Code() == dtDynXmlErrorCode::MalformedSyntax;
+        if (suffixRejected)
+        {
+            suffixRejected = error.Offset() == suffixXml.find("trailing");
+        }
+        if (suffixRejected)
+        {
+            suffixRejected = std::string(error.what()).find("closing XML tags cannot contain attributes or suffix text") !=
+                             std::string::npos;
+        }
+    }
+    assert(suffixRejected);
+}
+
 void TestSpecXmlRequiresSingleRootElement()
 {
     const auto expectMalformed = [](const std::string &xml, const std::size_t expectedOffset)
@@ -5695,6 +5749,7 @@ int main()
     TestSpecXmlRejectsUnsupportedSemanticValues();
     TestSpecXmlRejectsInvalidBooleanValue();
     TestSpecXmlPreservesLimitedBooleanGrammar();
+    TestSpecXmlPreservesTagWhitespaceAndClosingSuffixOffset();
     TestSpecXmlRequiresSingleRootElement();
     TestSpecXmlRejectsSupportedElementInWrongContext();
     TestSpecXmlAcceptsEverySupportedElementInItsDocumentedParent();
