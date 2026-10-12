@@ -878,6 +878,161 @@ void TestModelValidationRejectsInvalidFramePairs()
     assert(!ValidateModel(mismatchedSiteFrame, &error));
 }
 
+void AssertModelValidationFailure(const dtDynModel &model,
+                                  const dtDynValidationCode code,
+                                  const dtDynObjectType object,
+                                  const dtDynIndex index,
+                                  const std::string &message)
+{
+    dtDynValidationError error;
+    assert(!ValidateModel(model, &error));
+    assert(error.code == code);
+    assert(error.object == object);
+    assert(error.index == index);
+    assert(error.message == message);
+}
+
+void TestModelValidationPreservesUniqueNameValidationOrder()
+{
+    dtDynSpec spec;
+    const dtDynIndex firstBody = spec.AddBody("body_one", 0);
+    const dtDynIndex secondBody = spec.AddBody("body_two", 0);
+    const dtDynIndex firstJoint = spec.AddJoint(firstBody, "joint_one", dtDynJointType::Hinge);
+    const dtDynIndex secondJoint = spec.AddJoint(secondBody, "joint_two", dtDynJointType::Hinge);
+    const dtDynIndex firstSite = spec.AddSite(firstBody, "site_one");
+    const dtDynIndex secondSite = spec.AddSite(secondBody, "site_two");
+    const dtDynIndex firstActuator = spec.AddActuator(firstJoint, "actuator_one");
+    const dtDynIndex secondActuator = spec.AddActuator(secondJoint, "actuator_two");
+    const dtDynModel valid = CompileSpecChecked(spec);
+
+    dtDynModel duplicateBody = valid;
+    duplicateBody.body_names[static_cast<std::size_t>(secondBody)] =
+        duplicateBody.body_names[static_cast<std::size_t>(firstBody)];
+    AssertModelValidationFailure(duplicateBody, dtDynValidationCode::DuplicateName,
+                                 dtDynObjectType::Body, secondBody,
+                                 "body[2] duplicates name 'body_one'");
+
+    dtDynModel duplicateJoint = valid;
+    duplicateJoint.joint_names[static_cast<std::size_t>(secondJoint)] =
+        duplicateJoint.joint_names[static_cast<std::size_t>(firstJoint)];
+    AssertModelValidationFailure(duplicateJoint, dtDynValidationCode::DuplicateName,
+                                 dtDynObjectType::Joint, secondJoint,
+                                 "joint[1] duplicates name 'joint_one'");
+
+    dtDynModel duplicateSite = valid;
+    duplicateSite.site_names[static_cast<std::size_t>(secondSite)] =
+        duplicateSite.site_names[static_cast<std::size_t>(firstSite)];
+    AssertModelValidationFailure(duplicateSite, dtDynValidationCode::DuplicateName,
+                                 dtDynObjectType::Site, secondSite,
+                                 "site[1] duplicates name 'site_one'");
+
+    dtDynModel duplicateActuator = valid;
+    duplicateActuator.actuator_names[static_cast<std::size_t>(secondActuator)] =
+        duplicateActuator.actuator_names[static_cast<std::size_t>(firstActuator)];
+    AssertModelValidationFailure(duplicateActuator, dtDynValidationCode::DuplicateName,
+                                 dtDynObjectType::Actuator, secondActuator,
+                                 "actuator[1] duplicates name 'actuator_one'");
+
+    dtDynModel duplicateBodyAndActuator = duplicateBody;
+    duplicateBodyAndActuator.actuator_names[static_cast<std::size_t>(secondActuator)] =
+        duplicateBodyAndActuator.actuator_names[static_cast<std::size_t>(firstActuator)];
+    AssertModelValidationFailure(duplicateBodyAndActuator, dtDynValidationCode::DuplicateName,
+                                 dtDynObjectType::Body, secondBody,
+                                 "body[2] duplicates name 'body_one'");
+}
+
+void TestModelValidationPreservesJointAndSiteValidationFailures()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("validated_body", 0);
+    const dtDynIndex joint = spec.AddJoint(body, "validated_hinge", dtDynJointType::Hinge);
+    const dtDynIndex site = spec.AddSite(body, "validated_site");
+    const dtDynModel valid = CompileSpecChecked(spec);
+    const dtDynReal nan = std::numeric_limits<dtDynReal>::quiet_NaN();
+
+    dtDynModel negativeSpecId = valid;
+    negativeSpecId.jnt_specid[static_cast<std::size_t>(joint)] = DTDYN_INVALID_INDEX;
+    AssertModelValidationFailure(negativeSpecId, dtDynValidationCode::InvalidReference,
+                                 dtDynObjectType::Joint, joint,
+                                 "compiled joint specification provenance is invalid");
+
+    dtDynModel oversizedSpecId = valid;
+    oversizedSpecId.jnt_specid[static_cast<std::size_t>(joint)] = oversizedSpecId.njnt;
+    AssertModelValidationFailure(oversizedSpecId, dtDynValidationCode::InvalidReference,
+                                 dtDynObjectType::Joint, joint,
+                                 "compiled joint specification provenance is invalid");
+
+    dtDynModel badRangeMinimum = valid;
+    badRangeMinimum.jnt_range_min(joint) = nan;
+    AssertModelValidationFailure(badRangeMinimum, dtDynValidationCode::NonFiniteValue,
+                                 dtDynObjectType::Joint, joint,
+                                 "compiled joint contains a non-finite value");
+
+    dtDynModel badRangeMaximum = valid;
+    badRangeMaximum.jnt_range_max(joint) = nan;
+    AssertModelValidationFailure(badRangeMaximum, dtDynValidationCode::NonFiniteValue,
+                                 dtDynObjectType::Joint, joint,
+                                 "compiled joint contains a non-finite value");
+
+    dtDynModel badPosition = valid;
+    badPosition.jnt_pos[static_cast<std::size_t>(joint)](0) = nan;
+    AssertModelValidationFailure(badPosition, dtDynValidationCode::NonFiniteValue,
+                                 dtDynObjectType::Joint, joint,
+                                 "compiled joint contains a non-finite value");
+
+    dtDynModel badAxis = valid;
+    badAxis.jnt_axis[static_cast<std::size_t>(joint)](0) = nan;
+    AssertModelValidationFailure(badAxis, dtDynValidationCode::NonFiniteValue,
+                                 dtDynObjectType::Joint, joint,
+                                 "compiled joint contains a non-finite value");
+
+    dtDynModel nonUnitAxis = valid;
+    nonUnitAxis.jnt_axis[static_cast<std::size_t>(joint)].SetZero();
+    AssertModelValidationFailure(nonUnitAxis, dtDynValidationCode::InvalidReference,
+                                 dtDynObjectType::Joint, joint,
+                                 "compiled slide/hinge joint axis must be unit length");
+
+    dtDynSpec freeSpec;
+    const dtDynIndex freeBody = freeSpec.AddBody("free_body", 0);
+    const dtDynIndex freeJoint = freeSpec.AddJoint(freeBody, "free_joint", dtDynJointType::Free);
+    dtDynModel freeModel = CompileSpecChecked(freeSpec);
+    freeModel.jnt_axis[static_cast<std::size_t>(freeJoint)].SetZero();
+    dtDynValidationError freeError;
+    assert(ValidateModel(freeModel, &freeError));
+    assert(freeError.code == dtDynValidationCode::None);
+
+    dtDynModel badSitePosition = valid;
+    badSitePosition.site_pos[static_cast<std::size_t>(site)](0) = nan;
+    AssertModelValidationFailure(badSitePosition, dtDynValidationCode::NonFiniteValue,
+                                 dtDynObjectType::Site, site,
+                                 "compiled site contains a non-finite value");
+
+    dtDynModel badSiteQuaternion = valid;
+    badSiteQuaternion.site_quat[static_cast<std::size_t>(site)](0) = nan;
+    AssertModelValidationFailure(badSiteQuaternion, dtDynValidationCode::NonFiniteValue,
+                                 dtDynObjectType::Site, site,
+                                 "compiled site contains a non-finite value");
+
+    dtDynModel badSiteMatrix = valid;
+    badSiteMatrix.site_mat[static_cast<std::size_t>(site)](0, 0) = nan;
+    AssertModelValidationFailure(badSiteMatrix, dtDynValidationCode::NonFiniteValue,
+                                 dtDynObjectType::Site, site,
+                                 "compiled site contains a non-finite value");
+
+    dtDynModel improperSiteRotation = valid;
+    improperSiteRotation.site_mat[static_cast<std::size_t>(site)].SetZero();
+    AssertModelValidationFailure(improperSiteRotation, dtDynValidationCode::InvalidReference,
+                                 dtDynObjectType::Site, site,
+                                 "compiled site quaternion/matrix frame pair is invalid");
+
+    dtDynModel mismatchedSiteFrame = valid;
+    mismatchedSiteFrame.site_quat[static_cast<std::size_t>(site)](0) = 0.0;
+    mismatchedSiteFrame.site_quat[static_cast<std::size_t>(site)](3) = 1.0;
+    AssertModelValidationFailure(mismatchedSiteFrame, dtDynValidationCode::InvalidReference,
+                                 dtDynObjectType::Site, site,
+                                 "compiled site quaternion/matrix frame pair is invalid");
+}
+
 void AssertBodyValidationFailure(const dtDynModel &model, dtDynValidationCode code,
                                  const std::string &message)
 {
@@ -3129,8 +3284,7 @@ void TestUpdateSpecRejectsSiteBacklinkMutationWithoutWriting()
     spec.EditBody(body, [](dtDynBodySpec &draft)
                   {
                       draft.sites.clear();
-                      draft.inertial.mass = 7.0;
-                  });
+                      draft.inertial.mass = 7.0; });
 
     assert(!UpdateSpec(spec, model));
     assert(model.body_mass(body) == mass);
@@ -3200,8 +3354,7 @@ void TestUpdateSpecMatchesPhysicalRecompile()
                           draft.inertial.mass = 2.0;
                           draft.inertial.inertia(0) = 0.2;
                           draft.inertial.inertia(1) = 0.3;
-                          draft.inertial.inertia(2) = 0.4;
-                      });
+                          draft.inertial.inertia(2) = 0.4; });
     original.EditBody(child, [](dtDynBodySpec &draft)
                       { draft.inertial.mass = 0.0; });
 
@@ -3243,8 +3396,7 @@ void TestUpdateSpecMatchesPhysicalRecompile()
                          draft.inertial.quat = math::AxisAngleQuat(xAxis, 0.3);
                          draft.inertial.inertia(0) = 0.25;
                          draft.inertial.inertia(1) = 0.35;
-                         draft.inertial.inertia(2) = 0.45;
-                     });
+                         draft.inertial.inertia(2) = 0.45; });
     updated.EditBody(child, [&](dtDynBodySpec &draft)
                      {
                          draft.pos(0) = 0.6;
@@ -3255,32 +3407,28 @@ void TestUpdateSpecMatchesPhysicalRecompile()
                          draft.inertial.quat = math::AxisAngleQuat(zAxis, -0.5);
                          draft.inertial.inertia(0) = 0.12;
                          draft.inertial.inertia(1) = 0.18;
-                         draft.inertial.inertia(2) = 0.24;
-                     });
+                         draft.inertial.inertia(2) = 0.24; });
     updated.EditJoint(rootJoint, [&](dtDynJointSpec &draft)
-                        {
+                      {
                             draft.pos(0) = 0.1;
                             draft.axis = yAxis;
                             draft.limited = true;
                             draft.rangeMin = -0.7;
                             draft.rangeMax = 0.8;
-                            draft.armature = 0.11;
-                        });
+                            draft.armature = 0.11; });
     updated.EditJoint(childJoint, [&](dtDynJointSpec &draft)
-                        {
+                      {
                             draft.pos(2) = -0.3;
                             draft.axis = xAxis;
                             draft.limited = true;
                             draft.rangeMin = -0.2;
                             draft.rangeMax = 0.4;
-                            draft.armature = 0.23;
-                        });
+                            draft.armature = 0.23; });
     updated.EditSite(site, [&](dtDynSiteSpec &draft)
                      {
                          draft.pos(0) = 0.4;
                          draft.pos(2) = 0.1;
-                         draft.quat = math::AxisAngleQuat(yAxis, 0.6);
-                     });
+                         draft.quat = math::AxisAngleQuat(yAxis, 0.6); });
     updated.EditActuator(actuator, [](dtDynActuatorSpec &draft)
                          { draft.gear = 42.0; });
 
@@ -4947,6 +5095,8 @@ int main()
     TestSpecValidationRejectsInvalidPhysicalValues();
     TestModelValidationRejectsInvalidPhysicalValues();
     TestModelValidationRejectsInvalidFramePairs();
+    TestModelValidationPreservesUniqueNameValidationOrder();
+    TestModelValidationPreservesJointAndSiteValidationFailures();
     TestModelValidationPreservesEveryBodyNonFiniteFailure();
     TestModelValidationPreservesEveryBodyPhysicalOrFrameFailure();
     TestModelValidationPreservesBodyValidationPhasePrecedence();

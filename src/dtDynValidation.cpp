@@ -79,6 +79,54 @@ bool FailInvalidBodyPhysicalOrFrame(dtDynValidationError *error, const dtDynInde
                 "compiled body has invalid physical or frame-pair values");
 }
 
+bool FailInvalidJointSpecProvenance(dtDynValidationError *error, const dtDynIndex jointId)
+{
+    return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Joint, jointId,
+                "compiled joint specification provenance is invalid");
+}
+
+bool FailNonFiniteJoint(dtDynValidationError *error, const dtDynIndex jointId)
+{
+    return Fail(error, dtDynValidationCode::NonFiniteValue, dtDynObjectType::Joint, jointId,
+                "compiled joint contains a non-finite value");
+}
+
+bool FailInvalidSlideHingeAxis(dtDynValidationError *error, const dtDynIndex jointId)
+{
+    return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Joint, jointId,
+                "compiled slide/hinge joint axis must be unit length");
+}
+
+bool FailNonFiniteSite(dtDynValidationError *error, const dtDynIndex siteId)
+{
+    return Fail(error, dtDynValidationCode::NonFiniteValue, dtDynObjectType::Site, siteId,
+                "compiled site contains a non-finite value");
+}
+
+bool FailInvalidSiteFramePair(dtDynValidationError *error, const dtDynIndex siteId)
+{
+    return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Site, siteId,
+                "compiled site quaternion/matrix frame pair is invalid");
+}
+
+bool FailInvalidBodyJointSegment(dtDynValidationError *error, const dtDynIndex bodyId)
+{
+    return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body, bodyId,
+                "compiled body joint segments overlap or contain another body's joint");
+}
+
+bool FailInvalidBodyDofSegment(dtDynValidationError *error, const dtDynIndex bodyId)
+{
+    return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body, bodyId,
+                "compiled body DOF segments overlap or contain another body's DOF");
+}
+
+bool FailInvalidJointDofSpanOwnership(dtDynValidationError *error, const dtDynIndex jointId)
+{
+    return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Joint, jointId,
+                "compiled joint DOF span ownership is inconsistent");
+}
+
 template <typename Object>
 bool ValidateUniqueNames(const dtArray<Object> &objects,
                          const dtDynObjectType objectType,
@@ -576,10 +624,19 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
 #undef DTDYN_REQUIRE_DENSE
 #undef DTDYN_REQUIRE_ARRAY
 
-    if (!ValidateUniqueNames(model.body_names, dtDynObjectType::Body, "body", error) ||
-        !ValidateUniqueNames(model.joint_names, dtDynObjectType::Joint, "joint", error) ||
-        !ValidateUniqueNames(model.site_names, dtDynObjectType::Site, "site", error) ||
-        !ValidateUniqueNames(model.actuator_names, dtDynObjectType::Actuator, "actuator", error))
+    if (!ValidateUniqueNames(model.body_names, dtDynObjectType::Body, "body", error))
+    {
+        return false;
+    }
+    if (!ValidateUniqueNames(model.joint_names, dtDynObjectType::Joint, "joint", error))
+    {
+        return false;
+    }
+    if (!ValidateUniqueNames(model.site_names, dtDynObjectType::Site, "site", error))
+    {
+        return false;
+    }
+    if (!ValidateUniqueNames(model.actuator_names, dtDynObjectType::Actuator, "actuator", error))
     {
         return false;
     }
@@ -654,25 +711,48 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
     {
         const std::size_t index = static_cast<std::size_t>(jointId);
         const dtDynIndex specJointId = model.jnt_specid[index];
-        if (specJointId < 0 || specJointId >= model.njnt ||
-            ++jointSpecCoverage[static_cast<std::size_t>(specJointId)] != 1)
+        if (specJointId < 0)
         {
-            return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Joint,
-                        jointId, "compiled joint specification provenance is invalid");
+            return FailInvalidJointSpecProvenance(error, jointId);
         }
-        if (!std::isfinite(model.jnt_range_min.At(jointId)) ||
-            !std::isfinite(model.jnt_range_max.At(jointId)) || !IsFinite(model.jnt_pos[index]) ||
-            !IsFinite(model.jnt_axis[index]))
+        if (specJointId >= model.njnt)
         {
-            return Fail(error, dtDynValidationCode::NonFiniteValue, dtDynObjectType::Joint,
-                        jointId, "compiled joint contains a non-finite value");
+            return FailInvalidJointSpecProvenance(error, jointId);
+        }
+        if (++jointSpecCoverage[static_cast<std::size_t>(specJointId)] != 1)
+        {
+            return FailInvalidJointSpecProvenance(error, jointId);
+        }
+        if (!std::isfinite(model.jnt_range_min.At(jointId)))
+        {
+            return FailNonFiniteJoint(error, jointId);
+        }
+        if (!std::isfinite(model.jnt_range_max.At(jointId)))
+        {
+            return FailNonFiniteJoint(error, jointId);
+        }
+        if (!IsFinite(model.jnt_pos[index]))
+        {
+            return FailNonFiniteJoint(error, jointId);
+        }
+        if (!IsFinite(model.jnt_axis[index]))
+        {
+            return FailNonFiniteJoint(error, jointId);
         }
         const dtDynJointType jointType = static_cast<dtDynJointType>(model.jnt_type[index]);
-        if ((jointType == dtDynJointType::Slide || jointType == dtDynJointType::Hinge) &&
-            !IsUnitVector(model.jnt_axis[index]))
+        if (jointType == dtDynJointType::Slide)
         {
-            return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Joint,
-                        jointId, "compiled slide/hinge joint axis must be unit length");
+            if (!IsUnitVector(model.jnt_axis[index]))
+            {
+                return FailInvalidSlideHingeAxis(error, jointId);
+            }
+        }
+        else if (jointType == dtDynJointType::Hinge)
+        {
+            if (!IsUnitVector(model.jnt_axis[index]))
+            {
+                return FailInvalidSlideHingeAxis(error, jointId);
+            }
         }
     }
     for (dtDynIndex dofId = 0; dofId < model.nv; ++dofId)
@@ -693,17 +773,25 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
     for (dtDynIndex siteId = 0; siteId < model.nsite; ++siteId)
     {
         const std::size_t index = static_cast<std::size_t>(siteId);
-        if (!IsFinite(model.site_pos[index]) || !IsFinite(model.site_quat[index]) ||
-            !IsFinite(model.site_mat[index]))
+        if (!IsFinite(model.site_pos[index]))
         {
-            return Fail(error, dtDynValidationCode::NonFiniteValue, dtDynObjectType::Site, siteId,
-                        "compiled site contains a non-finite value");
+            return FailNonFiniteSite(error, siteId);
         }
-        if (!IsProperRotation(model.site_mat[index]) ||
-            !MatrixMatchesQuaternion(model.site_mat[index], model.site_quat[index]))
+        if (!IsFinite(model.site_quat[index]))
         {
-            return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Site,
-                        siteId, "compiled site quaternion/matrix frame pair is invalid");
+            return FailNonFiniteSite(error, siteId);
+        }
+        if (!IsFinite(model.site_mat[index]))
+        {
+            return FailNonFiniteSite(error, siteId);
+        }
+        if (!IsProperRotation(model.site_mat[index]))
+        {
+            return FailInvalidSiteFramePair(error, siteId);
+        }
+        if (!MatrixMatchesQuaternion(model.site_mat[index], model.site_quat[index]))
+        {
+            return FailInvalidSiteFramePair(error, siteId);
         }
     }
     for (dtDynIndex actuatorId = 0; actuatorId < model.nu; ++actuatorId)
@@ -867,21 +955,25 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
         for (dtDynIndex offset = 0; offset < jointCount; ++offset)
         {
             const dtDynIndex jointId = jointAddress + offset;
-            if (model.jnt_bodyid[static_cast<std::size_t>(jointId)] != bodyId ||
-                ++jointBodyCoverage[static_cast<std::size_t>(jointId)] != 1)
+            if (model.jnt_bodyid[static_cast<std::size_t>(jointId)] != bodyId)
             {
-                return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body,
-                            bodyId, "compiled body joint segments overlap or contain another body's joint");
+                return FailInvalidBodyJointSegment(error, bodyId);
+            }
+            if (++jointBodyCoverage[static_cast<std::size_t>(jointId)] != 1)
+            {
+                return FailInvalidBodyJointSegment(error, bodyId);
             }
         }
         for (dtDynIndex offset = 0; offset < dofCount; ++offset)
         {
             const dtDynIndex dofId = dofAddress + offset;
-            if (model.dof_bodyid[static_cast<std::size_t>(dofId)] != bodyId ||
-                ++dofBodyCoverage[static_cast<std::size_t>(dofId)] != 1)
+            if (model.dof_bodyid[static_cast<std::size_t>(dofId)] != bodyId)
             {
-                return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body,
-                            bodyId, "compiled body DOF segments overlap or contain another body's DOF");
+                return FailInvalidBodyDofSegment(error, bodyId);
+            }
+            if (++dofBodyCoverage[static_cast<std::size_t>(dofId)] != 1)
+            {
+                return FailInvalidBodyDofSegment(error, bodyId);
             }
         }
     }
@@ -945,11 +1037,17 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
         {
             const dtDynIndex dofId = dofAddress + offset;
             const std::size_t dofIndex = static_cast<std::size_t>(dofId);
-            if (model.dof_jntid[dofIndex] != jointId || model.dof_bodyid[dofIndex] != bodyId ||
-                ++jointDofCoverage[dofIndex] != 1)
+            if (model.dof_jntid[dofIndex] != jointId)
             {
-                return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Joint,
-                            jointId, "compiled joint DOF span ownership is inconsistent");
+                return FailInvalidJointDofSpanOwnership(error, jointId);
+            }
+            if (model.dof_bodyid[dofIndex] != bodyId)
+            {
+                return FailInvalidJointDofSpanOwnership(error, jointId);
+            }
+            if (++jointDofCoverage[dofIndex] != 1)
+            {
+                return FailInvalidJointDofSpanOwnership(error, jointId);
             }
         }
     }
