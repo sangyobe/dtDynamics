@@ -4780,6 +4780,45 @@ void TestCompileSpecSupportsMultipleMovableRoots()
     assert(std::fabs(data.comJmat(4, 1) - 1.0) < 1.0e-12);
 }
 
+void SetRootMassForComProductRegression(dtDynBodySpec &draft)
+{
+    draft.inertial.mass = 2.0;
+}
+
+void SetRootHingeAxisForComProductRegression(dtDynJointSpec &draft)
+{
+    draft.axis(1) = 1.0;
+}
+
+void TestCcrbaPreservesRootMassGuardedComProducts()
+{
+    dtDynSpec spec;
+    const dtDynIndex root = spec.AddBody("root", 0);
+    spec.EditBody(root, SetRootMassForComProductRegression);
+    const dtDynIndex joint = spec.AddJoint(root, "root_hinge", dtDynJointType::Hinge);
+    spec.EditJoint(joint, SetRootHingeAxisForComProductRegression);
+
+    const dtDynModel model = CompileSpec(spec);
+    assert(model.nroot == 1);
+    assert(model.nv == 1);
+    assert(std::fabs(model.root_mass(0) - 2.0) < 1.0e-12);
+
+    dtDynData data;
+    data.Resize(model);
+    data.qvel(0) = 0.75;
+    dt::Math::Vector3<dtDynReal> gravity;
+    gravity.SetZero();
+    ComputeDynamicsCCRBA(model, data, gravity, DTDYN_CCRBA_TERM_ALL);
+
+    for (dtDynIndex row = 0; row < 3; ++row)
+    {
+        assert(std::isfinite(data.comJmat(row, 0)));
+        assert(std::isfinite(data.comJmatDot(row, 0)));
+        assert(std::isfinite(data.comVel(row)));
+        assert(std::fabs(data.comVel(row) - data.comJmat(row, 0) * data.qvel(0)) < 1.0e-12);
+    }
+}
+
 void TestCompileSpecSupportsFloatingBaseQuadrupedTree()
 {
     dtDynSpec spec;
@@ -5930,6 +5969,7 @@ int main()
     TestSpatialInertiaAtWorldOriginUsesParallelAxisTheorem();
     TestCompileSpecUsesNativeIndexLayout();
     TestCompileSpecSupportsMultipleMovableRoots();
+    TestCcrbaPreservesRootMassGuardedComProducts();
     TestCompileSpecSupportsFloatingBaseQuadrupedTree();
     TestForwardKinematicsAndPointJacobianForFixedChain();
     TestIndexedJacobiansOnlyRefreshRequestedIds();

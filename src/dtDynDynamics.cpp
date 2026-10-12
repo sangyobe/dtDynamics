@@ -1049,7 +1049,11 @@ void ComputeComJacobianMatrixFromForces(const dtDynModel &model, dtDynData &data
     {
         const dtDynIndex bodyId = model.dof_bodyid[static_cast<std::size_t>(dofId)];
         const dtDynIndex rootIdx = utils::RootIndex(model, bodyId);
-        if (rootIdx < 0 || model.root_mass.At(rootIdx) <= std::numeric_limits<dtDynReal>::epsilon())
+        if (rootIdx < 0)
+        {
+            continue;
+        }
+        if (model.root_mass.At(rootIdx) <= std::numeric_limits<dtDynReal>::epsilon())
         {
             continue;
         }
@@ -1070,7 +1074,11 @@ void ComputeComJacobianMatrixDotFromForces(const dtDynModel &model, dtDynData &d
     {
         const dtDynIndex bodyId = model.dof_bodyid[static_cast<std::size_t>(dofId)];
         const dtDynIndex rootIdx = utils::RootIndex(model, bodyId);
-        if (rootIdx < 0 || model.root_mass.At(rootIdx) <= std::numeric_limits<dtDynReal>::epsilon())
+        if (rootIdx < 0)
+        {
+            continue;
+        }
+        if (model.root_mass.At(rootIdx) <= std::numeric_limits<dtDynReal>::epsilon())
         {
             continue;
         }
@@ -1119,7 +1127,11 @@ void ComputeComVelocityProductFromForces(const dtDynModel &model, dtDynData &dat
     {
         const dtDynIndex bodyId = model.dof_bodyid[static_cast<std::size_t>(dofId)];
         const dtDynIndex rootIdx = utils::RootIndex(model, bodyId);
-        if (rootIdx < 0 || model.root_mass.At(rootIdx) <= std::numeric_limits<dtDynReal>::epsilon())
+        if (rootIdx < 0)
+        {
+            continue;
+        }
+        if (model.root_mass.At(rootIdx) <= std::numeric_limits<dtDynReal>::epsilon())
         {
             continue;
         }
