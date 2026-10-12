@@ -353,6 +353,20 @@ std::size_t ValidationOrigin(const dtDynValidationError &error,
     return 0;
 }
 
+[[noreturn]] void ThrowMalformedXmlAttribute(const std::string &sourcePath,
+                                             const std::size_t offset)
+{
+    throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath, offset,
+                        "malformed XML attribute");
+}
+
+[[noreturn]] void ThrowUnquotedXmlAttributeValue(const std::string &sourcePath,
+                                                 const std::size_t offset)
+{
+    throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath, offset,
+                        "XML attribute value must be quoted");
+}
+
 AttributeMap ParseAttributes(const std::string &tag, const std::size_t tagOffset,
                              const std::string &sourcePath)
 {
@@ -360,8 +374,12 @@ AttributeMap ParseAttributes(const std::string &tag, const std::size_t tagOffset
     std::size_t pos = TagName(tag).size();
     while (pos < tag.size())
     {
-        while (pos < tag.size() && std::isspace(static_cast<unsigned char>(tag[pos])))
+        while (pos < tag.size())
         {
+            if (!std::isspace(static_cast<unsigned char>(tag[pos])))
+            {
+                break;
+            }
             ++pos;
         }
         if (pos >= tag.size())
@@ -376,8 +394,16 @@ AttributeMap ParseAttributes(const std::string &tag, const std::size_t tagOffset
         }
 
         const std::size_t keyStart = pos;
-        while (pos < tag.size() && tag[pos] != '=' && !std::isspace(static_cast<unsigned char>(tag[pos])))
+        while (pos < tag.size())
         {
+            if (tag[pos] == '=')
+            {
+                break;
+            }
+            if (std::isspace(static_cast<unsigned char>(tag[pos])))
+            {
+                break;
+            }
             ++pos;
         }
         const std::string key = tag.substr(keyStart, pos - keyStart);
@@ -388,31 +414,55 @@ AttributeMap ParseAttributes(const std::string &tag, const std::size_t tagOffset
                                 "invalid XML attribute name");
         }
 
-        while (pos < tag.size() && std::isspace(static_cast<unsigned char>(tag[pos])))
+        while (pos < tag.size())
         {
+            if (!std::isspace(static_cast<unsigned char>(tag[pos])))
+            {
+                break;
+            }
             ++pos;
         }
-        if (key.empty() || pos >= tag.size() || tag[pos] != '=')
+        if (key.empty())
         {
-            throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath,
-                                tagOffset + keyStart, "malformed XML attribute");
+            ThrowMalformedXmlAttribute(sourcePath, tagOffset + keyStart);
+        }
+        if (pos >= tag.size())
+        {
+            ThrowMalformedXmlAttribute(sourcePath, tagOffset + keyStart);
+        }
+        if (tag[pos] != '=')
+        {
+            ThrowMalformedXmlAttribute(sourcePath, tagOffset + keyStart);
         }
         ++pos;
-        while (pos < tag.size() && std::isspace(static_cast<unsigned char>(tag[pos])))
+        while (pos < tag.size())
         {
+            if (!std::isspace(static_cast<unsigned char>(tag[pos])))
+            {
+                break;
+            }
             ++pos;
         }
-        if (pos >= tag.size() || (tag[pos] != '"' && tag[pos] != '\''))
+        if (pos >= tag.size())
         {
-            throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath,
-                                tagOffset + keyStart,
-                                "XML attribute value must be quoted");
+            ThrowUnquotedXmlAttributeValue(sourcePath, tagOffset + keyStart);
+        }
+        if (tag[pos] != '"')
+        {
+            if (tag[pos] != '\'')
+            {
+                ThrowUnquotedXmlAttributeValue(sourcePath, tagOffset + keyStart);
+            }
         }
 
         const char quote = tag[pos++];
         const std::size_t valueStart = pos;
-        while (pos < tag.size() && tag[pos] != quote)
+        while (pos < tag.size())
         {
+            if (tag[pos] == quote)
+            {
+                break;
+            }
             if (tag[pos] == '<')
             {
                 throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath,

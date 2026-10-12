@@ -2657,6 +2657,45 @@ void TestSpecXmlRejectsMalformedAttributes()
     assert(rejected);
 }
 
+static void ExpectMalformedXmlAttributeError(const std::string &xml,
+                                             const std::string &anchor,
+                                             const std::string &requiredDiagnostic)
+{
+    bool rejected = false;
+    try
+    {
+        (void)dtDynSpec::DecodeXml(xml);
+    }
+    catch (const dtDynXmlError &error)
+    {
+        assert(error.Code() == dtDynXmlErrorCode::MalformedSyntax);
+        assert(error.Offset() == xml.find(anchor));
+        assert(std::string(error.what()).find(requiredDiagnostic) != std::string::npos);
+        rejected = true;
+    }
+    assert(rejected);
+}
+
+void TestSpecXmlPreservesAttributeWhitespaceAndFirstFailure()
+{
+    const std::string valid =
+        "<mujoco><worldbody><body name = \"base\" pos = \"1 0 0\" />"
+        "</worldbody></mujoco>";
+    const dtDynSpec decoded = dtDynSpec::DecodeXml(valid);
+    assert(decoded.Bodies().size() == 2);
+    assert(decoded.BodyId("base") >= 0);
+    assert(std::fabs(decoded.Bodies()[1].pos(0) - 1.0) < 1.0e-12);
+
+    ExpectMalformedXmlAttributeError(
+        "<mujoco><worldbody><body name \"base\"/></worldbody></mujoco>",
+        "name",
+        "malformed XML attribute");
+    ExpectMalformedXmlAttributeError(
+        "<mujoco><worldbody><body name=base/></worldbody></mujoco>",
+        "name",
+        "XML attribute value must be quoted");
+}
+
 void TestSpecXmlRejectsMisnestedSupportedTags()
 {
     const std::string xml =
@@ -5560,6 +5599,7 @@ int main()
     TestSpecXmlReportsTypedNumericErrors();
     TestSpecXmlRejectsWrongVectorArity();
     TestSpecXmlRejectsMalformedAttributes();
+    TestSpecXmlPreservesAttributeWhitespaceAndFirstFailure();
     TestSpecXmlRejectsMisnestedSupportedTags();
     TestSpecXmlRejectsDuplicateObjectNames();
     TestSpecXmlRejectsUnknownReferencesWithTypedError();
