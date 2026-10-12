@@ -127,6 +127,49 @@ bool FailInvalidJointDofSpanOwnership(dtDynValidationError *error, const dtDynIn
                 "compiled joint DOF span ownership is inconsistent");
 }
 
+bool FailNonFiniteSpecBody(dtDynValidationError *error, const dtDynIndex bodyId)
+{
+    return Fail(error, dtDynValidationCode::NonFiniteValue, dtDynObjectType::Body, bodyId,
+                "body[" + std::to_string(bodyId) + "] contains a non-finite value");
+}
+
+bool FailInvalidSpecBodyPhysicalInertia(dtDynValidationError *error, const dtDynIndex bodyId)
+{
+    return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body, bodyId,
+                "body[" + std::to_string(bodyId) +
+                    "] has a negative mass or physically invalid principal inertia");
+}
+
+bool FailInvalidSpecBodyQuaternion(dtDynValidationError *error, const dtDynIndex bodyId)
+{
+    return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body, bodyId,
+                "body[" + std::to_string(bodyId) + "] has a non-unit body or inertial quaternion");
+}
+
+bool FailNonFiniteSpecJoint(dtDynValidationError *error, const dtDynIndex jointId)
+{
+    return Fail(error, dtDynValidationCode::NonFiniteValue, dtDynObjectType::Joint, jointId,
+                "joint[" + std::to_string(jointId) + "] contains a non-finite value");
+}
+
+bool FailInvalidSpecSlideHingeAxis(dtDynValidationError *error, const dtDynIndex jointId)
+{
+    return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Joint, jointId,
+                "joint axis must be unit length for slide/hinge joints");
+}
+
+bool FailNegativeSpecJointArmature(dtDynValidationError *error, const dtDynIndex jointId)
+{
+    return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Joint, jointId,
+                "joint armature must be nonnegative");
+}
+
+bool FailNonFiniteSpecSite(dtDynValidationError *error, const dtDynIndex siteId)
+{
+    return Fail(error, dtDynValidationCode::NonFiniteValue, dtDynObjectType::Site, siteId,
+                "site[" + std::to_string(siteId) + "] contains a non-finite value");
+}
+
 template <typename Object>
 bool ValidateUniqueNames(const dtArray<Object> &objects,
                          const dtDynObjectType objectType,
@@ -311,22 +354,46 @@ bool ValidateSpec(const dtDynSpec &spec, dtDynValidationError *error)
     for (std::size_t bodyIndex = 0; bodyIndex < bodies.size(); ++bodyIndex)
     {
         const dtDynBodySpec &body = bodies[bodyIndex];
-        if (!IsFinite(body.pos) || !IsFinite(body.quat) ||
-            !std::isfinite(body.inertial.mass) || !IsFinite(body.inertial.pos) ||
-            !IsFinite(body.inertial.quat) || !IsFinite(body.inertial.inertia))
+        const dtDynIndex bodyId = static_cast<dtDynIndex>(bodyIndex);
+        if (!IsFinite(body.pos))
         {
-            return Fail(error, dtDynValidationCode::NonFiniteValue, dtDynObjectType::Body,
-                        static_cast<dtDynIndex>(bodyIndex), "body[" + std::to_string(bodyIndex) + "] contains a non-finite value");
+            return FailNonFiniteSpecBody(error, bodyId);
         }
-        if (body.inertial.mass < 0.0 || !IsPhysicalInertia(body.inertial.inertia))
+        if (!IsFinite(body.quat))
         {
-            return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body,
-                        static_cast<dtDynIndex>(bodyIndex), "body[" + std::to_string(bodyIndex) + "] has a negative mass or physically invalid principal inertia");
+            return FailNonFiniteSpecBody(error, bodyId);
         }
-        if (!IsUnitQuaternion(body.quat) || !IsUnitQuaternion(body.inertial.quat))
+        if (!std::isfinite(body.inertial.mass))
         {
-            return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body,
-                        static_cast<dtDynIndex>(bodyIndex), "body[" + std::to_string(bodyIndex) + "] has a non-unit body or inertial quaternion");
+            return FailNonFiniteSpecBody(error, bodyId);
+        }
+        if (!IsFinite(body.inertial.pos))
+        {
+            return FailNonFiniteSpecBody(error, bodyId);
+        }
+        if (!IsFinite(body.inertial.quat))
+        {
+            return FailNonFiniteSpecBody(error, bodyId);
+        }
+        if (!IsFinite(body.inertial.inertia))
+        {
+            return FailNonFiniteSpecBody(error, bodyId);
+        }
+        if (body.inertial.mass < 0.0)
+        {
+            return FailInvalidSpecBodyPhysicalInertia(error, bodyId);
+        }
+        if (!IsPhysicalInertia(body.inertial.inertia))
+        {
+            return FailInvalidSpecBodyPhysicalInertia(error, bodyId);
+        }
+        if (!IsUnitQuaternion(body.quat))
+        {
+            return FailInvalidSpecBodyQuaternion(error, bodyId);
+        }
+        if (!IsUnitQuaternion(body.inertial.quat))
+        {
+            return FailInvalidSpecBodyQuaternion(error, bodyId);
         }
     }
 
@@ -458,12 +525,25 @@ bool ValidateSpec(const dtDynSpec &spec, dtDynValidationError *error)
                         "joint[" + std::to_string(jointId) + "] '" + joint.name +
                             "' has an unsupported joint type");
         }
-        if (!IsFinite(joint.pos) || !IsFinite(joint.axis) ||
-            !std::isfinite(joint.rangeMin) || !std::isfinite(joint.rangeMax) ||
-            !std::isfinite(joint.armature))
+        if (!IsFinite(joint.pos))
         {
-            return Fail(error, dtDynValidationCode::NonFiniteValue, dtDynObjectType::Joint, jointId,
-                        "joint[" + std::to_string(jointId) + "] contains a non-finite value");
+            return FailNonFiniteSpecJoint(error, jointId);
+        }
+        if (!IsFinite(joint.axis))
+        {
+            return FailNonFiniteSpecJoint(error, jointId);
+        }
+        if (!std::isfinite(joint.rangeMin))
+        {
+            return FailNonFiniteSpecJoint(error, jointId);
+        }
+        if (!std::isfinite(joint.rangeMax))
+        {
+            return FailNonFiniteSpecJoint(error, jointId);
+        }
+        if (!std::isfinite(joint.armature))
+        {
+            return FailNonFiniteSpecJoint(error, jointId);
         }
         if (joint.body <= 0 || static_cast<std::size_t>(joint.body) >= bodies.size())
         {
@@ -477,16 +557,33 @@ bool ValidateSpec(const dtDynSpec &spec, dtDynValidationError *error)
                         "joint[" + std::to_string(jointId) + "] '" + joint.name +
                             "' does not have exactly one owning-body backlink");
         }
-        if ((joint.type == dtDynJointType::Slide || joint.type == dtDynJointType::Hinge) &&
-            !IsUnitVector(joint.axis))
+        if (joint.type == dtDynJointType::Slide)
         {
-            return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Joint,
-                        jointId, "joint axis must be unit length for slide/hinge joints");
+            if (!IsUnitVector(joint.axis))
+            {
+                return FailInvalidSpecSlideHingeAxis(error, jointId);
+            }
+            if (joint.armature < 0.0)
+            {
+                return FailNegativeSpecJointArmature(error, jointId);
+            }
+            continue;
+        }
+        if (joint.type == dtDynJointType::Hinge)
+        {
+            if (!IsUnitVector(joint.axis))
+            {
+                return FailInvalidSpecSlideHingeAxis(error, jointId);
+            }
+            if (joint.armature < 0.0)
+            {
+                return FailNegativeSpecJointArmature(error, jointId);
+            }
+            continue;
         }
         if (joint.armature < 0.0)
         {
-            return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Joint,
-                        jointId, "joint armature must be nonnegative");
+            return FailNegativeSpecJointArmature(error, jointId);
         }
     }
 
@@ -494,10 +591,13 @@ bool ValidateSpec(const dtDynSpec &spec, dtDynValidationError *error)
     {
         const dtDynIndex siteId = static_cast<dtDynIndex>(siteIndex);
         const dtDynSiteSpec &site = sites[siteIndex];
-        if (!IsFinite(site.pos) || !IsFinite(site.quat))
+        if (!IsFinite(site.pos))
         {
-            return Fail(error, dtDynValidationCode::NonFiniteValue, dtDynObjectType::Site, siteId,
-                        "site[" + std::to_string(siteId) + "] contains a non-finite value");
+            return FailNonFiniteSpecSite(error, siteId);
+        }
+        if (!IsFinite(site.quat))
+        {
+            return FailNonFiniteSpecSite(error, siteId);
         }
         if (!IsUnitQuaternion(site.quat))
         {
@@ -534,10 +634,19 @@ bool ValidateSpec(const dtDynSpec &spec, dtDynValidationError *error)
                         actuatorId, "actuator[" + std::to_string(actuatorId) + "] '" + actuator.name + "' references invalid joint " + std::to_string(actuator.joint));
         }
     }
-    return ValidateUniqueNames(bodies, dtDynObjectType::Body, "body", error) &&
-           ValidateUniqueNames(joints, dtDynObjectType::Joint, "joint", error) &&
-           ValidateUniqueNames(sites, dtDynObjectType::Site, "site", error) &&
-           ValidateUniqueNames(actuators, dtDynObjectType::Actuator, "actuator", error);
+    if (!ValidateUniqueNames(bodies, dtDynObjectType::Body, "body", error))
+    {
+        return false;
+    }
+    if (!ValidateUniqueNames(joints, dtDynObjectType::Joint, "joint", error))
+    {
+        return false;
+    }
+    if (!ValidateUniqueNames(sites, dtDynObjectType::Site, "site", error))
+    {
+        return false;
+    }
+    return ValidateUniqueNames(actuators, dtDynObjectType::Actuator, "actuator", error);
 }
 
 bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)

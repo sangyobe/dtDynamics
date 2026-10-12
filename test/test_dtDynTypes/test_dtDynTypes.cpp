@@ -791,6 +791,183 @@ void TestSpecValidationRejectsInvalidPhysicalValues()
     assert(ValidateSpec(roundedAxis, &error));
 }
 
+void AssertSpecValidationFailure(const dtDynSpec &spec,
+                                 const dtDynValidationCode code,
+                                 const dtDynObjectType object,
+                                 const dtDynIndex index,
+                                 const std::string &message)
+{
+    dtDynValidationError error;
+    assert(!ValidateSpec(spec, &error));
+    assert(error.code == code);
+    assert(error.object == object);
+    assert(error.index == index);
+    assert(error.message == message);
+}
+
+void TestSpecValidationPreservesOrderedPhysicalAndNameFailures()
+{
+    const dtDynReal nan = std::numeric_limits<dtDynReal>::quiet_NaN();
+
+    dtDynSpec nonFiniteBody;
+    const dtDynIndex nonFiniteBodyId = nonFiniteBody.AddBody("nonfinite_body", 0);
+    nonFiniteBody.EditBody(nonFiniteBodyId, [&](dtDynBodySpec &draft)
+                           { draft.pos(0) = nan; });
+    AssertSpecValidationFailure(nonFiniteBody, dtDynValidationCode::NonFiniteValue,
+                                dtDynObjectType::Body, nonFiniteBodyId,
+                                "body[1] contains a non-finite value");
+    bool checkedCompileRejected = false;
+    try
+    {
+        (void)CompileSpecChecked(nonFiniteBody);
+    }
+    catch (const std::runtime_error &exception)
+    {
+        checkedCompileRejected =
+            std::string(exception.what()) == "CompileSpecChecked: body[1] contains a non-finite value";
+    }
+    assert(checkedCompileRejected);
+
+    dtDynSpec negativeMass;
+    const dtDynIndex massBody = negativeMass.AddBody("negative_mass_body", 0);
+    negativeMass.EditBody(massBody, [&](dtDynBodySpec &draft)
+                          { draft.inertial.mass = -1.0; });
+    AssertSpecValidationFailure(negativeMass, dtDynValidationCode::InvalidReference,
+                                dtDynObjectType::Body, massBody,
+                                "body[1] has a negative mass or physically invalid principal inertia");
+
+    dtDynSpec invalidQuaternion;
+    const dtDynIndex quaternionBody = invalidQuaternion.AddBody("invalid_quaternion_body", 0);
+    invalidQuaternion.EditBody(quaternionBody, [&](dtDynBodySpec &draft)
+                               { draft.quat.SetZero(); });
+    AssertSpecValidationFailure(invalidQuaternion, dtDynValidationCode::InvalidReference,
+                                dtDynObjectType::Body, quaternionBody,
+                                "body[1] has a non-unit body or inertial quaternion");
+
+    dtDynSpec nonFiniteJoint;
+    const dtDynIndex jointBody = nonFiniteJoint.AddBody("nonfinite_joint_body", 0);
+    const dtDynIndex nonFiniteJointId =
+        nonFiniteJoint.AddJoint(jointBody, "nonfinite_joint", dtDynJointType::Hinge);
+    nonFiniteJoint.EditJoint(nonFiniteJointId, [&](dtDynJointSpec &draft)
+                             { draft.rangeMin = nan; });
+    AssertSpecValidationFailure(nonFiniteJoint, dtDynValidationCode::NonFiniteValue,
+                                dtDynObjectType::Joint, nonFiniteJointId,
+                                "joint[0] contains a non-finite value");
+
+    dtDynSpec invalidSlideAxis;
+    const dtDynIndex slideBody = invalidSlideAxis.AddBody("slide_body", 0);
+    const dtDynIndex slideJoint =
+        invalidSlideAxis.AddJoint(slideBody, "slide_joint", dtDynJointType::Slide);
+    invalidSlideAxis.EditJoint(slideJoint, [&](dtDynJointSpec &draft)
+                               {
+                                   draft.axis.SetZero();
+                                   draft.armature = -1.0; });
+    AssertSpecValidationFailure(invalidSlideAxis, dtDynValidationCode::InvalidReference,
+                                dtDynObjectType::Joint, slideJoint,
+                                "joint axis must be unit length for slide/hinge joints");
+
+    dtDynSpec negativeSlideArmature;
+    const dtDynIndex negativeSlideBody = negativeSlideArmature.AddBody("negative_slide_body", 0);
+    const dtDynIndex negativeSlideJoint =
+        negativeSlideArmature.AddJoint(negativeSlideBody, "negative_slide", dtDynJointType::Slide);
+    negativeSlideArmature.EditJoint(negativeSlideJoint, [&](dtDynJointSpec &draft)
+                                    { draft.armature = -1.0; });
+    AssertSpecValidationFailure(negativeSlideArmature, dtDynValidationCode::InvalidReference,
+                                dtDynObjectType::Joint, negativeSlideJoint,
+                                "joint armature must be nonnegative");
+
+    dtDynSpec invalidHingeAxis;
+    const dtDynIndex hingeBody = invalidHingeAxis.AddBody("hinge_body", 0);
+    const dtDynIndex hingeJoint =
+        invalidHingeAxis.AddJoint(hingeBody, "hinge_joint", dtDynJointType::Hinge);
+    invalidHingeAxis.EditJoint(hingeJoint, [&](dtDynJointSpec &draft)
+                               { draft.axis.SetZero(); });
+    AssertSpecValidationFailure(invalidHingeAxis, dtDynValidationCode::InvalidReference,
+                                dtDynObjectType::Joint, hingeJoint,
+                                "joint axis must be unit length for slide/hinge joints");
+
+    dtDynSpec negativeHingeArmature;
+    const dtDynIndex negativeHingeBody = negativeHingeArmature.AddBody("negative_hinge_body", 0);
+    const dtDynIndex negativeHingeJoint =
+        negativeHingeArmature.AddJoint(negativeHingeBody, "negative_hinge", dtDynJointType::Hinge);
+    negativeHingeArmature.EditJoint(negativeHingeJoint, [&](dtDynJointSpec &draft)
+                                    { draft.armature = -1.0; });
+    AssertSpecValidationFailure(negativeHingeArmature, dtDynValidationCode::InvalidReference,
+                                dtDynObjectType::Joint, negativeHingeJoint,
+                                "joint armature must be nonnegative");
+
+    dtDynSpec validFreeAxis;
+    const dtDynIndex freeBody = validFreeAxis.AddBody("free_body", 0);
+    const dtDynIndex freeJoint = validFreeAxis.AddJoint(freeBody, "free_joint", dtDynJointType::Free);
+    validFreeAxis.EditJoint(freeJoint, [&](dtDynJointSpec &draft)
+                            { draft.axis.SetZero(); });
+    const dtDynModel freeModel = CompileSpecChecked(validFreeAxis);
+    assert(freeModel.njnt == 1);
+
+    dtDynSpec negativeFreeArmature = validFreeAxis;
+    negativeFreeArmature.EditJoint(freeJoint, [&](dtDynJointSpec &draft)
+                                   { draft.armature = -1.0; });
+    AssertSpecValidationFailure(negativeFreeArmature, dtDynValidationCode::InvalidReference,
+                                dtDynObjectType::Joint, freeJoint,
+                                "joint armature must be nonnegative");
+
+    dtDynSpec nonFiniteSite;
+    const dtDynIndex siteBody = nonFiniteSite.AddBody("site_body", 0);
+    const dtDynIndex site = nonFiniteSite.AddSite(siteBody, "nonfinite_site");
+    nonFiniteSite.EditSite(site, [&](dtDynSiteSpec &draft)
+                           { draft.quat(0) = nan; });
+    AssertSpecValidationFailure(nonFiniteSite, dtDynValidationCode::NonFiniteValue,
+                                dtDynObjectType::Site, site,
+                                "site[0] contains a non-finite value");
+
+    dtDynSpec named;
+    const dtDynIndex firstBody = named.AddBody("body_one", 0);
+    const dtDynIndex secondBody = named.AddBody("body_two", 0);
+    const dtDynIndex firstJoint = named.AddJoint(firstBody, "joint_one", dtDynJointType::Hinge);
+    const dtDynIndex secondJoint = named.AddJoint(secondBody, "joint_two", dtDynJointType::Hinge);
+    const dtDynIndex firstSite = named.AddSite(firstBody, "site_one");
+    const dtDynIndex secondSite = named.AddSite(secondBody, "site_two");
+    const dtDynIndex firstActuator = named.AddActuator(firstJoint, "actuator_one");
+    const dtDynIndex secondActuator = named.AddActuator(secondJoint, "actuator_two");
+
+    dtDynSpec duplicateBody = named;
+    duplicateBody.EditBody(secondBody, [&](dtDynBodySpec &draft)
+                           { draft.name = "body_one"; });
+    AssertSpecValidationFailure(duplicateBody, dtDynValidationCode::DuplicateName,
+                                dtDynObjectType::Body, secondBody,
+                                "body[2] duplicates name 'body_one'");
+
+    dtDynSpec duplicateJoint = named;
+    duplicateJoint.EditJoint(secondJoint, [&](dtDynJointSpec &draft)
+                             { draft.name = "joint_one"; });
+    AssertSpecValidationFailure(duplicateJoint, dtDynValidationCode::DuplicateName,
+                                dtDynObjectType::Joint, secondJoint,
+                                "joint[1] duplicates name 'joint_one'");
+
+    dtDynSpec duplicateSite = named;
+    duplicateSite.EditSite(secondSite, [&](dtDynSiteSpec &draft)
+                           { draft.name = "site_one"; });
+    AssertSpecValidationFailure(duplicateSite, dtDynValidationCode::DuplicateName,
+                                dtDynObjectType::Site, secondSite,
+                                "site[1] duplicates name 'site_one'");
+
+    dtDynSpec duplicateActuator = named;
+    duplicateActuator.EditActuator(secondActuator, [&](dtDynActuatorSpec &draft)
+                                   { draft.name = "actuator_one"; });
+    AssertSpecValidationFailure(duplicateActuator, dtDynValidationCode::DuplicateName,
+                                dtDynObjectType::Actuator, secondActuator,
+                                "actuator[1] duplicates name 'actuator_one'");
+
+    dtDynSpec duplicateBodyAndActuator = named;
+    duplicateBodyAndActuator.EditBody(secondBody, [&](dtDynBodySpec &draft)
+                                      { draft.name = "body_one"; });
+    duplicateBodyAndActuator.EditActuator(secondActuator, [&](dtDynActuatorSpec &draft)
+                                          { draft.name = "actuator_one"; });
+    AssertSpecValidationFailure(duplicateBodyAndActuator, dtDynValidationCode::DuplicateName,
+                                dtDynObjectType::Body, secondBody,
+                                "body[2] duplicates name 'body_one'");
+}
+
 void TestModelValidationRejectsInvalidPhysicalValues()
 {
     dtDynSpec spec;
@@ -5101,6 +5278,7 @@ int main()
     TestModelValidationRejectsIncorrectDofParentTopology();
     TestModelValidationRejectsInconsistentDerivedMasses();
     TestSpecValidationRejectsInvalidPhysicalValues();
+    TestSpecValidationPreservesOrderedPhysicalAndNameFailures();
     TestModelValidationRejectsInvalidPhysicalValues();
     TestModelValidationRejectsInvalidFramePairs();
     TestModelValidationPreservesUniqueNameValidationOrder();
