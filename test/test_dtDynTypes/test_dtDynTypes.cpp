@@ -2590,6 +2590,48 @@ void TestSpecXmlReportsTypedNumericErrors()
     expectError("Inf", dtDynXmlErrorCode::NonFiniteValue, "Inf");
 }
 
+void TestSpecXmlPreservesNumericWhitespaceAndFirstFailure()
+{
+    const std::string valid =
+        "<mujoco><worldbody><body name=\"base\"><inertial mass=\" \t 2.5 \n \"/>"
+        "</body></worldbody></mujoco>";
+    const dtDynSpec decoded = dtDynSpec::DecodeXml(valid);
+    assert(decoded.Bodies().size() == 2);
+    assert(std::fabs(decoded.Bodies()[1].inertial.mass - 2.5) < 1.0e-12);
+
+    const std::string trailingJunk =
+        "<mujoco><worldbody><body name=\"base\"><inertial mass=\" \t 1junk \n \"/>"
+        "</body></worldbody></mujoco>";
+    bool junkRejected = false;
+    try
+    {
+        (void)dtDynSpec::DecodeXml(trailingJunk);
+    }
+    catch (const dtDynXmlError &error)
+    {
+        junkRejected = error.Code() == dtDynXmlErrorCode::InvalidNumber &&
+                       error.Offset() == trailingJunk.find("junk");
+    }
+    assert(junkRejected);
+
+    const std::string whitespaceOnly =
+        "<mujoco><worldbody><body name=\"base\"><inertial mass=\" \t \n \"/>"
+        "</body></worldbody></mujoco>";
+    const std::size_t whitespaceOffset =
+        whitespaceOnly.find("mass=\"") + std::string("mass=\"").size();
+    bool whitespaceRejected = false;
+    try
+    {
+        (void)dtDynSpec::DecodeXml(whitespaceOnly);
+    }
+    catch (const dtDynXmlError &error)
+    {
+        whitespaceRejected = error.Code() == dtDynXmlErrorCode::InvalidNumber &&
+                             error.Offset() == whitespaceOffset;
+    }
+    assert(whitespaceRejected);
+}
+
 void TestSpecXmlRejectsWrongVectorArity()
 {
     const auto expectInvalidArity = [](const std::string &value, const std::string &anchor)
@@ -5597,6 +5639,7 @@ int main()
     TestSpecNameLookupReflectsEditorMutations();
     TestModelActuatorNameLookupUsesRebuiltCache();
     TestSpecXmlReportsTypedNumericErrors();
+    TestSpecXmlPreservesNumericWhitespaceAndFirstFailure();
     TestSpecXmlRejectsWrongVectorArity();
     TestSpecXmlRejectsMalformedAttributes();
     TestSpecXmlPreservesAttributeWhitespaceAndFirstFailure();

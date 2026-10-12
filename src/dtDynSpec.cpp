@@ -499,15 +499,21 @@ std::string AttributeOr(const AttributeMap &attrs, const std::string &key, const
 dtDynReal ParseReal(const AttributeValue &attribute, const std::string &sourcePath)
 {
     std::size_t first = 0;
-    while (first < attribute.text.size() &&
-           std::isspace(static_cast<unsigned char>(attribute.text[first])))
+    while (first < attribute.text.size())
     {
+        if (!std::isspace(static_cast<unsigned char>(attribute.text[first])))
+        {
+            break;
+        }
         ++first;
     }
     std::size_t last = attribute.text.size();
-    while (last > first &&
-           std::isspace(static_cast<unsigned char>(attribute.text[last - 1])))
+    while (last > first)
     {
+        if (!std::isspace(static_cast<unsigned char>(attribute.text[last - 1])))
+        {
+            break;
+        }
         --last;
     }
     const std::size_t tokenOffset = first == attribute.text.size() ? attribute.offset : attribute.offset + first;
