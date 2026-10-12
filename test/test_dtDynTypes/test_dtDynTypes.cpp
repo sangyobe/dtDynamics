@@ -3008,6 +3008,55 @@ void TestUpdateSpecRejectsSiteBacklinkMutationWithoutWriting()
     assert(model.body_mass(body) == mass);
 }
 
+void TestUpdateSpecRejectsEarlyStorageMismatchWithoutWriting()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("link", 0);
+    spec.AddJoint(body, "hinge", dtDynJointType::Hinge);
+    spec.EditBody(body, [](dtDynBodySpec &draft)
+                  {
+                      draft.pos(0) = 1.0;
+                      draft.inertial.mass = 1.0; });
+
+    dtDynModel model = CompileSpecChecked(spec);
+    const auto position = model.body_pos[static_cast<std::size_t>(body)];
+    const dtDynReal mass = model.body_mass(body);
+    spec.EditBody(body, [](dtDynBodySpec &draft)
+                  {
+                      draft.pos(0) = 7.0;
+                      draft.inertial.mass = 7.0; });
+    model.body_names.clear();
+
+    assert(!UpdateSpec(spec, model));
+    assert(model.body_pos[static_cast<std::size_t>(body)](0) == position(0));
+    assert(model.body_mass(body) == mass);
+}
+
+void TestUpdateSpecRejectsLateStorageMismatchWithoutWriting()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("link", 0);
+    spec.AddJoint(body, "hinge", dtDynJointType::Hinge);
+    spec.EditBody(body, [](dtDynBodySpec &draft)
+                  {
+                      draft.pos(0) = 1.0;
+                      draft.inertial.mass = 1.0; });
+
+    dtDynModel model = CompileSpecChecked(spec);
+    assert(model.nroot > 0);
+    const auto position = model.body_pos[static_cast<std::size_t>(body)];
+    const dtDynReal mass = model.body_mass(body);
+    spec.EditBody(body, [](dtDynBodySpec &draft)
+                  {
+                      draft.pos(0) = 7.0;
+                      draft.inertial.mass = 7.0; });
+    ResizeDenseVector(model.root_mass, model.nroot - 1);
+
+    assert(!UpdateSpec(spec, model));
+    assert(model.body_pos[static_cast<std::size_t>(body)](0) == position(0));
+    assert(model.body_mass(body) == mass);
+}
+
 void TestUpdateSpecMatchesPhysicalRecompile()
 {
     dtDynSpec original;
@@ -4800,6 +4849,8 @@ int main()
     TestUpdateSpecRejectsWorldParentMutationWithoutWriting();
     TestUpdateSpecRejectsChildListMutationWithoutWriting();
     TestUpdateSpecRejectsSiteBacklinkMutationWithoutWriting();
+    TestUpdateSpecRejectsEarlyStorageMismatchWithoutWriting();
+    TestUpdateSpecRejectsLateStorageMismatchWithoutWriting();
     TestUpdateSpecMatchesPhysicalRecompile();
     TestUpdateSpecRefreshesMultiRootMultiDofCaches();
     TestDtMathDynamicResizeHelpers();

@@ -104,49 +104,175 @@ bool UpdateSpec(const dtDynSpec &spec, dtDynModel &model) noexcept
         return false;
     }
 
-    if (!hasArraySize(model.body_names.size(), model.nbody) ||
-        !hasArraySize(model.body_parentid.size(), model.nbody) ||
-        !hasArraySize(model.body_rootid.size(), model.nbody) ||
-        !hasArraySize(model.body_rootidx.size(), model.nbody) ||
-        !hasArraySize(model.body_jntnum.size(), model.nbody) ||
-        !hasArraySize(model.body_jntadr.size(), model.nbody) ||
-        !hasArraySize(model.body_dofnum.size(), model.nbody) ||
-        !hasArraySize(model.body_dofadr.size(), model.nbody) ||
-        !hasArraySize(model.body_weldid.size(), model.nbody) ||
-        !hasDenseSize(model.body_mass, model.nbody) ||
-        !hasDenseSize(model.body_subtreemass, model.nbody) ||
-        !hasArraySize(model.body_pos.size(), model.nbody) ||
-        !hasArraySize(model.body_quat.size(), model.nbody) ||
-        !hasArraySize(model.body_mat.size(), model.nbody) ||
-        !hasArraySize(model.body_ipos.size(), model.nbody) ||
-        !hasArraySize(model.body_iquat.size(), model.nbody) ||
-        !hasArraySize(model.body_imat.size(), model.nbody) ||
-        !hasArraySize(model.body_inertia.size(), model.nbody) ||
-        !hasArraySize(model.joint_names.size(), model.njnt) ||
-        !hasArraySize(model.jnt_type.size(), model.njnt) ||
-        !hasArraySize(model.jnt_bodyid.size(), model.njnt) ||
-        !hasArraySize(model.jnt_specid.size(), model.njnt) ||
-        !hasArraySize(model.jnt_qposadr.size(), model.njnt) ||
-        !hasArraySize(model.jnt_dofadr.size(), model.njnt) ||
-        !hasArraySize(model.jnt_limited.size(), model.njnt) ||
-        !hasDenseSize(model.jnt_range_min, model.njnt) ||
-        !hasDenseSize(model.jnt_range_max, model.njnt) ||
-        !hasArraySize(model.jnt_pos.size(), model.njnt) ||
-        !hasArraySize(model.jnt_axis.size(), model.njnt) ||
-        !hasArraySize(model.dof_bodyid.size(), model.nv) ||
-        !hasArraySize(model.dof_parentid.size(), model.nv) ||
-        !hasArraySize(model.dof_jntid.size(), model.nv) ||
-        !hasDenseSize(model.dof_armature, model.nv) ||
-        !hasArraySize(model.site_names.size(), model.nsite) ||
-        !hasArraySize(model.site_bodyid.size(), model.nsite) ||
-        !hasArraySize(model.site_pos.size(), model.nsite) ||
-        !hasArraySize(model.site_quat.size(), model.nsite) ||
-        !hasArraySize(model.site_mat.size(), model.nsite) ||
-        !hasArraySize(model.actuator_names.size(), model.nu) ||
-        !hasArraySize(model.actuator_jointid.size(), model.nu) ||
-        !hasDenseSize(model.actuator_gear, model.nu) ||
-        !hasArraySize(model.root_bodyid.size(), model.nroot) ||
-        !hasDenseSize(model.root_mass, model.nroot))
+    if (!hasArraySize(model.body_names.size(), model.nbody))
+    {
+        return false;
+    }
+    if (!hasArraySize(model.body_parentid.size(), model.nbody))
+    {
+        return false;
+    }
+    if (!hasArraySize(model.body_rootid.size(), model.nbody))
+    {
+        return false;
+    }
+    if (!hasArraySize(model.body_rootidx.size(), model.nbody))
+    {
+        return false;
+    }
+    if (!hasArraySize(model.body_jntnum.size(), model.nbody))
+    {
+        return false;
+    }
+    if (!hasArraySize(model.body_jntadr.size(), model.nbody))
+    {
+        return false;
+    }
+    if (!hasArraySize(model.body_dofnum.size(), model.nbody))
+    {
+        return false;
+    }
+    if (!hasArraySize(model.body_dofadr.size(), model.nbody))
+    {
+        return false;
+    }
+    if (!hasArraySize(model.body_weldid.size(), model.nbody))
+    {
+        return false;
+    }
+    if (!hasDenseSize(model.body_mass, model.nbody))
+    {
+        return false;
+    }
+    if (!hasDenseSize(model.body_subtreemass, model.nbody))
+    {
+        return false;
+    }
+    if (!hasArraySize(model.body_pos.size(), model.nbody))
+    {
+        return false;
+    }
+    if (!hasArraySize(model.body_quat.size(), model.nbody))
+    {
+        return false;
+    }
+    if (!hasArraySize(model.body_mat.size(), model.nbody))
+    {
+        return false;
+    }
+    if (!hasArraySize(model.body_ipos.size(), model.nbody))
+    {
+        return false;
+    }
+    if (!hasArraySize(model.body_iquat.size(), model.nbody))
+    {
+        return false;
+    }
+    if (!hasArraySize(model.body_imat.size(), model.nbody))
+    {
+        return false;
+    }
+    if (!hasArraySize(model.body_inertia.size(), model.nbody))
+    {
+        return false;
+    }
+    if (!hasArraySize(model.joint_names.size(), model.njnt))
+    {
+        return false;
+    }
+    if (!hasArraySize(model.jnt_type.size(), model.njnt))
+    {
+        return false;
+    }
+    if (!hasArraySize(model.jnt_bodyid.size(), model.njnt))
+    {
+        return false;
+    }
+    if (!hasArraySize(model.jnt_specid.size(), model.njnt))
+    {
+        return false;
+    }
+    if (!hasArraySize(model.jnt_qposadr.size(), model.njnt))
+    {
+        return false;
+    }
+    if (!hasArraySize(model.jnt_dofadr.size(), model.njnt))
+    {
+        return false;
+    }
+    if (!hasArraySize(model.jnt_limited.size(), model.njnt))
+    {
+        return false;
+    }
+    if (!hasDenseSize(model.jnt_range_min, model.njnt))
+    {
+        return false;
+    }
+    if (!hasDenseSize(model.jnt_range_max, model.njnt))
+    {
+        return false;
+    }
+    if (!hasArraySize(model.jnt_pos.size(), model.njnt))
+    {
+        return false;
+    }
+    if (!hasArraySize(model.jnt_axis.size(), model.njnt))
+    {
+        return false;
+    }
+    if (!hasArraySize(model.dof_bodyid.size(), model.nv))
+    {
+        return false;
+    }
+    if (!hasArraySize(model.dof_parentid.size(), model.nv))
+    {
+        return false;
+    }
+    if (!hasArraySize(model.dof_jntid.size(), model.nv))
+    {
+        return false;
+    }
+    if (!hasDenseSize(model.dof_armature, model.nv))
+    {
+        return false;
+    }
+    if (!hasArraySize(model.site_names.size(), model.nsite))
+    {
+        return false;
+    }
+    if (!hasArraySize(model.site_bodyid.size(), model.nsite))
+    {
+        return false;
+    }
+    if (!hasArraySize(model.site_pos.size(), model.nsite))
+    {
+        return false;
+    }
+    if (!hasArraySize(model.site_quat.size(), model.nsite))
+    {
+        return false;
+    }
+    if (!hasArraySize(model.site_mat.size(), model.nsite))
+    {
+        return false;
+    }
+    if (!hasArraySize(model.actuator_names.size(), model.nu))
+    {
+        return false;
+    }
+    if (!hasArraySize(model.actuator_jointid.size(), model.nu))
+    {
+        return false;
+    }
+    if (!hasDenseSize(model.actuator_gear, model.nu))
+    {
+        return false;
+    }
+    if (!hasArraySize(model.root_bodyid.size(), model.nroot))
+    {
+        return false;
+    }
+    if (!hasDenseSize(model.root_mass, model.nroot))
     {
         return false;
     }
