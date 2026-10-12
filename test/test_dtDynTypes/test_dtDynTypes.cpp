@@ -2859,6 +2859,38 @@ void TestSpecXmlAcceptsEverySupportedElementInItsDocumentedParent()
     assert(spec.ActuatorId("drive") >= 0);
 }
 
+void TestSpecXmlPreservesWhitespaceAndTagNameGrammar()
+{
+    const std::string whitespace =
+        "<  mujoco  ><  worldbody  ><  body name=\"base\"  /  >"
+        "</  worldbody  ></  mujoco  >";
+    const dtDynSpec decoded = dtDynSpec::DecodeXml(whitespace);
+    assert(decoded.Bodies().size() == 2);
+    assert(decoded.BodyId("base") >= 0);
+
+    const auto expectError = [](const std::string &xml,
+                                const dtDynXmlErrorCode code,
+                                const std::string &anchor)
+    {
+        bool rejected = false;
+        try
+        {
+            (void)dtDynSpec::DecodeXml(xml);
+        }
+        catch (const dtDynXmlError &error)
+        {
+            rejected = error.Code() == code && error.Offset() == xml.find(anchor);
+        }
+        assert(rejected);
+    };
+
+    expectError("<mujoco><1invalid/></mujoco>", dtDynXmlErrorCode::MalformedSyntax, "1invalid");
+    expectError("<mujoco><invalid!/></mujoco>", dtDynXmlErrorCode::MalformedSyntax, "invalid!");
+    expectError("<mujoco><_valid-1:name.part/></mujoco>",
+                dtDynXmlErrorCode::UnsupportedElement,
+                "<_valid-1:name.part");
+}
+
 void TestSpecXmlScannerIsQuoteAwareAndFailClosed()
 {
     const std::string valid =
@@ -5537,6 +5569,7 @@ int main()
     TestSpecXmlRequiresSingleRootElement();
     TestSpecXmlRejectsSupportedElementInWrongContext();
     TestSpecXmlAcceptsEverySupportedElementInItsDocumentedParent();
+    TestSpecXmlPreservesWhitespaceAndTagNameGrammar();
     TestSpecXmlScannerIsQuoteAwareAndFailClosed();
     TestSpecXmlRunsSetupValidationAfterParsing();
     TestSpecXmlRejectsClosingTagAttributes();

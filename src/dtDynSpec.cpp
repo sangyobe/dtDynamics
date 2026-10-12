@@ -93,14 +93,22 @@ static constexpr dtDynReal kDegreeToRadian = kPi / static_cast<dtDynReal>(180.0)
 std::string Trim(const std::string &text)
 {
     std::size_t first = 0;
-    while (first < text.size() && std::isspace(static_cast<unsigned char>(text[first])))
+    while (first < text.size())
     {
+        if (!std::isspace(static_cast<unsigned char>(text[first])))
+        {
+            break;
+        }
         ++first;
     }
 
     std::size_t last = text.size();
-    while (last > first && std::isspace(static_cast<unsigned char>(text[last - 1])))
+    while (last > first)
     {
+        if (!std::isspace(static_cast<unsigned char>(text[last - 1])))
+        {
+            break;
+        }
         --last;
     }
     return text.substr(first, last - first);
@@ -109,8 +117,16 @@ std::string Trim(const std::string &text)
 std::string TagName(const std::string &tag)
 {
     std::size_t pos = 0;
-    while (pos < tag.size() && !std::isspace(static_cast<unsigned char>(tag[pos])) && tag[pos] != '/')
+    while (pos < tag.size())
     {
+        if (std::isspace(static_cast<unsigned char>(tag[pos])))
+        {
+            break;
+        }
+        if (tag[pos] == '/')
+        {
+            break;
+        }
         ++pos;
     }
     return tag.substr(0, pos);
@@ -169,17 +185,34 @@ bool IsSupportedElement(const std::string &name)
 
 bool IsValidTagName(const std::string &name)
 {
-    if (name.empty() ||
-        !(std::isalpha(static_cast<unsigned char>(name[0])) || name[0] == '_'))
+    if (name.empty())
     {
         return false;
     }
-    for (const char character : name)
+    if (!std::isalpha(static_cast<unsigned char>(name[0])))
     {
-        if (!(std::isalnum(static_cast<unsigned char>(character)) || character == '_' ||
-              character == '-' || character == ':' || character == '.'))
+        if (name[0] != '_')
         {
             return false;
+        }
+    }
+    for (const char character : name)
+    {
+        if (!std::isalnum(static_cast<unsigned char>(character)))
+        {
+            if (character != '_')
+            {
+                if (character != '-')
+                {
+                    if (character != ':')
+                    {
+                        if (character != '.')
+                        {
+                            return false;
+                        }
+                    }
+                }
+            }
         }
     }
     return true;
