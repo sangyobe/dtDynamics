@@ -3382,6 +3382,19 @@ void TestDataResizeSeparatesBodyAndDofStorage()
     assert(!data.IsCompatible(mismatchedModel));
 }
 
+void TestDataCompatibilityRejectsLateWorkspaceMismatch()
+{
+    const dtDynModel model = CompileSpecChecked(dtDynSpec{});
+    assert(model.nroot == 0);
+
+    dtDynData data;
+    data.Resize(model);
+    assert(data.IsCompatible(model));
+
+    ResizeDenseVector(data.comVel, 2);
+    assert(!data.IsCompatible(model));
+}
+
 void TestDataResizeSupportsFullyFixedZeroDofModel()
 {
     for (const dtDynIndex siteCount : {dtDynIndex(0), dtDynIndex(1), dtDynIndex(3)})
@@ -4791,6 +4804,7 @@ int main()
     TestUpdateSpecRefreshesMultiRootMultiDofCaches();
     TestDtMathDynamicResizeHelpers();
     TestDataResizeSeparatesBodyAndDofStorage();
+    TestDataCompatibilityRejectsLateWorkspaceMismatch();
     TestDataResizeSupportsFullyFixedZeroDofModel();
     TestDtDynMathHelpersAreReusable();
     TestCompileSpecUsesNativeIndexLayout();

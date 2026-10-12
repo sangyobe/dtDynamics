@@ -153,54 +153,193 @@ void dtDynData::Resize(const dtDynModel &model)
 
 bool dtDynData::IsCompatible(const dtDynModel &model) const
 {
-    const dtDynIndex rootCount = model.nroot > 0 ? model.nroot : 1;
+    dtDynIndex rootCount = 1;
+    if (model.nroot > 0)
+    {
+        rootCount = model.nroot;
+    }
 
-    return DenseVectorHasSize(qpos, model.nq) &&
-           DenseVectorHasSize(qvel, model.nv) &&
-           ArrayHasSize(xpos, model.nbody) &&
-           ArrayHasSize(xquat, model.nbody) &&
-           ArrayHasSize(xmat, model.nbody) &&
-           ArrayHasSize(xipos, model.nbody) &&
-           ArrayHasSize(ximat, model.nbody) &&
-           ArrayHasSize(subtree_com, model.nbody) &&
-           ArrayHasSize(xanchor, model.njnt) &&
-           ArrayHasSize(xaxis, model.njnt) &&
-           ArrayHasSize(site_xpos, model.nsite) &&
-           ArrayHasSize(site_xmat, model.nsite) &&
-           DenseMatrixArrayHasSize(body_jacp, model.nbody, 3, model.nv) &&
-           DenseMatrixArrayHasSize(body_jacr, model.nbody, 3, model.nv) &&
-           DenseMatrixArrayHasSize(body_jacp_dot, model.nbody, 3, model.nv) &&
-           DenseMatrixArrayHasSize(body_jacr_dot, model.nbody, 3, model.nv) &&
-           DenseMatrixArrayHasSize(site_jacp, model.nsite, 3, model.nv) &&
-           DenseMatrixArrayHasSize(site_jacr, model.nsite, 3, model.nv) &&
-           DenseMatrixArrayHasSize(site_jacp_dot, model.nsite, 3, model.nv) &&
-           DenseMatrixArrayHasSize(site_jacr_dot, model.nsite, 3, model.nv) &&
-           ArrayHasSize(cdof, model.nv) &&
-           ArrayHasSize(cdof_dot, model.nv) &&
-           ArrayHasSize(cvel, model.nbody) &&
-           ArrayHasSize(cinert, model.nbody) &&
-           ArrayHasSize(crb, model.nbody) &&
-           ArrayHasSize(BmatComp, model.nbody) &&
-           ArrayHasSize(BmatCompNonzero, model.nbody) &&
-           ArrayHasSize(f1, model.nv) &&
-           ArrayHasSize(f2, model.nv) &&
-           ArrayHasSize(f3, model.nv) &&
-           ArrayHasSize(cacc, model.nbody) &&
-           ArrayHasSize(cfrc, model.nbody) &&
-           ArrayHasSize(scratch_weightedCom, model.nbody) &&
-           DenseMatrixHasSize(Mmat, model.nv, model.nv) &&
-           DenseMatrixHasSize(MmatDot, model.nv, model.nv) &&
-           DenseMatrixHasSize(Cmat, model.nv, model.nv) &&
-           DenseVectorHasSize(gravityTorq, model.nv) &&
-           DenseVectorHasSize(coriolisTorq, model.nv) &&
-           DenseVectorHasSize(nonlinTorq, model.nv) &&
-           DenseMatrixHasSize(comJmat, 3 * rootCount, model.nv) &&
-           DenseMatrixHasSize(comJmatDot, 3 * rootCount, model.nv) &&
-           DenseMatrixHasSize(cmAmat, 6 * rootCount, model.nv) &&
-           DenseMatrixHasSize(cmAmatDot, 6 * rootCount, model.nv) &&
-           DenseVectorHasSize(centMom, 6 * rootCount) &&
-           DenseVectorHasSize(comPos, 3 * rootCount) &&
-           DenseVectorHasSize(comVel, 3 * rootCount);
+    if (!DenseVectorHasSize(qpos, model.nq))
+    {
+        return false;
+    }
+    if (!DenseVectorHasSize(qvel, model.nv))
+    {
+        return false;
+    }
+    if (!ArrayHasSize(xpos, model.nbody))
+    {
+        return false;
+    }
+    if (!ArrayHasSize(xquat, model.nbody))
+    {
+        return false;
+    }
+    if (!ArrayHasSize(xmat, model.nbody))
+    {
+        return false;
+    }
+    if (!ArrayHasSize(xipos, model.nbody))
+    {
+        return false;
+    }
+    if (!ArrayHasSize(ximat, model.nbody))
+    {
+        return false;
+    }
+    if (!ArrayHasSize(subtree_com, model.nbody))
+    {
+        return false;
+    }
+    if (!ArrayHasSize(xanchor, model.njnt))
+    {
+        return false;
+    }
+    if (!ArrayHasSize(xaxis, model.njnt))
+    {
+        return false;
+    }
+    if (!ArrayHasSize(site_xpos, model.nsite))
+    {
+        return false;
+    }
+    if (!ArrayHasSize(site_xmat, model.nsite))
+    {
+        return false;
+    }
+    if (!DenseMatrixArrayHasSize(body_jacp, model.nbody, 3, model.nv))
+    {
+        return false;
+    }
+    if (!DenseMatrixArrayHasSize(body_jacr, model.nbody, 3, model.nv))
+    {
+        return false;
+    }
+    if (!DenseMatrixArrayHasSize(body_jacp_dot, model.nbody, 3, model.nv))
+    {
+        return false;
+    }
+    if (!DenseMatrixArrayHasSize(body_jacr_dot, model.nbody, 3, model.nv))
+    {
+        return false;
+    }
+    if (!DenseMatrixArrayHasSize(site_jacp, model.nsite, 3, model.nv))
+    {
+        return false;
+    }
+    if (!DenseMatrixArrayHasSize(site_jacr, model.nsite, 3, model.nv))
+    {
+        return false;
+    }
+    if (!DenseMatrixArrayHasSize(site_jacp_dot, model.nsite, 3, model.nv))
+    {
+        return false;
+    }
+    if (!DenseMatrixArrayHasSize(site_jacr_dot, model.nsite, 3, model.nv))
+    {
+        return false;
+    }
+    if (!ArrayHasSize(cdof, model.nv))
+    {
+        return false;
+    }
+    if (!ArrayHasSize(cdof_dot, model.nv))
+    {
+        return false;
+    }
+    if (!ArrayHasSize(cvel, model.nbody))
+    {
+        return false;
+    }
+    if (!ArrayHasSize(cinert, model.nbody))
+    {
+        return false;
+    }
+    if (!ArrayHasSize(crb, model.nbody))
+    {
+        return false;
+    }
+    if (!ArrayHasSize(BmatComp, model.nbody))
+    {
+        return false;
+    }
+    if (!ArrayHasSize(BmatCompNonzero, model.nbody))
+    {
+        return false;
+    }
+    if (!ArrayHasSize(f1, model.nv))
+    {
+        return false;
+    }
+    if (!ArrayHasSize(f2, model.nv))
+    {
+        return false;
+    }
+    if (!ArrayHasSize(f3, model.nv))
+    {
+        return false;
+    }
+    if (!ArrayHasSize(cacc, model.nbody))
+    {
+        return false;
+    }
+    if (!ArrayHasSize(cfrc, model.nbody))
+    {
+        return false;
+    }
+    if (!ArrayHasSize(scratch_weightedCom, model.nbody))
+    {
+        return false;
+    }
+    if (!DenseMatrixHasSize(Mmat, model.nv, model.nv))
+    {
+        return false;
+    }
+    if (!DenseMatrixHasSize(MmatDot, model.nv, model.nv))
+    {
+        return false;
+    }
+    if (!DenseMatrixHasSize(Cmat, model.nv, model.nv))
+    {
+        return false;
+    }
+    if (!DenseVectorHasSize(gravityTorq, model.nv))
+    {
+        return false;
+    }
+    if (!DenseVectorHasSize(coriolisTorq, model.nv))
+    {
+        return false;
+    }
+    if (!DenseVectorHasSize(nonlinTorq, model.nv))
+    {
+        return false;
+    }
+    if (!DenseMatrixHasSize(comJmat, 3 * rootCount, model.nv))
+    {
+        return false;
+    }
+    if (!DenseMatrixHasSize(comJmatDot, 3 * rootCount, model.nv))
+    {
+        return false;
+    }
+    if (!DenseMatrixHasSize(cmAmat, 6 * rootCount, model.nv))
+    {
+        return false;
+    }
+    if (!DenseMatrixHasSize(cmAmatDot, 6 * rootCount, model.nv))
+    {
+        return false;
+    }
+    if (!DenseVectorHasSize(centMom, 6 * rootCount))
+    {
+        return false;
+    }
+    if (!DenseVectorHasSize(comPos, 3 * rootCount))
+    {
+        return false;
+    }
+    return DenseVectorHasSize(comVel, 3 * rootCount);
 }
 
 } // namespace dt::Dynamics
