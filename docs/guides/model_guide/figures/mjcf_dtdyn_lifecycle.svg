@@ -1,95 +1,153 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="820" viewBox="0 0 1600 820" role="img" aria-labelledby="title desc">
-  <title id="title">MJCF to dtDynamics lifecycle</title>
-  <desc id="desc">Pipeline from MJCF-like XML through dtDynSpec, CompileSpec, dtDynModel, dtDynData, runtime state update, dynamics, Jacobians, and controller outputs.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
+  <title id="title">MJCF-like XML to dtDynamics runtime lifecycle</title>
+  <desc id="desc">A linear lifecycle from XML through checked compilation and preallocated runtime data, with separate structural and fixed-layout physical update paths.</desc>
   <defs>
     <style>
-      .bg { fill: #f8fafc; }
-      .box { fill: #ffffff; stroke: #334155; stroke-width: 2.5; rx: 14; }
-      .blue { fill: #dbeafe; stroke: #2563eb; }
-      .teal { fill: #ccfbf1; stroke: #0f766e; }
-      .amber { fill: #fef3c7; stroke: #b45309; }
-      .green { fill: #dcfce7; stroke: #15803d; }
-      .gray { fill: #e2e8f0; stroke: #475569; }
-      .title { font: 700 34px Arial, sans-serif; fill: #0f172a; }
-      .label { font: 700 24px Arial, sans-serif; fill: #0f172a; }
-      .body { font: 400 18px Arial, sans-serif; fill: #334155; }
-      .small { font: 400 15px Arial, sans-serif; fill: #475569; }
-      .arrow { stroke: #334155; stroke-width: 3; fill: none; marker-end: url(#arrowhead); }
-      .dash { stroke: #64748b; stroke-width: 2; stroke-dasharray: 8 8; fill: none; marker-end: url(#arrowhead); }
+      .page { fill: #fbfcfe; }
+      .title { font: 700 38px Arial, sans-serif; fill: #0f172a; }
+      .subtitle { font: 400 20px Arial, sans-serif; fill: #475569; }
+      .lane { font: 700 16px Arial, sans-serif; letter-spacing: 1.8px; fill: #64748b; }
+      .node { fill: #ffffff; stroke: #cbd5e1; stroke-width: 2; }
+      .nodeTitle { font: 700 22px Arial, sans-serif; fill: #0f172a; }
+      .nodeTitleSmall { font: 700 18px Arial, sans-serif; fill: #0f172a; }
+      .nodeBody { font: 400 17.5px Arial, sans-serif; fill: #475569; }
+      .calloutTitle { font: 700 20px Arial, sans-serif; fill: #0f172a; }
+      .calloutBody { font: 400 17px Arial, sans-serif; fill: #334155; }
+      .note { font: 400 16.5px Arial, sans-serif; fill: #475569; }
+      .noteStrong { font: 700 16.5px Arial, sans-serif; fill: #334155; }
+      .arrow { stroke: #475569; stroke-width: 2.6; fill: none; marker-end: url(#arrowhead); }
+      .dashed { stroke: #7e22ce; stroke-width: 2.6; stroke-dasharray: 8 7; fill: none; marker-end: url(#updateArrowhead); }
+      .structural { stroke: #b45309; stroke-width: 2.6; stroke-dasharray: 8 7; fill: none; marker-end: url(#structuralArrowhead); }
     </style>
-    <marker id="arrowhead" markerWidth="12" markerHeight="8" refX="11" refY="4" orient="auto">
-      <path d="M0,0 L12,4 L0,8 Z" fill="#334155"/>
+    <marker id="arrowhead" markerWidth="12" markerHeight="9" refX="11" refY="4.5" orient="auto">
+      <path d="M0,0 L12,4.5 L0,9 Z" fill="#475569"/>
+    </marker>
+    <marker id="updateArrowhead" markerWidth="12" markerHeight="9" refX="11" refY="4.5" orient="auto">
+      <path d="M0,0 L12,4.5 L0,9 Z" fill="#7e22ce"/>
+    </marker>
+    <marker id="structuralArrowhead" markerWidth="12" markerHeight="9" refX="11" refY="4.5" orient="auto">
+      <path d="M0,0 L12,4.5 L0,9 Z" fill="#b45309"/>
     </marker>
   </defs>
-  <rect class="bg" x="0" y="0" width="1600" height="820"/>
-  <text class="title" x="70" y="70">MJCF-like XML to dtDynamics runtime data</text>
-  <text class="body" x="70" y="104">Editable spec, compiled model, resized runtime data, and repeated control-loop recomputation.</text>
 
-  <rect class="box blue" x="70" y="180" width="210" height="130"/>
-  <text class="label" x="100" y="225">XML file</text>
-  <text class="body" x="100" y="262">body / inertial</text>
-  <text class="body" x="100" y="288">joint / site</text>
+  <rect class="page" x="0" y="0" width="1600" height="900"/>
+  <text class="title" x="64" y="68">MJCF-like XML to dtDynamics runtime lifecycle</text>
+  <text class="subtitle" x="64" y="102">One linear setup path; structural and fixed-layout physical changes take distinct, explicit routes.</text>
 
-  <rect class="box teal" x="365" y="180" width="230" height="130"/>
-  <text class="label" x="395" y="225">DecodeXml</text>
-  <text class="body" x="395" y="262">parse subset</text>
-  <text class="body" x="395" y="288">reject loops</text>
+  <text class="lane" x="64" y="152">SETUP → PREALLOCATED RUNTIME</text>
+  <line x1="64" y1="166" x2="1536" y2="166" stroke="#dbe3ee" stroke-width="2"/>
 
-  <rect class="box teal" x="680" y="180" width="240" height="130"/>
-  <text class="label" x="710" y="225">dtDynSpec</text>
-  <text class="body" x="710" y="262">editable tree</text>
-  <text class="body" x="710" y="288">encode/decode</text>
+  <!-- Primary lifecycle: one left-to-right sequence. -->
+  <g aria-label="XML input">
+    <rect class="node" x="64" y="190" width="145" height="118"/>
+    <rect x="64" y="190" width="145" height="6" fill="#0f766e"/>
+    <text class="nodeTitle" x="83" y="239">XML</text>
+    <text class="nodeBody" x="83" y="267">text / file</text>
+  </g>
+  <g aria-label="XML decode">
+    <rect class="node" x="231" y="190" width="145" height="118"/>
+    <rect x="231" y="190" width="145" height="6" fill="#0f766e"/>
+    <text class="nodeTitle" x="250" y="239">DecodeXml</text>
+    <text class="nodeBody" x="250" y="267">parse subset</text>
+  </g>
+  <g aria-label="editable specification">
+    <rect class="node" x="398" y="190" width="155" height="118"/>
+    <rect x="398" y="190" width="155" height="6" fill="#0f766e"/>
+    <text class="nodeTitle" x="417" y="239">dtDynSpec</text>
+    <text class="nodeBody" x="417" y="267">editable intent</text>
+  </g>
+  <g aria-label="checked compilation">
+    <rect class="node" x="575" y="190" width="200" height="118"/>
+    <rect x="575" y="190" width="200" height="6" fill="#b45309"/>
+    <text class="nodeTitleSmall" x="595" y="232">CompileSpecChecked</text>
+    <text class="nodeBody" x="595" y="258">ValidateSpec + layout</text>
+    <text class="nodeBody" x="595" y="280">addresses / name maps</text>
+  </g>
+  <g aria-label="compiled model">
+    <rect class="node" x="797" y="190" width="155" height="118"/>
+    <rect x="797" y="190" width="155" height="6" fill="#b45309"/>
+    <text class="nodeTitle" x="816" y="239">dtDynModel</text>
+    <text class="nodeBody" x="816" y="267">fixed layout</text>
+  </g>
+  <g aria-label="runtime storage preparation">
+    <rect class="node" x="974" y="190" width="130" height="118"/>
+    <rect x="974" y="190" width="130" height="6" fill="#15803d"/>
+    <text class="nodeTitleSmall" x="990" y="239">Resize</text>
+    <text class="nodeBody" x="990" y="267">preallocate</text>
+  </g>
+  <g aria-label="runtime data">
+    <rect class="node" x="1126" y="190" width="145" height="118"/>
+    <rect x="1126" y="190" width="145" height="6" fill="#15803d"/>
+    <text class="nodeTitle" x="1145" y="239">dtDynData</text>
+    <text class="nodeBody" x="1145" y="267">state + scratch</text>
+  </g>
+  <g aria-label="control loop">
+    <rect class="node" x="1293" y="190" width="243" height="118"/>
+    <rect x="1293" y="190" width="243" height="6" fill="#15803d"/>
+    <text class="nodeTitle" x="1312" y="232">Control tick</text>
+    <text class="nodeBody" x="1312" y="258">state → dynamics</text>
+    <text class="nodeBody" x="1312" y="280">Jacobians → outputs</text>
+  </g>
 
-  <rect class="box amber" x="1005" y="180" width="230" height="130"/>
-  <text class="label" x="1035" y="225">CompileSpec</text>
-  <text class="body" x="1035" y="262">assign qpos/qvel</text>
-  <text class="body" x="1035" y="288">build indices</text>
+  <path class="arrow" d="M209 249 L231 249"/>
+  <path class="arrow" d="M376 249 L398 249"/>
+  <path class="arrow" d="M553 249 L575 249"/>
+  <path class="arrow" d="M775 249 L797 249"/>
+  <path class="arrow" d="M952 249 L974 249"/>
+  <path class="arrow" d="M1104 249 L1126 249"/>
+  <path class="arrow" d="M1271 249 L1293 249"/>
 
-  <rect class="box amber" x="1320" y="180" width="230" height="130"/>
-  <text class="label" x="1350" y="225">dtDynModel</text>
-  <text class="body" x="1350" y="262">immutable arrays</text>
-  <text class="body" x="1350" y="288">name lookup</text>
+  <!-- The trusted/raw setup note sits below both change routes. -->
+  <text class="note" x="64" y="654">Raw <tspan class="noteStrong">CompileSpec</tspan> is a trusted setup-only path after separate validation.</text>
 
-  <path class="arrow" d="M280 245 L365 245"/>
-  <path class="arrow" d="M595 245 L680 245"/>
-  <path class="arrow" d="M920 245 L1005 245"/>
-  <path class="arrow" d="M1235 245 L1320 245"/>
+  <!-- Structural changes compile an independent candidate and publish it safely. -->
+  <rect class="node" x="64" y="460" width="350" height="154"/>
+  <rect x="64" y="460" width="6" height="154" fill="#b45309"/>
+  <text class="lane" x="88" y="492" fill="#b45309">STRUCTURAL CHANGE</text>
+  <text class="calloutTitle" x="88" y="526">Topology / address / name</text>
+  <text class="calloutBody" x="88" y="554">Compile independent candidate</text>
+  <text class="calloutBody" x="88" y="578">CompileSpecChecked + Resize</text>
+  <text class="calloutBody" x="88" y="602">rebuild caches; reader-free safe swap</text>
+  <path class="structural" d="M239 460 C239 400 350 350 475 308"/>
 
-  <rect class="box gray" x="1320" y="420" width="230" height="130"/>
-  <text class="label" x="1350" y="465">Resize data</text>
-  <text class="body" x="1350" y="502">allocate buffers</text>
-  <text class="body" x="1350" y="528">match model</text>
+  <!-- Physical updates are intentionally distinct and validate before any model write. -->
+  <g aria-label="fixed-layout input">
+    <rect class="node" x="430" y="460" width="210" height="154"/>
+    <rect x="430" y="460" width="6" height="154" fill="#7e22ce"/>
+    <text class="lane" x="454" y="492" fill="#7e22ce">FIXED-LAYOUT</text>
+    <text class="calloutTitle" x="454" y="526">Physical values</text>
+    <text class="calloutBody" x="454" y="554">topology, storage, names</text>
+    <text class="calloutBody" x="454" y="578">addresses unchanged</text>
+  </g>
+  <path class="dashed" aria-label="editable fixed-layout spec to validation" d="M553 308 C555 360 545 414 535 460"/>
 
-  <rect class="box green" x="1005" y="420" width="230" height="130"/>
-  <text class="label" x="1035" y="465">dtDynData</text>
-  <text class="body" x="1035" y="502">qpos / qvel</text>
-  <text class="body" x="1035" y="528">outputs / scratch</text>
+  <g aria-label="fixed-layout validation">
+    <rect class="node" x="664" y="460" width="220" height="154"/>
+    <rect x="664" y="460" width="6" height="154" fill="#7e22ce"/>
+    <text class="lane" x="688" y="492" fill="#7e22ce">VALIDATE FIRST</text>
+    <text class="calloutTitle" x="688" y="526">ValidateSpec</text>
+    <text class="calloutBody" x="688" y="554">external / editable input</text>
+    <text class="calloutBody" x="688" y="578">false: no UpdateSpec call</text>
+  </g>
+  <path class="dashed" aria-label="fixed-layout input to validation" d="M640 526 L664 526"/>
 
-  <rect class="box green" x="680" y="420" width="240" height="130"/>
-  <text class="label" x="710" y="465">Control tick</text>
-  <text class="body" x="710" y="502">write state</text>
-  <text class="body" x="710" y="528">no XML parse</text>
+  <g aria-label="UpdateSpec control-safe boundary">
+    <rect class="node" x="908" y="460" width="276" height="154"/>
+    <rect x="908" y="460" width="6" height="154" fill="#7e22ce"/>
+    <text class="lane" x="932" y="492" fill="#7e22ce">CONTROL-SAFE BOUNDARY</text>
+    <text class="calloutTitle" x="932" y="526">UpdateSpec</text>
+    <text class="calloutBody" x="932" y="554">exclusive model access</text>
+    <text class="calloutBody" x="932" y="578">false: no model writes</text>
+  </g>
+  <path class="dashed" aria-label="validated fixed-layout spec to UpdateSpec" d="M884 526 L908 526"/>
+  <path class="dashed" d="M1046 460 C1010 405 918 352 875 308"/>
 
-  <rect class="box green" x="365" y="420" width="230" height="130"/>
-  <text class="label" x="395" y="465">Dynamics</text>
-  <text class="body" x="395" y="502">CCRBA / RNEA</text>
-  <text class="body" x="395" y="528">Jacobians</text>
+  <rect x="1208" y="460" width="328" height="154" fill="#f7f3ff" stroke="#d8b4fe" stroke-width="2"/>
+  <text class="lane" x="1232" y="492" fill="#7e22ce">AFTER A SUCCESSFUL UPDATE</text>
+  <text class="calloutTitle" x="1232" y="526">Recompute before use</text>
+  <text class="calloutBody" x="1232" y="554">dtDynData results become stale</text>
+  <text class="calloutBody" x="1232" y="578">recompute stale outputs before use</text>
+  <path class="dashed" d="M1184 526 L1208 526"/>
 
-  <rect class="box blue" x="70" y="420" width="210" height="130"/>
-  <text class="label" x="100" y="465">Controller</text>
-  <text class="body" x="100" y="502">WBC fields</text>
-  <text class="body" x="100" y="528">task outputs</text>
-
-  <path class="arrow" d="M1435 310 L1435 420"/>
-  <path class="arrow" d="M1320 485 L1235 485"/>
-  <path class="arrow" d="M1005 485 L920 485"/>
-  <path class="arrow" d="M680 485 L595 485"/>
-  <path class="arrow" d="M365 485 L280 485"/>
-
-  <path class="dash" d="M785 420 C760 365 760 350 800 312"/>
-  <text class="small" x="820" y="365">Spec changes recompile</text>
-  <path class="dash" d="M1115 420 C1160 365 1185 345 1340 312"/>
-  <text class="small" x="1090" y="365">Model changes resize data</text>
-  <path class="dash" d="M800 550 C790 610 840 650 1005 550"/>
-  <text class="small" x="790" y="640">State changes reuse model/data</text>
+  <text class="note" x="64" y="700">Setup parses, validates, compiles, allocates, and rebuilds lookup state. The control tick only stages state and recomputes required outputs.</text>
 </svg>

@@ -105,6 +105,29 @@ def assert_gate_fails_for_noncompiling_row() -> None:
     assert "noncompiling=1" in result.stdout
 
 
+def assert_gate_fails_for_truncated_canonical_schema() -> None:
+    truncated_header = "Color\tCheck\tStatus\tFile\tLine\tFunction\n"
+    truncated_row = "Green\tNULL_PTR\tUnreviewed\tsrc/example.cpp\t10\tfunction\n"
+    result = run_raw_report(truncated_header + truncated_row)
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "canonical TSV header" in result.stderr
+
+
+def assert_gate_fails_for_unexpected_canonical_column() -> None:
+    expanded_header = HEADER.rstrip("\n") + "\tUnexpected\n"
+    expanded_row = result_row("NULL_PTR", "Green", "Unreviewed").rstrip("\n") + "\textra\n"
+    result = run_raw_report(expanded_header + expanded_row)
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "canonical TSV header" in result.stderr
+
+
+def assert_gate_fails_for_reordered_canonical_columns() -> None:
+    reordered_header = HEADER.replace("ID\tFamily\t", "Family\tID\t")
+    result = run_raw_report(reordered_header)
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "canonical TSV header" in result.stderr
+
+
 def assert_gate_fails_for_truncated_green_row() -> None:
     result = run_raw_report(HEADER + "1\tDefect\tProgramming\tGreen\n")
     assert result.returncode == 2, result.stdout + result.stderr
@@ -135,10 +158,20 @@ def assert_gate_fails_for_whitespace_required_identity() -> None:
 
 def assert_gate_fails_for_non_tsv_line_separator() -> None:
     green_row = result_row("NULL_PTR", "Green", "Unreviewed").rstrip("\n")
-    for separator in ("\r", "\x0b", "\x1c", "\u2028"):
+    for separator in ("\r", "\u2028", "\u2029"):
         result = run_raw_report(HEADER + green_row + separator)
         assert result.returncode == 2, result.stdout + result.stderr
         assert "disallowed line separator" in result.stderr
+
+
+def assert_gate_fails_for_non_tsv_control_characters() -> None:
+    for control in ("\x00", "\x01", "\x08", "\x0b", "\x1f", "\x7f", "\x80", "\x85", "\x9f"):
+        row = result_row("NULL_PTR", "Green", "Unreviewed").replace(
+            "Impact: Medium", f"Impact: {control} Medium"
+        )
+        result = run_raw_report(HEADER + row)
+        assert result.returncode == 2, result.stdout + result.stderr
+        assert "disallowed control character" in result.stderr
 
 
 def assert_gate_fails_for_bare_quote() -> None:
@@ -217,11 +250,15 @@ def main() -> None:
     assert_gate_rejects_green_justified_row()
     assert_gate_rejects_other_reviewed_defects()
     assert_gate_fails_for_noncompiling_row()
+    assert_gate_fails_for_truncated_canonical_schema()
+    assert_gate_fails_for_unexpected_canonical_column()
+    assert_gate_fails_for_reordered_canonical_columns()
     assert_gate_fails_for_truncated_green_row()
     assert_gate_fails_for_whitespace_header()
     assert_gate_fails_for_blank_required_identity()
     assert_gate_fails_for_whitespace_required_identity()
     assert_gate_fails_for_non_tsv_line_separator()
+    assert_gate_fails_for_non_tsv_control_characters()
     assert_gate_fails_for_bare_quote()
     assert_gate_fails_for_unterminated_quote()
     assert_gate_fails_when_green_row_absorbs_red_line()

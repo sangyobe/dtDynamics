@@ -74,17 +74,22 @@ tools/validate_install_export.sh
 tools/audit_release_readiness.sh
 ```
 
-- `validate_install_export.sh`의 fail-closed 확인 항목:
+- `validate_install_export.sh`의 선택 layout fail-closed 확인 항목 (`DTDYNAMICS_INSTALL_LIBDIR`, 기본 `lib`):
   - `find_package(dtDynamics 0.1.3 EXACT CONFIG REQUIRED)` 성공
   - exported target이 `dt::Dynamics`이고 legacy target 없음
   - production CMake export에 MuJoCo/Pinocchio 없음
   - installed public-header version과 current SVG package claim이 `0.1.3`
+  - `PATHS ... NO_DEFAULT_PATH`로 선택한 config만 찾고, imported library가 선택한 staged `${prefix}/${install_libdir}` 아래에 있으며 package include가 staged prefix 아래에 있는지 확인
+  - staged prefix를 이동한 뒤에도 fresh consumer가 configure, compile, link, run
   - fresh downstream consumer의 configure, compile, link, run
+- `validate_package.sh` 기본 matrix는 위 validator를 `lib`와 `lib64` 각각에 독립 실행
 
 - benchmark 결과: wall-clock byte replay 비보장
 - 채택된 raw run과 게시 artifact의 provenance: byte identity로 확인
 - 새 실행 확인 항목: schema, fixture/state/scope coverage, status, percentile ordering
-- GitLab Polyspace gate: production library compile database만 분석하고, Bug Finder와 MISRA C++:2023 subset `6.8.2`, `8.18.1`, `11.6.2`, `25.5.2`, `25.5.3`을 적용
+- GitLab Polyspace gate: production library compile database만 분석하고, `polyspace/checkers.xml`에 고정한 Bug Finder 237개와 MISRA C++:2023 179개 rule을 적용. exact profile은 `tools/test_polyspace_checker_profile.py`가 검증
+- static-analysis 실행 경로: `ci/polyspace.sh`가 cache 결과와 기존 report를 제거한 뒤 새 canonical `result_list.txt`만 `tools/polyspace_result_gate.py`에 전달하고, parser exit code를 GitLab job exit로 사용. Polyspace Access 업로드는 release pass/fail을 바꾸지 않음
+- canonical schema: TSV header는 `ID`부터 `Col`까지 정해진 16개 column을 같은 순서로 모두 포함해야 함. 축약·순서 변경·추가 column은 raw-defect-zero 증거가 아님
 - static-analysis 통과 기준: canonical `result_list.txt`의 모든 row가 `Color=Green` 및 blank/`Unreviewed` status. `Justified`를 포함한 reviewed row, non-Green, malformed export, compile failure는 모두 실패
 
 ## Realtime 경계

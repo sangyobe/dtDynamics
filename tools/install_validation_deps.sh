@@ -85,6 +85,17 @@ download_file() {
     fi
 }
 
+verify_sha256() {
+    local expected="$1"
+    local file="$2"
+
+    if ! command -v sha256sum >/dev/null 2>&1; then
+        echo "error: sha256sum is required to verify downloaded validation dependencies" >&2
+        return 1
+    fi
+    printf '%s  %s\n' "${expected}" "${file}" | sha256sum --check --status
+}
+
 ensure_conda_tool() {
     if command -v micromamba >/dev/null 2>&1; then
         command -v micromamba
@@ -99,7 +110,10 @@ ensure_conda_tool() {
         return
     fi
 
-    local micromamba_root="${DEPS_DIR}/micromamba"
+    local micromamba_version="2.9.0-0"
+    local micromamba_url="https://github.com/mamba-org/micromamba-releases/releases/download/${micromamba_version}/micromamba-linux-64.tar.bz2"
+    local micromamba_sha256="8761c382127e6363bd9e0a2451aa3ef90d071a79133f736e2f759a3bf13040dd"
+    local micromamba_root="${DEPS_DIR}/micromamba-${micromamba_version}"
     local micromamba_bin="${micromamba_root}/bin/micromamba"
     if [[ -x "${micromamba_bin}" ]]; then
         echo "${micromamba_bin}"
@@ -112,9 +126,14 @@ ensure_conda_tool() {
     trap 'rm -rf "${tmp}"' RETURN
 
     echo "Bootstrapping private micromamba for Pinocchio installation" >&2
-    download_file "https://micro.mamba.pm/api/micromamba/linux-64/latest" "${tmp}/micromamba.tar.bz2"
-    tar -xjf "${tmp}/micromamba.tar.bz2" -C "${micromamba_root}"
-    chmod 755 "${micromamba_bin}"
+    download_file "${micromamba_url}" "${tmp}/micromamba.tar.bz2" || return 1
+    verify_sha256 "${micromamba_sha256}" "${tmp}/micromamba.tar.bz2" || return 1
+    tar -xjf "${tmp}/micromamba.tar.bz2" -C "${micromamba_root}" || return 1
+    chmod 755 "${micromamba_bin}" || return 1
+    if [[ ! -x "${micromamba_bin}" ]]; then
+        echo "error: micromamba bootstrap did not create ${micromamba_bin}" >&2
+        return 1
+    fi
     echo "${micromamba_bin}"
 }
 
@@ -177,7 +196,10 @@ install_pinocchio() {
     fi
 
     local conda_tool
-    conda_tool="$(ensure_conda_tool)"
+    conda_tool="$(ensure_conda_tool)" || {
+        echo "error: could not provision a conda-compatible tool for Pinocchio" >&2
+        return 1
+    }
     MAMBA_ROOT_PREFIX="${DEPS_DIR}/micromamba-root" \
         "${conda_tool}" create -y -p "${root}" -c conda-forge "pinocchio=${PINOCCHIO_VERSION}"
 

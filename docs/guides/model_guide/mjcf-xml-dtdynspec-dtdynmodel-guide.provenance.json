@@ -1,0 +1,16 @@
+{
+  "schema": 2,
+  "renderer": "@marp-team/marp-cli@4.5.1",
+  "browser": "google-chrome-stable",
+  "source": "mjcf-xml-dtdynspec-dtdynmodel-guide.md",
+  "source_sha256": "0606d30d4ab55435bb54f72540e4bdfe79f74672fcf7fdd0b8fa968582989e95",
+  "theme": "../themes/hmg.css",
+  "theme_sha256": "808d9c27e57175db2c7bacb33c1a8b037223dfbb0689131ac81e66b71768c659",
+  "assets": {
+    "figures/mjcf_dtdyn_lifecycle.svg": "d4301c8489d0ed4b461453e579f9fae5a569b1a88d71ef5d8d246d6874d7706e",
+    "figures/dtdynamics_to_be.svg": "2a03f62be3144b674082acb02039d01f9f091f62bbc619faf3c6f44b206d4ed7",
+    "figures/runtime_model_update.svg": "3a313940056cdb0585cf54e559abd80d4a087870eb6478a89b3dac135378cc77"
+  },
+  "pdf": "mjcf-xml-dtdynspec-dtdynmodel-guide.pdf",
+  "pdf_sha256": "c68ebc6aebd27eb98cfc35d8dc9e486ec38d2eacfe657837a69deb9e66900240"
+}

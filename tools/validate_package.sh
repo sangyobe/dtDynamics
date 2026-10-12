@@ -15,6 +15,7 @@ PINOCCHIO_ROOT="${DTDYNAMICS_PINOCCHIO_ROOT:-${VALIDATION_DEPS_DIR}/pinocchio-${
 WORK_ROOT="${DTDYNAMICS_VALIDATE_ROOT:-$(mktemp -d "${TMPDIR:-/tmp}/dtdynamics-package-validate-XXXXXX")}"
 BUILD_DIR="${WORK_ROOT}/build"
 INSTALL_VALIDATE_ROOT="${WORK_ROOT}/install-export"
+INSTALL_LIBDIRS="${DTDYNAMICS_INSTALL_LIBDIRS:-lib lib64}"
 BUILD_BENCHMARKS=ON
 REFERENCE_TESTS=ON
 KEEP_WORK_ROOT=OFF
@@ -36,6 +37,7 @@ Environment:
   DTDYNAMICS_DTMATH_INCLUDE_DIR     Include root containing dtMath/dtMath.h.
   DTDYNAMICS_VALIDATION_DEPS_DIR    Defaults to <package>/.validation_deps.
   DTDYNAMICS_VALIDATE_ROOT          Reuse an explicit build root.
+  DTDYNAMICS_INSTALL_LIBDIRS        Space-separated staged install layouts (default: "lib lib64").
 
 The validation build uses the checked-in CMakePresets.json as its baseline:
   validation         Full native plus MuJoCo/Pinocchio reference validation.
@@ -93,6 +95,7 @@ echo "dtMath include: ${DTMATH_INCLUDE_DIR}"
 echo "Validation deps: ${VALIDATION_DEPS_DIR}"
 echo "Reference tests: ${REFERENCE_TESTS}"
 echo "Build benchmarks: ${BUILD_BENCHMARKS}"
+echo "Install layouts: ${INSTALL_LIBDIRS}"
 
 if [[ "${REFERENCE_TESTS}" == "ON" ]]; then
     CMAKE_PRESET=validation
@@ -120,10 +123,22 @@ cmake --preset "${CMAKE_PRESET}" -S "${DTDYNAMICS_ROOT}" -B "${BUILD_DIR}" \
 cmake --build "${BUILD_DIR}" -- -j2
 ctest --test-dir "${BUILD_DIR}" --output-on-failure
 
-DTDYNAMICS_INSTALL_VALIDATE_ROOT="${INSTALL_VALIDATE_ROOT}" \
-CMAKE_BUILD_TYPE="${BUILD_TYPE}" \
-DTDYNAMICS_DTMATH_INCLUDE_DIR="${DTMATH_INCLUDE_DIR}" \
-    "${SCRIPT_DIR}/validate_install_export.sh"
+read -r -a INSTALL_LIBDIR_ARRAY <<< "${INSTALL_LIBDIRS}"
+if [[ ${#INSTALL_LIBDIR_ARRAY[@]} -eq 0 ]]; then
+    echo "No install layouts were requested." >&2
+    exit 1
+fi
+for install_libdir in "${INSTALL_LIBDIR_ARRAY[@]}"; do
+    if [[ -z "${install_libdir}" || "${install_libdir}" = /* || "${install_libdir}" == *..* ]]; then
+        echo "Invalid staged install layout: ${install_libdir}" >&2
+        exit 1
+    fi
+    DTDYNAMICS_INSTALL_VALIDATE_ROOT="${INSTALL_VALIDATE_ROOT}-${install_libdir//\//_}" \
+    DTDYNAMICS_INSTALL_LIBDIR="${install_libdir}" \
+    CMAKE_BUILD_TYPE="${BUILD_TYPE}" \
+    DTDYNAMICS_DTMATH_INCLUDE_DIR="${DTMATH_INCLUDE_DIR}" \
+        "${SCRIPT_DIR}/validate_install_export.sh"
+done
 
 if [[ "${KEEP_WORK_ROOT}" == "OFF" && -z "${DTDYNAMICS_VALIDATE_ROOT:-}" ]]; then
     rm -rf "${WORK_ROOT}"

@@ -1,0 +1,19 @@
+{
+  "schema": 2,
+  "renderer": "@marp-team/marp-cli@4.5.1",
+  "browser": "google-chrome-stable",
+  "source": "dtdynamics-usage-migration-guide.md",
+  "source_sha256": "ab5e7c8c0bcb25c39c3fac424c859fbf132760c5540c81de57b0bce0d51b163a",
+  "theme": "../themes/hmg.css",
+  "theme_sha256": "808d9c27e57175db2c7bacb33c1a8b037223dfbb0689131ac81e66b71768c659",
+  "assets": {
+    "figures/dtdynamics_as_is.svg": "2cc0899fdec33734c4b4e258a7b1269a59f39a161f66fbd13816605f285c99e6",
+    "figures/dtdynamics_to_be.svg": "2a03f62be3144b674082acb02039d01f9f091f62bbc619faf3c6f44b206d4ed7",
+    "../../figures/runtime_by_fixture.png": "d1d35af79891c3fea9dcbc8beb501344f826b986f23d913ac1aa203e27ecf387",
+    "../../figures/scaling_by_dof.png": "e278911215ad2576cbdf53f5ca0eb93ecaef2e7957693daa64330e68b4fb4513",
+    "../../figures/stage_breakdown.png": "a679f60fee6c13a4c9f77ed8944ac9246b2c5f20c1f82c4878d29249efb1594c",
+    "../../figures/latency_cdf.png": "6b4da15e15022eeabfaa7c9d1c5b58ca12b0c6e2f290d1b4f25a87199a664c1e"
+  },
+  "pdf": "dtdynamics-usage-migration-guide.pdf",
+  "pdf_sha256": "c7059ea41b09d1bea161bc2b2ba42a11ee5283a9a4a7912f3e4e1b7a4a527cba"
+}

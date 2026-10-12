@@ -33,6 +33,9 @@ def run_job(
     exporter_exit: int = 9,
     configure_exit: int = 0,
     cleanup_exit: int = 0,
+    report_content: str = HEADER + GREEN_ROW,
+    exporter_writes_report: bool = True,
+    report_generator_exit: int = 0,
 ) -> subprocess.CompletedProcess[str]:
     temporary = tempfile.TemporaryDirectory()
     root = Path(temporary.name)
@@ -47,9 +50,13 @@ def run_job(
     (root / "polyspace" / "polyspace.opts").write_text("# fixture\n", encoding="utf-8")
     (root / "polyspace" / "checkers.xml").write_text("<fixture/>\n", encoding="utf-8")
     report_template = root / "green-result-list.txt"
-    report_template.write_text(HEADER + GREEN_ROW, encoding="utf-8")
+    report_template.write_text(report_content, encoding="utf-8")
     (root / "reports" / "polyspace" / "polyspace" / "result_list.txt").write_text(
         HEADER + GREEN_ROW,
+        encoding="utf-8",
+    )
+    (root / "reports" / "polyspace" / "polyspace-report.pdf").write_text(
+        "stale PDF artifact\n",
         encoding="utf-8",
     )
     shutil.copy2(GATE, root / "tools" / "polyspace_result_gate.py")
@@ -90,10 +97,15 @@ def run_job(
         "  if [ \"$1\" = \"-output-name\" ]; then output=$2; shift 2; continue; fi\n"
         "  shift\n"
         "done\n"
-        "mkdir -p \"$output\"\n"
-        "cp \"${FAKE_REPORT_TEMPLATE}\" \"$output/result_list.txt\"\n",
+        "if [ \"${FAKE_EXPORT_WRITES_REPORT}\" = 1 ]; then\n"
+        "  mkdir -p \"$output\"\n"
+        "  cp \"${FAKE_REPORT_TEMPLATE}\" \"$output/result_list.txt\"\n"
+        "fi\n",
     )
-    write_executable(root / "bin" / "polyspace-report-generator", "#!/usr/bin/env sh\nexit 0\n")
+    write_executable(
+        root / "bin" / "polyspace-report-generator",
+        "#!/usr/bin/env sh\nexit \"${FAKE_REPORT_GENERATOR_EXIT}\"\n",
+    )
 
     environment = {
         **os.environ,
@@ -114,6 +126,8 @@ def run_job(
         "FAKE_CONFIGURE_EXIT": str(configure_exit),
         "FAKE_CLEANUP_EXIT": str(cleanup_exit),
         "FAKE_REPORT_TEMPLATE": str(report_template),
+        "FAKE_EXPORT_WRITES_REPORT": "1" if exporter_writes_report else "0",
+        "FAKE_REPORT_GENERATOR_EXIT": str(report_generator_exit),
     }
     result = subprocess.run(
         ["bash", str(POLYSPACE_JOB)],
@@ -136,11 +150,53 @@ def assert_failed_export_cannot_reuse_stale_report() -> None:
         result._polyspace_temporary_directory.cleanup()  # type: ignore[attr-defined]
 
 
+def assert_missing_exported_report_cannot_reuse_stale_report() -> None:
+    result = run_job(exporter_exit=0, exporter_writes_report=False)
+    try:
+        assert result.returncode != 0, result.stdout + result.stderr
+        assert "ERROR: Polyspace export did not produce canonical result_list.txt" in result.stdout
+    finally:
+        result._polyspace_temporary_directory.cleanup()  # type: ignore[attr-defined]
+
+
+def assert_failed_pdf_generation_cannot_publish_stale_pdf() -> None:
+    result = run_job(exporter_exit=0, report_generator_exit=7)
+    try:
+        assert result.returncode == 0, result.stdout + result.stderr
+        stale_pdf = Path(result._polyspace_temporary_directory.name) / "reports/polyspace/polyspace-report.pdf"  # type: ignore[attr-defined]
+        assert not stale_pdf.exists(), f"stale Polyspace PDF survived: {stale_pdf}"
+    finally:
+        result._polyspace_temporary_directory.cleanup()  # type: ignore[attr-defined]
+
+
 def assert_failed_analysis_cannot_publish_partial_result() -> None:
     result = run_job(analyzer_exit=17, exporter_exit=0)
     try:
         assert result.returncode != 0, result.stdout + result.stderr
         assert "ERROR: Polyspace analysis command failed" in result.stdout
+    finally:
+        result._polyspace_temporary_directory.cleanup()  # type: ignore[attr-defined]
+
+
+def assert_reviewed_green_row_fails_raw_zero_gate() -> None:
+    reviewed_green = (HEADER + GREEN_ROW).replace("\tUnreviewed\t", "\tJustified\t")
+    result = run_job(exporter_exit=0, report_content=reviewed_green)
+    try:
+        assert result.returncode != 0, result.stdout + result.stderr
+        assert "Polyspace result gate: unresolved=1 justified=1 noncompiling=0" in result.stdout
+    finally:
+        result._polyspace_temporary_directory.cleanup()  # type: ignore[attr-defined]
+
+
+def assert_truncated_schema_cannot_pass_the_ci_wrapper() -> None:
+    truncated = (
+        "Color\tCheck\tStatus\tFile\tLine\tFunction\n"
+        "Green\tNULL_PTR\tUnreviewed\tsrc/example.cpp\t10\tfunction\n"
+    )
+    result = run_job(exporter_exit=0, report_content=truncated)
+    try:
+        assert result.returncode != 0, result.stdout + result.stderr
+        assert "canonical TSV header/schema" in result.stderr
     finally:
         result._polyspace_temporary_directory.cleanup()  # type: ignore[attr-defined]
 
@@ -165,7 +221,11 @@ def assert_failed_cleanup_cannot_continue() -> None:
 
 def main() -> None:
     assert_failed_export_cannot_reuse_stale_report()
+    assert_missing_exported_report_cannot_reuse_stale_report()
+    assert_failed_pdf_generation_cannot_publish_stale_pdf()
     assert_failed_analysis_cannot_publish_partial_result()
+    assert_reviewed_green_row_fails_raw_zero_gate()
+    assert_truncated_schema_cannot_pass_the_ci_wrapper()
     assert_failed_configuration_cannot_reuse_stale_options()
     assert_failed_cleanup_cannot_continue()
     print("Polyspace cleanup, configuration, export, and analysis contracts: PASS")

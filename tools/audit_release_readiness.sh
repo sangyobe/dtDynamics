@@ -129,6 +129,22 @@ require_file CMakePresets.json
 require_file LICENSE
 require_file README.md
 require_file tools/package_release.sh
+require_file tools/test_package_release_contract.py
+require_file tools/validate_installed_guide_provenance.py
+require_file tools/guide_provenance.py
+require_file tools/test_guide_provenance_parser.py
+require_file tools/test_installed_guide_provenance.py
+require_file tools/test_guide_provenance_reference_contract.py
+require_file tools/test_guide_install_contract.py
+require_file tools/install_validation_deps.sh
+require_file tools/test_validation_deps_installer.py
+require_file tools/test_dtdynamics_config_include_order.py
+require_file tools/polyspace_result_gate.py
+require_file tools/test_polyspace_result_gate.py
+require_file tools/test_polyspace_export_contract.py
+require_file tools/test_polyspace_transport.py
+require_file tools/test_polyspace_checker_profile.py
+require_file tools/test_ci_lint.py
 require_file include/dtDynamics/dtArray.h
 require_file include/dtDynamics/dtDynTypes.h
 require_file include/dtDynamics/dtDynSpec.h
@@ -175,6 +191,19 @@ cache_bool_must_be_off DTDYNAMICS_BUILD_BENCHMARK "${cache_file}"
 cache_bool_must_be_off DTDYNAMICS_BUILD_REFERENCE_BENCHMARK "${cache_file}"
 cache_bool_must_be_off BUILD_DTDYNAMICS_MUJOCO_TEST "${cache_file}"
 cache_bool_must_be_off BUILD_DTDYNAMICS_PINOCCHIO_TEST "${cache_file}"
+
+python3 "${SCRIPT_DIR}/test_package_release_contract.py"
+python3 "${SCRIPT_DIR}/test_guide_provenance_parser.py"
+python3 "${SCRIPT_DIR}/test_installed_guide_provenance.py"
+python3 "${SCRIPT_DIR}/test_guide_provenance_reference_contract.py"
+python3 "${SCRIPT_DIR}/test_guide_install_contract.py"
+python3 "${SCRIPT_DIR}/test_validation_deps_installer.py"
+python3 "${SCRIPT_DIR}/test_dtdynamics_config_include_order.py"
+python3 "${SCRIPT_DIR}/test_polyspace_result_gate.py"
+python3 "${SCRIPT_DIR}/test_polyspace_export_contract.py"
+python3 "${SCRIPT_DIR}/test_polyspace_transport.py"
+python3 "${SCRIPT_DIR}/test_polyspace_checker_profile.py"
+python3 "${SCRIPT_DIR}/test_ci_lint.py"
 
 if [[ "${RUN_DOCS_VALIDATION}" == "ON" ]]; then
     python3 "${SCRIPT_DIR}/validate_docs.py"

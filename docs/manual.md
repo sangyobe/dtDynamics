@@ -345,13 +345,16 @@ python3 tools/validate_docs.py
 
 - authoritative execution: GitLab `polyspace` job와 job artifact `reports/polyspace/polyspace/result_list.txt`
 - analysis scope: test/benchmark/reference target을 끈 production `dtDynamics` compile database
-- checker profile: Bug Finder + MISRA C++:2023 `6.8.2`, `8.18.1`, `11.6.2`, `25.5.2`, `25.5.3`
+- checker profile: production library compile database에 `polyspace/checkers.xml`로 고정한 Bug Finder 237개와 MISRA C++:2023 179개 rule 적용. exact profile은 `tools/test_polyspace_checker_profile.py`가 검증
+- execution: `ci/polyspace.sh`가 cache 결과와 기존 report를 제거하고, 새 canonical `result_list.txt`만 `tools/polyspace_result_gate.py`에 전달. parser exit code가 GitLab job exit를 결정하며 Polyspace Access 업로드는 이 판정을 바꾸지 않음
+- canonical schema: TSV header는 `ID`부터 `Col`까지 정해진 16개 column을 같은 순서로 모두 포함해야 함. 축약·순서 변경·추가 column은 즉시 실패
 - raw-defect-zero policy: 모든 canonical export row는 `Color=Green`이고 status가 blank 또는 `Unreviewed`여야 한다. `Justified`, `No action planned`, `Not a defect`, non-Green row, malformed TSV, `File does not compile`은 모두 gate 실패다.
 
 ```bash
 python3 tools/test_polyspace_checker_profile.py
 python3 tools/test_polyspace_result_gate.py
 python3 tools/test_polyspace_export_contract.py
+python3 tools/test_polyspace_transport.py
 ```
 
 - 개념(setup/native/external validation 의미, artifact 판정 기준): [validation.md](manual/validation.md)
@@ -432,7 +435,7 @@ tools/audit_release_readiness.sh
 >
 > 검증 PASS ≠ 자동 publication consent. commit/push/tag/release 또는 외부 게시 전 필수 절차: 변경 범위와 evidence 제시, 명시적 승인 획득.
 >
-> source archive 생성 조건: clean committed tree와 exact tag 승인 이후만.
+> source archive 생성 조건: clean committed tree와 exact `v0.1.3` tag 승인 이후만. archive version `0.1.3`은 `CMakeLists.txt` project version과 같고, exact `v0.1.3` tag가 현재 `HEAD`와 archive embedded commit ID를 모두 가리켜야 함.
 
 - 개념(package surface 체크리스트, publication 경계 rationale): [release.md](manual/release.md)
 

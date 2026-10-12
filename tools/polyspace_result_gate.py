@@ -10,19 +10,35 @@ import sys
 from pathlib import Path
 
 
-REQUIRED_COLUMNS = {"Color", "Check", "Status", "File", "Line", "Function"}
-REQUIRED_NONEMPTY_COLUMNS = {"Color", "Check", "File", "Line", "Function"}
-DISALLOWED_LINE_SEPARATORS = (
-    "\x0b",
-    "\x0c",
-    "\x1c",
-    "\x1d",
-    "\x1e",
-    "\x1f",
-    "\x85",
-    "\u2028",
-    "\u2029",
+CANONICAL_COLUMNS = (
+    "ID",
+    "Family",
+    "Group",
+    "Color",
+    "New",
+    "Check",
+    "Information",
+    "Class",
+    "Function",
+    "File",
+    "Status",
+    "Severity",
+    "Comment",
+    "Key",
+    "Line",
+    "Col",
 )
+REQUIRED_NONEMPTY_COLUMNS = {"Color", "Check", "File", "Line", "Function"}
+DISALLOWED_UNICODE_LINE_SEPARATORS = ("\u2028", "\u2029")
+
+
+def reject_non_tsv_control_characters(content: str) -> None:
+    for character in content:
+        codepoint = ord(character)
+        if character in {"\t", "\n", "\r"}:
+            continue
+        if codepoint < 0x20 or 0x7F <= codepoint <= 0x9F:
+            raise ValueError("result list has a disallowed control character")
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -32,9 +48,10 @@ def parse_arguments() -> argparse.Namespace:
 
 
 def split_tsv_physical_lines(content: str) -> list[str]:
+    reject_non_tsv_control_characters(content)
     if "\r" in content.replace("\r\n", ""):
         raise ValueError("result list has a disallowed line separator")
-    if any(separator in content for separator in DISALLOWED_LINE_SEPARATORS):
+    if any(separator in content for separator in DISALLOWED_UNICODE_LINE_SEPARATORS):
         raise ValueError("result list has a disallowed line separator")
 
     physical_lines = content.replace("\r\n", "\n").split("\n")
@@ -71,9 +88,8 @@ def classify_results(report: Path) -> tuple[list[dict[str, str]], int, int]:
     duplicate_headers = sorted({name for name in headers if headers.count(name) > 1})
     if duplicate_headers:
         raise ValueError(f"result list has duplicate TSV headers: {', '.join(duplicate_headers)}")
-    missing = REQUIRED_COLUMNS.difference(headers)
-    if missing:
-        raise ValueError(f"result list is missing required columns: {', '.join(sorted(missing))}")
+    if headers != list(CANONICAL_COLUMNS):
+        raise ValueError("result list does not have the canonical TSV header/schema")
 
     unresolved: list[dict[str, str]] = []
     justified = 0
