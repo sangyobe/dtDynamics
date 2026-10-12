@@ -408,17 +408,22 @@ AttributeMap ParseAttributes(const std::string &tag, const std::size_t tagOffset
             }
             ++pos;
         }
-        if (key.empty())
+        bool malformedAttribute = key.empty();
+        if (!malformedAttribute)
         {
-            throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath,
-                                tagOffset + keyStart, "malformed XML attribute");
+            if (pos >= tag.size())
+            {
+                malformedAttribute = true;
+            }
         }
-        if (pos >= tag.size())
+        if (!malformedAttribute)
         {
-            throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath,
-                                tagOffset + keyStart, "malformed XML attribute");
+            if (tag[pos] != '=')
+            {
+                malformedAttribute = true;
+            }
         }
-        if (tag[pos] != '=')
+        if (malformedAttribute)
         {
             throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath,
                                 tagOffset + keyStart, "malformed XML attribute");
@@ -432,18 +437,18 @@ AttributeMap ParseAttributes(const std::string &tag, const std::size_t tagOffset
             }
             ++pos;
         }
-        if (pos >= tag.size())
+        bool unquotedAttributeValue = pos >= tag.size();
+        if (!unquotedAttributeValue)
+        {
+            if (tag[pos] != '"')
+            {
+                unquotedAttributeValue = tag[pos] != '\'';
+            }
+        }
+        if (unquotedAttributeValue)
         {
             throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath,
                                 tagOffset + keyStart, "XML attribute value must be quoted");
-        }
-        if (tag[pos] != '"')
-        {
-            if (tag[pos] != '\'')
-            {
-                throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath,
-                                    tagOffset + keyStart, "XML attribute value must be quoted");
-            }
         }
 
         const char quote = tag[pos++];
