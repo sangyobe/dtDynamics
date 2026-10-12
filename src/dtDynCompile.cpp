@@ -342,15 +342,39 @@ bool UpdateSpec(const dtDynSpec &spec, dtDynModel &model) noexcept
             const std::size_t modelJointIndex = static_cast<std::size_t>(nextJointId);
             const dtDynJointSpec &joint = joints[specJointIndex];
             const dtDynIndex type = static_cast<dtDynIndex>(joint.type);
-            if (joint.body != bodyId ||
-                type < static_cast<dtDynIndex>(dtDynJointType::Free) ||
-                type > static_cast<dtDynIndex>(dtDynJointType::Hinge) ||
-                model.joint_names[modelJointIndex] != joint.name ||
-                model.jnt_specid[modelJointIndex] != specJointId ||
-                model.jnt_type[modelJointIndex] != type ||
-                model.jnt_bodyid[modelJointIndex] != bodyId ||
-                model.jnt_qposadr[modelJointIndex] != nextQposAdr ||
-                model.jnt_dofadr[modelJointIndex] != nextDofAdr)
+            if (joint.body != bodyId)
+            {
+                return false;
+            }
+            if (type < static_cast<dtDynIndex>(dtDynJointType::Free))
+            {
+                return false;
+            }
+            if (type > static_cast<dtDynIndex>(dtDynJointType::Hinge))
+            {
+                return false;
+            }
+            if (model.joint_names[modelJointIndex] != joint.name)
+            {
+                return false;
+            }
+            if (model.jnt_specid[modelJointIndex] != specJointId)
+            {
+                return false;
+            }
+            if (model.jnt_type[modelJointIndex] != type)
+            {
+                return false;
+            }
+            if (model.jnt_bodyid[modelJointIndex] != bodyId)
+            {
+                return false;
+            }
+            if (model.jnt_qposadr[modelJointIndex] != nextQposAdr)
+            {
+                return false;
+            }
+            if (model.jnt_dofadr[modelJointIndex] != nextDofAdr)
             {
                 return false;
             }
@@ -399,8 +423,20 @@ bool UpdateSpec(const dtDynSpec &spec, dtDynModel &model) noexcept
         dtDynIndex siblingSteps = 0;
         while (child != DTDYN_INVALID_INDEX)
         {
-            if (child <= 0 || child >= model.nbody || ++siblingSteps > model.nbody ||
-                childLinkCount >= model.nbody - 1)
+            if (child <= 0)
+            {
+                return false;
+            }
+            if (child >= model.nbody)
+            {
+                return false;
+            }
+            ++siblingSteps;
+            if (siblingSteps > model.nbody)
+            {
+                return false;
+            }
+            if (childLinkCount >= model.nbody - 1)
             {
                 return false;
             }
@@ -463,8 +499,19 @@ bool UpdateSpec(const dtDynSpec &spec, dtDynModel &model) noexcept
     {
         const std::size_t siteIndex = static_cast<std::size_t>(siteId);
         const dtDynSiteSpec &site = sites[siteIndex];
-        if (site.body < 0 || site.body >= model.nbody ||
-            model.site_names[siteIndex] != site.name || model.site_bodyid[siteIndex] != site.body)
+        if (site.body < 0)
+        {
+            return false;
+        }
+        if (site.body >= model.nbody)
+        {
+            return false;
+        }
+        if (model.site_names[siteIndex] != site.name)
+        {
+            return false;
+        }
+        if (model.site_bodyid[siteIndex] != site.body)
         {
             return false;
         }
@@ -490,9 +537,13 @@ bool UpdateSpec(const dtDynSpec &spec, dtDynModel &model) noexcept
         dtDynIndex backlinkCount = 0;
         for (std::size_t localSiteId = 0; localSiteId < owner.sites.size(); ++localSiteId)
         {
-            if (owner.sites[localSiteId] == siteId && ++backlinkCount > 1)
+            if (owner.sites[localSiteId] == siteId)
             {
-                return false;
+                ++backlinkCount;
+                if (backlinkCount > 1)
+                {
+                    return false;
+                }
             }
         }
         if (backlinkCount != 1)
@@ -506,10 +557,27 @@ bool UpdateSpec(const dtDynSpec &spec, dtDynModel &model) noexcept
         const std::size_t actuatorIndex = static_cast<std::size_t>(actuatorId);
         const dtDynActuatorSpec &actuator = actuators[actuatorIndex];
         const dtDynIndex modelJointId = model.actuator_jointid[actuatorIndex];
-        if (actuator.joint < 0 || actuator.joint >= model.njnt ||
-            model.actuator_names[actuatorIndex] != actuator.name ||
-            modelJointId < 0 || modelJointId >= model.njnt ||
-            model.jnt_specid[static_cast<std::size_t>(modelJointId)] != actuator.joint)
+        if (actuator.joint < 0)
+        {
+            return false;
+        }
+        if (actuator.joint >= model.njnt)
+        {
+            return false;
+        }
+        if (model.actuator_names[actuatorIndex] != actuator.name)
+        {
+            return false;
+        }
+        if (modelJointId < 0)
+        {
+            return false;
+        }
+        if (modelJointId >= model.njnt)
+        {
+            return false;
+        }
+        if (model.jnt_specid[static_cast<std::size_t>(modelJointId)] != actuator.joint)
         {
             return false;
         }

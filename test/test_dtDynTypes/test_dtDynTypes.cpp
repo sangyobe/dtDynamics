@@ -3548,6 +3548,163 @@ void TestUpdateSpecRejectsLateStorageMismatchWithoutWriting()
     assert(model.body_mass(body) == mass);
 }
 
+void TestUpdateSpecRejectsLateCompatibilityMetadataMutationsWithoutWriting()
+{
+    {
+        dtDynSpec spec;
+        const dtDynIndex body = spec.AddBody("joint_body", 0);
+        const dtDynIndex joint = spec.AddJoint(body, "joint", dtDynJointType::Hinge);
+        spec.EditBody(body, [](dtDynBodySpec &draft)
+                      {
+                          draft.pos(0) = 1.0;
+                          draft.inertial.mass = 1.0; });
+
+        dtDynModel model = CompileSpecChecked(spec);
+        const dtDynReal mass = model.body_mass(body);
+        const auto position = model.body_pos[static_cast<std::size_t>(body)];
+        const std::string *const jointNameStorage = model.joint_names.data();
+        spec.EditJoint(joint, [](dtDynJointSpec &draft)
+                       { draft.name = "renamed_joint"; });
+        spec.EditBody(body, [](dtDynBodySpec &draft)
+                      {
+                          draft.pos(0) = 7.0;
+                          draft.inertial.mass = 7.0; });
+        const std::size_t allocationsBeforeUpdate = g_totalTestAllocations;
+
+        assert(!UpdateSpec(spec, model));
+        assert(g_totalTestAllocations == allocationsBeforeUpdate);
+        assert(model.joint_names.data() == jointNameStorage);
+        assert(model.joint_names[static_cast<std::size_t>(joint)] == "joint");
+        assert(model.JointId("joint") == joint);
+        assert(model.JointId("renamed_joint") == DTDYN_INVALID_INDEX);
+        assert(model.body_pos[static_cast<std::size_t>(body)](0) == position(0));
+        assert(model.body_mass(body) == mass);
+    }
+
+    {
+        dtDynSpec spec;
+        const dtDynIndex body = spec.AddBody("site_body", 0);
+        spec.AddJoint(body, "site_joint", dtDynJointType::Hinge);
+        const dtDynIndex site = spec.AddSite(body, "site");
+        spec.EditBody(body, [](dtDynBodySpec &draft)
+                      {
+                          draft.pos(0) = 1.0;
+                          draft.inertial.mass = 1.0; });
+
+        dtDynModel model = CompileSpecChecked(spec);
+        const dtDynReal mass = model.body_mass(body);
+        const auto position = model.body_pos[static_cast<std::size_t>(body)];
+        const std::string *const siteNameStorage = model.site_names.data();
+        spec.EditSite(site, [](dtDynSiteSpec &draft)
+                      { draft.name = "renamed_site"; });
+        spec.EditBody(body, [](dtDynBodySpec &draft)
+                      {
+                          draft.pos(0) = 7.0;
+                          draft.inertial.mass = 7.0; });
+        const std::size_t allocationsBeforeUpdate = g_totalTestAllocations;
+
+        assert(!UpdateSpec(spec, model));
+        assert(g_totalTestAllocations == allocationsBeforeUpdate);
+        assert(model.site_names.data() == siteNameStorage);
+        assert(model.site_names[static_cast<std::size_t>(site)] == "site");
+        assert(model.SiteId("site") == site);
+        assert(model.SiteId("renamed_site") == DTDYN_INVALID_INDEX);
+        assert(model.body_pos[static_cast<std::size_t>(body)](0) == position(0));
+        assert(model.body_mass(body) == mass);
+    }
+
+    {
+        dtDynSpec spec;
+        const dtDynIndex body = spec.AddBody("backlink_body", 0);
+        spec.AddJoint(body, "backlink_joint", dtDynJointType::Hinge);
+        const dtDynIndex site = spec.AddSite(body, "backlink_site");
+        spec.EditBody(body, [](dtDynBodySpec &draft)
+                      {
+                          draft.pos(0) = 1.0;
+                          draft.inertial.mass = 1.0; });
+
+        dtDynModel model = CompileSpecChecked(spec);
+        const dtDynReal mass = model.body_mass(body);
+        const auto position = model.body_pos[static_cast<std::size_t>(body)];
+        const dtDynIndex *const siteOwnerStorage = model.site_bodyid.data();
+        spec.EditBody(body, [site](dtDynBodySpec &draft)
+                      {
+                          draft.sites.push_back(site);
+                          draft.pos(0) = 7.0;
+                          draft.inertial.mass = 7.0; });
+        const std::size_t allocationsBeforeUpdate = g_totalTestAllocations;
+
+        assert(!UpdateSpec(spec, model));
+        assert(g_totalTestAllocations == allocationsBeforeUpdate);
+        assert(model.site_bodyid.data() == siteOwnerStorage);
+        assert(model.site_bodyid[static_cast<std::size_t>(site)] == body);
+        assert(model.SiteId("backlink_site") == site);
+        assert(model.body_pos[static_cast<std::size_t>(body)](0) == position(0));
+        assert(model.body_mass(body) == mass);
+    }
+
+    {
+        dtDynSpec spec;
+        const dtDynIndex body = spec.AddBody("child_body", 0);
+        spec.AddJoint(body, "child_joint", dtDynJointType::Hinge);
+        spec.EditBody(body, [](dtDynBodySpec &draft)
+                      {
+                          draft.pos(0) = 1.0;
+                          draft.inertial.mass = 1.0; });
+
+        dtDynModel model = CompileSpecChecked(spec);
+        const dtDynReal mass = model.body_mass(body);
+        const auto position = model.body_pos[static_cast<std::size_t>(body)];
+        const dtDynIndex *const parentStorage = model.body_parentid.data();
+        spec.EditBody(body, [body](dtDynBodySpec &draft)
+                      {
+                          draft.nextSibling = body;
+                          draft.pos(0) = 7.0;
+                          draft.inertial.mass = 7.0; });
+        const std::size_t allocationsBeforeUpdate = g_totalTestAllocations;
+
+        assert(!UpdateSpec(spec, model));
+        assert(g_totalTestAllocations == allocationsBeforeUpdate);
+        assert(model.body_parentid.data() == parentStorage);
+        assert(model.body_parentid[static_cast<std::size_t>(body)] == 0);
+        assert(model.BodyId("child_body") == body);
+        assert(model.body_pos[static_cast<std::size_t>(body)](0) == position(0));
+        assert(model.body_mass(body) == mass);
+    }
+
+    {
+        dtDynSpec spec;
+        const dtDynIndex body = spec.AddBody("actuator_body", 0);
+        const dtDynIndex joint = spec.AddJoint(body, "actuator_joint", dtDynJointType::Hinge);
+        const dtDynIndex actuator = spec.AddActuator(joint, "actuator");
+        spec.EditBody(body, [](dtDynBodySpec &draft)
+                      {
+                          draft.pos(0) = 1.0;
+                          draft.inertial.mass = 1.0; });
+
+        dtDynModel model = CompileSpecChecked(spec);
+        const dtDynReal mass = model.body_mass(body);
+        const auto position = model.body_pos[static_cast<std::size_t>(body)];
+        const std::string *const actuatorNameStorage = model.actuator_names.data();
+        spec.EditActuator(actuator, [](dtDynActuatorSpec &draft)
+                          { draft.name = "renamed_actuator"; });
+        spec.EditBody(body, [](dtDynBodySpec &draft)
+                      {
+                          draft.pos(0) = 7.0;
+                          draft.inertial.mass = 7.0; });
+        const std::size_t allocationsBeforeUpdate = g_totalTestAllocations;
+
+        assert(!UpdateSpec(spec, model));
+        assert(g_totalTestAllocations == allocationsBeforeUpdate);
+        assert(model.actuator_names.data() == actuatorNameStorage);
+        assert(model.actuator_names[static_cast<std::size_t>(actuator)] == "actuator");
+        assert(model.ActuatorId("actuator") == actuator);
+        assert(model.ActuatorId("renamed_actuator") == DTDYN_INVALID_INDEX);
+        assert(model.body_pos[static_cast<std::size_t>(body)](0) == position(0));
+        assert(model.body_mass(body) == mass);
+    }
+}
+
 void TestUpdateSpecMatchesPhysicalRecompile()
 {
     dtDynSpec original;
@@ -5383,6 +5540,7 @@ int main()
     TestUpdateSpecRejectsSiteBacklinkMutationWithoutWriting();
     TestUpdateSpecRejectsEarlyStorageMismatchWithoutWriting();
     TestUpdateSpecRejectsLateStorageMismatchWithoutWriting();
+    TestUpdateSpecRejectsLateCompatibilityMetadataMutationsWithoutWriting();
     TestUpdateSpecMatchesPhysicalRecompile();
     TestUpdateSpecRefreshesMultiRootMultiDofCaches();
     TestDtMathDynamicResizeHelpers();
