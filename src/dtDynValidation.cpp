@@ -46,6 +46,18 @@ bool Fail(dtDynValidationError *error,
     return false;
 }
 
+bool FailNonFiniteBody(dtDynValidationError *error, const dtDynIndex bodyId)
+{
+    return Fail(error, dtDynValidationCode::NonFiniteValue, dtDynObjectType::Body, bodyId,
+                "compiled body[" + std::to_string(bodyId) + "] contains a non-finite value");
+}
+
+bool FailInvalidBodyPhysicalOrFrame(dtDynValidationError *error, const dtDynIndex bodyId)
+{
+    return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body, bodyId,
+                "compiled body has invalid physical or frame-pair values");
+}
+
 template <typename Object>
 bool ValidateUniqueNames(const dtArray<Object> &objects,
                          const dtDynObjectType objectType,
@@ -571,87 +583,63 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
         const std::size_t index = static_cast<std::size_t>(bodyId);
         if (!std::isfinite(model.body_mass(bodyId)))
         {
-            return Fail(error, dtDynValidationCode::NonFiniteValue, dtDynObjectType::Body, bodyId,
-                        "compiled body[" + std::to_string(bodyId) +
-                            "] contains a non-finite value");
+            return FailNonFiniteBody(error, bodyId);
         }
         if (!std::isfinite(model.body_subtreemass(bodyId)))
         {
-            return Fail(error, dtDynValidationCode::NonFiniteValue, dtDynObjectType::Body, bodyId,
-                        "compiled body[" + std::to_string(bodyId) +
-                            "] contains a non-finite value");
+            return FailNonFiniteBody(error, bodyId);
         }
         if (!IsFinite(model.body_pos[index]))
         {
-            return Fail(error, dtDynValidationCode::NonFiniteValue, dtDynObjectType::Body, bodyId,
-                        "compiled body[" + std::to_string(bodyId) +
-                            "] contains a non-finite value");
+            return FailNonFiniteBody(error, bodyId);
         }
         if (!IsFinite(model.body_quat[index]))
         {
-            return Fail(error, dtDynValidationCode::NonFiniteValue, dtDynObjectType::Body, bodyId,
-                        "compiled body[" + std::to_string(bodyId) +
-                            "] contains a non-finite value");
+            return FailNonFiniteBody(error, bodyId);
         }
         if (!IsFinite(model.body_mat[index]))
         {
-            return Fail(error, dtDynValidationCode::NonFiniteValue, dtDynObjectType::Body, bodyId,
-                        "compiled body[" + std::to_string(bodyId) +
-                            "] contains a non-finite value");
+            return FailNonFiniteBody(error, bodyId);
         }
         if (!IsFinite(model.body_ipos[index]))
         {
-            return Fail(error, dtDynValidationCode::NonFiniteValue, dtDynObjectType::Body, bodyId,
-                        "compiled body[" + std::to_string(bodyId) +
-                            "] contains a non-finite value");
+            return FailNonFiniteBody(error, bodyId);
         }
         if (!IsFinite(model.body_iquat[index]))
         {
-            return Fail(error, dtDynValidationCode::NonFiniteValue, dtDynObjectType::Body, bodyId,
-                        "compiled body[" + std::to_string(bodyId) +
-                            "] contains a non-finite value");
+            return FailNonFiniteBody(error, bodyId);
         }
         if (!IsFinite(model.body_imat[index]))
         {
-            return Fail(error, dtDynValidationCode::NonFiniteValue, dtDynObjectType::Body, bodyId,
-                        "compiled body[" + std::to_string(bodyId) +
-                            "] contains a non-finite value");
+            return FailNonFiniteBody(error, bodyId);
         }
         if (!IsFinite(model.body_inertia[index]))
         {
-            return Fail(error, dtDynValidationCode::NonFiniteValue, dtDynObjectType::Body, bodyId,
-                        "compiled body[" + std::to_string(bodyId) +
-                            "] contains a non-finite value");
+            return FailNonFiniteBody(error, bodyId);
         }
         if (model.body_mass(bodyId) < 0.0)
         {
-            return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body,
-                        bodyId, "compiled body has invalid physical or frame-pair values");
+            return FailInvalidBodyPhysicalOrFrame(error, bodyId);
         }
         if (!IsPhysicalInertia(model.body_inertia[index]))
         {
-            return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body,
-                        bodyId, "compiled body has invalid physical or frame-pair values");
+            return FailInvalidBodyPhysicalOrFrame(error, bodyId);
         }
         if (!IsProperRotation(model.body_mat[index]))
         {
-            return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body,
-                        bodyId, "compiled body has invalid physical or frame-pair values");
+            return FailInvalidBodyPhysicalOrFrame(error, bodyId);
         }
         if (!IsProperRotation(model.body_imat[index]))
         {
-            return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body,
-                        bodyId, "compiled body has invalid physical or frame-pair values");
+            return FailInvalidBodyPhysicalOrFrame(error, bodyId);
         }
         if (!MatrixMatchesQuaternion(model.body_mat[index], model.body_quat[index]))
         {
-            return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body,
-                        bodyId, "compiled body has invalid physical or frame-pair values");
+            return FailInvalidBodyPhysicalOrFrame(error, bodyId);
         }
         if (!MatrixMatchesQuaternion(model.body_imat[index], model.body_iquat[index]))
         {
-            return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body,
-                        bodyId, "compiled body has invalid physical or frame-pair values");
+            return FailInvalidBodyPhysicalOrFrame(error, bodyId);
         }
     }
     dtArray<dtDynIndex> jointSpecCoverage;
