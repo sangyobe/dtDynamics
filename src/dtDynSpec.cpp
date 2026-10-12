@@ -1327,8 +1327,22 @@ dtDynSpec DecodeXmlImpl(const std::string &xml, const std::string &sourcePath)
 
         if (closing)
         {
-            if (selfClosing || elementStack.empty() ||
-                elementStack[elementStack.size() - 1].name != name)
+            bool misnestedClosing = selfClosing;
+            if (!misnestedClosing)
+            {
+                if (elementStack.empty())
+                {
+                    misnestedClosing = true;
+                }
+            }
+            if (!misnestedClosing)
+            {
+                if (elementStack[elementStack.size() - 1].name != name)
+                {
+                    misnestedClosing = true;
+                }
+            }
+            if (misnestedClosing)
             {
                 throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath, begin,
                                     "misnested closing element </" + name + ">");

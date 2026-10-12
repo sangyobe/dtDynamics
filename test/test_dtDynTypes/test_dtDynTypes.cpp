@@ -2782,6 +2782,70 @@ void TestSpecXmlRejectsMisnestedSupportedTags()
     assert(rejected);
 }
 
+void TestSpecXmlPreservesClosingElementFailureOrder()
+{
+    const std::string selfClosing = "<mujoco><worldbody></worldbody/></mujoco>";
+    bool selfClosingRejected = false;
+    try
+    {
+        (void)dtDynSpec::DecodeXml(selfClosing);
+    }
+    catch (const dtDynXmlError &error)
+    {
+        selfClosingRejected = error.Code() == dtDynXmlErrorCode::MalformedSyntax;
+        if (selfClosingRejected)
+        {
+            selfClosingRejected = error.Offset() == selfClosing.find("</worldbody/>");
+        }
+        if (selfClosingRejected)
+        {
+            selfClosingRejected = std::string(error.what()).find("misnested closing element </worldbody>") != std::string::npos;
+        }
+    }
+    assert(selfClosingRejected);
+
+    const std::string emptyStack = "</mujoco>";
+    bool emptyStackRejected = false;
+    try
+    {
+        (void)dtDynSpec::DecodeXml(emptyStack);
+    }
+    catch (const dtDynXmlError &error)
+    {
+        emptyStackRejected = error.Code() == dtDynXmlErrorCode::MalformedSyntax;
+        if (emptyStackRejected)
+        {
+            emptyStackRejected = error.Offset() == emptyStack.find("</mujoco>");
+        }
+        if (emptyStackRejected)
+        {
+            emptyStackRejected = std::string(error.what()).find("misnested closing element </mujoco>") != std::string::npos;
+        }
+    }
+    assert(emptyStackRejected);
+
+    const std::string mismatched =
+        "<mujoco><worldbody><body name=\"base\"></worldbody></body></mujoco>";
+    bool mismatchedRejected = false;
+    try
+    {
+        (void)dtDynSpec::DecodeXml(mismatched);
+    }
+    catch (const dtDynXmlError &error)
+    {
+        mismatchedRejected = error.Code() == dtDynXmlErrorCode::MalformedSyntax;
+        if (mismatchedRejected)
+        {
+            mismatchedRejected = error.Offset() == mismatched.find("</worldbody>");
+        }
+        if (mismatchedRejected)
+        {
+            mismatchedRejected = std::string(error.what()).find("misnested closing element </worldbody>") != std::string::npos;
+        }
+    }
+    assert(mismatchedRejected);
+}
+
 void TestSpecXmlRejectsDuplicateObjectNames()
 {
     const auto expectDuplicate = [](const std::string &xml)
@@ -5810,6 +5874,7 @@ int main()
     TestSpecXmlRejectsMalformedAttributes();
     TestSpecXmlPreservesAttributeWhitespaceAndFirstFailure();
     TestSpecXmlRejectsMisnestedSupportedTags();
+    TestSpecXmlPreservesClosingElementFailureOrder();
     TestSpecXmlRejectsDuplicateObjectNames();
     TestSpecXmlRejectsUnknownReferencesWithTypedError();
     TestSpecXmlRejectsInvalidJointRange();
