@@ -353,20 +353,6 @@ std::size_t ValidationOrigin(const dtDynValidationError &error,
     return 0;
 }
 
-[[noreturn]] void ThrowMalformedXmlAttribute(const std::string &sourcePath,
-                                             const std::size_t offset)
-{
-    throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath, offset,
-                        "malformed XML attribute");
-}
-
-[[noreturn]] void ThrowUnquotedXmlAttributeValue(const std::string &sourcePath,
-                                                 const std::size_t offset)
-{
-    throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath, offset,
-                        "XML attribute value must be quoted");
-}
-
 AttributeMap ParseAttributes(const std::string &tag, const std::size_t tagOffset,
                              const std::string &sourcePath)
 {
@@ -424,15 +410,18 @@ AttributeMap ParseAttributes(const std::string &tag, const std::size_t tagOffset
         }
         if (key.empty())
         {
-            ThrowMalformedXmlAttribute(sourcePath, tagOffset + keyStart);
+            throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath,
+                                tagOffset + keyStart, "malformed XML attribute");
         }
         if (pos >= tag.size())
         {
-            ThrowMalformedXmlAttribute(sourcePath, tagOffset + keyStart);
+            throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath,
+                                tagOffset + keyStart, "malformed XML attribute");
         }
         if (tag[pos] != '=')
         {
-            ThrowMalformedXmlAttribute(sourcePath, tagOffset + keyStart);
+            throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath,
+                                tagOffset + keyStart, "malformed XML attribute");
         }
         ++pos;
         while (pos < tag.size())
@@ -445,13 +434,15 @@ AttributeMap ParseAttributes(const std::string &tag, const std::size_t tagOffset
         }
         if (pos >= tag.size())
         {
-            ThrowUnquotedXmlAttributeValue(sourcePath, tagOffset + keyStart);
+            throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath,
+                                tagOffset + keyStart, "XML attribute value must be quoted");
         }
         if (tag[pos] != '"')
         {
             if (tag[pos] != '\'')
             {
-                ThrowUnquotedXmlAttributeValue(sourcePath, tagOffset + keyStart);
+                throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath,
+                                    tagOffset + keyStart, "XML attribute value must be quoted");
             }
         }
 
