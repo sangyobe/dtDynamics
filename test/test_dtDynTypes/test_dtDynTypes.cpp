@@ -2680,6 +2680,33 @@ void TestSpecXmlRejectsWrongVectorArity()
         "0");
 }
 
+void TestSpecXmlPreservesVectorWhitespaceAndArityOffset()
+{
+    const std::string valid =
+        "<mujoco><worldbody><body name=\"base\" pos=\" \t 1 \n 2  3 \n \"/>"
+        "</worldbody></mujoco>";
+    const dtDynSpec decoded = dtDynSpec::DecodeXml(valid);
+    assert(decoded.Bodies().size() == 2);
+    assert(std::fabs(decoded.Bodies()[1].pos(0) - 1.0) < 1.0e-12);
+    assert(std::fabs(decoded.Bodies()[1].pos(1) - 2.0) < 1.0e-12);
+    assert(std::fabs(decoded.Bodies()[1].pos(2) - 3.0) < 1.0e-12);
+
+    const std::string tooMany =
+        "<mujoco><worldbody><body name=\"base\" pos=\" \t 1 \n 2  3  4 \n \"/>"
+        "</worldbody></mujoco>";
+    bool rejected = false;
+    try
+    {
+        (void)dtDynSpec::DecodeXml(tooMany);
+    }
+    catch (const dtDynXmlError &error)
+    {
+        rejected = error.Code() == dtDynXmlErrorCode::InvalidVectorArity &&
+                   error.Offset() == tooMany.find("4");
+    }
+    assert(rejected);
+}
+
 void TestSpecXmlRejectsMalformedAttributes()
 {
     const std::string xml =
@@ -5641,6 +5668,7 @@ int main()
     TestSpecXmlReportsTypedNumericErrors();
     TestSpecXmlPreservesNumericWhitespaceAndFirstFailure();
     TestSpecXmlRejectsWrongVectorArity();
+    TestSpecXmlPreservesVectorWhitespaceAndArityOffset();
     TestSpecXmlRejectsMalformedAttributes();
     TestSpecXmlPreservesAttributeWhitespaceAndFirstFailure();
     TestSpecXmlRejectsMisnestedSupportedTags();

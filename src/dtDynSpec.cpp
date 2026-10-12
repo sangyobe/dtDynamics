@@ -581,9 +581,12 @@ dtArray<dtDynReal> ParseVectorValues(const AttributeValue &attribute, const std:
     std::size_t pos = 0;
     while (pos < attribute.text.size())
     {
-        while (pos < attribute.text.size() &&
-               std::isspace(static_cast<unsigned char>(attribute.text[pos])))
+        while (pos < attribute.text.size())
         {
+            if (!std::isspace(static_cast<unsigned char>(attribute.text[pos])))
+            {
+                break;
+            }
             ++pos;
         }
         if (pos == attribute.text.size())
@@ -591,9 +594,12 @@ dtArray<dtDynReal> ParseVectorValues(const AttributeValue &attribute, const std:
             break;
         }
         const std::size_t tokenStart = pos;
-        while (pos < attribute.text.size() &&
-               !std::isspace(static_cast<unsigned char>(attribute.text[pos])))
+        while (pos < attribute.text.size())
         {
+            if (std::isspace(static_cast<unsigned char>(attribute.text[pos])))
+            {
+                break;
+            }
             ++pos;
         }
         tokens.push_back({attribute.text.substr(tokenStart, pos - tokenStart),
