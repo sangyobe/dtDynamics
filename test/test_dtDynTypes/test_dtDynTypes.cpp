@@ -992,6 +992,14 @@ void TestModelValidationPreservesJointAndSiteValidationFailures()
                                  dtDynObjectType::Joint, joint,
                                  "compiled slide/hinge joint axis must be unit length");
 
+    dtDynSpec slideSpec;
+    const dtDynIndex slideBody = slideSpec.AddBody("slide_body", 0);
+    slideSpec.AddJoint(slideBody, "slide_joint", dtDynJointType::Slide);
+    const dtDynModel slideModel = CompileSpecChecked(slideSpec);
+    dtDynValidationError slideError;
+    assert(ValidateModel(slideModel, &slideError));
+    assert(slideError.code == dtDynValidationCode::None);
+
     dtDynSpec freeSpec;
     const dtDynIndex freeBody = freeSpec.AddBody("free_body", 0);
     const dtDynIndex freeJoint = freeSpec.AddJoint(freeBody, "free_joint", dtDynJointType::Free);

@@ -746,15 +746,13 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
             {
                 return FailInvalidSlideHingeAxis(error, jointId);
             }
+            continue;
         }
-        else
+        if (jointType == dtDynJointType::Hinge)
         {
-            if (jointType == dtDynJointType::Hinge)
+            if (!IsUnitVector(model.jnt_axis[index]))
             {
-                if (!IsUnitVector(model.jnt_axis[index]))
-                {
-                    return FailInvalidSlideHingeAxis(error, jointId);
-                }
+                return FailInvalidSlideHingeAxis(error, jointId);
             }
         }
     }
