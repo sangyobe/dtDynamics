@@ -878,6 +878,134 @@ void TestModelValidationRejectsInvalidFramePairs()
     assert(!ValidateModel(mismatchedSiteFrame, &error));
 }
 
+void AssertBodyValidationFailure(const dtDynModel &model, dtDynValidationCode code,
+                                 const std::string &message)
+{
+    dtDynValidationError error;
+    assert(!ValidateModel(model, &error));
+    assert(error.code == code);
+    assert(error.object == dtDynObjectType::Body);
+    assert(error.index == 1);
+    assert(error.message == message);
+}
+
+void TestModelValidationPreservesEveryBodyNonFiniteFailure()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("validated_body", 0);
+    const dtDynModel valid = CompileSpecChecked(spec);
+    assert(valid.nbody == 2);
+    assert(valid.nroot == 1);
+
+    const auto assertNonFinite = [&](const dtDynModel &candidate)
+    {
+        AssertBodyValidationFailure(candidate, dtDynValidationCode::NonFiniteValue,
+                                    "compiled body[1] contains a non-finite value");
+    };
+    const dtDynReal nan = std::numeric_limits<dtDynReal>::quiet_NaN();
+
+    dtDynModel badMass = valid;
+    badMass.body_mass(body) = nan;
+    assertNonFinite(badMass);
+
+    dtDynModel badSubtreeMass = valid;
+    badSubtreeMass.body_subtreemass(body) = nan;
+    assertNonFinite(badSubtreeMass);
+
+    dtDynModel badPosition = valid;
+    badPosition.body_pos[static_cast<std::size_t>(body)](0) = nan;
+    assertNonFinite(badPosition);
+
+    dtDynModel badQuaternion = valid;
+    badQuaternion.body_quat[static_cast<std::size_t>(body)](0) = nan;
+    assertNonFinite(badQuaternion);
+
+    dtDynModel badRotation = valid;
+    badRotation.body_mat[static_cast<std::size_t>(body)](0, 0) = nan;
+    assertNonFinite(badRotation);
+
+    dtDynModel badInertialPosition = valid;
+    badInertialPosition.body_ipos[static_cast<std::size_t>(body)](0) = nan;
+    assertNonFinite(badInertialPosition);
+
+    dtDynModel badInertialQuaternion = valid;
+    badInertialQuaternion.body_iquat[static_cast<std::size_t>(body)](0) = nan;
+    assertNonFinite(badInertialQuaternion);
+
+    dtDynModel badInertialRotation = valid;
+    badInertialRotation.body_imat[static_cast<std::size_t>(body)](0, 0) = nan;
+    assertNonFinite(badInertialRotation);
+
+    dtDynModel badInertia = valid;
+    badInertia.body_inertia[static_cast<std::size_t>(body)](0) = nan;
+    assertNonFinite(badInertia);
+}
+
+void TestModelValidationPreservesEveryBodyPhysicalOrFrameFailure()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("validated_body", 0);
+    const dtDynModel valid = CompileSpecChecked(spec);
+    assert(valid.nbody == 2);
+    assert(valid.nroot == 1);
+
+    const auto assertInvalidReference = [&](const dtDynModel &candidate)
+    {
+        AssertBodyValidationFailure(candidate, dtDynValidationCode::InvalidReference,
+                                    "compiled body has invalid physical or frame-pair values");
+    };
+
+    dtDynModel negativeMass = valid;
+    negativeMass.body_mass(body) = -1.0;
+    assertInvalidReference(negativeMass);
+
+    dtDynModel invalidInertia = valid;
+    invalidInertia.body_inertia[static_cast<std::size_t>(body)](0) = 3.0;
+    invalidInertia.body_inertia[static_cast<std::size_t>(body)](1) = 1.0;
+    invalidInertia.body_inertia[static_cast<std::size_t>(body)](2) = 1.0;
+    assertInvalidReference(invalidInertia);
+
+    dtDynModel invalidBodyRotation = valid;
+    invalidBodyRotation.body_mat[static_cast<std::size_t>(body)].SetZero();
+    assertInvalidReference(invalidBodyRotation);
+
+    dtDynModel invalidInertialRotation = valid;
+    invalidInertialRotation.body_imat[static_cast<std::size_t>(body)].SetZero();
+    assertInvalidReference(invalidInertialRotation);
+
+    dtDynModel mismatchedBodyFrame = valid;
+    mismatchedBodyFrame.body_quat[static_cast<std::size_t>(body)](0) = 0.0;
+    mismatchedBodyFrame.body_quat[static_cast<std::size_t>(body)](3) = 1.0;
+    assertInvalidReference(mismatchedBodyFrame);
+
+    dtDynModel mismatchedInertialFrame = valid;
+    mismatchedInertialFrame.body_iquat[static_cast<std::size_t>(body)](0) = 0.0;
+    mismatchedInertialFrame.body_iquat[static_cast<std::size_t>(body)](3) = 1.0;
+    assertInvalidReference(mismatchedInertialFrame);
+}
+
+void TestModelValidationPreservesBodyValidationPhasePrecedence()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("validated_body", 0);
+    const dtDynModel valid = CompileSpecChecked(spec);
+    assert(valid.nbody == 2);
+    assert(valid.nroot == 1);
+
+    dtDynModel nonFiniteBeforePhysical = valid;
+    nonFiniteBeforePhysical.body_inertia[static_cast<std::size_t>(body)](0) =
+        std::numeric_limits<dtDynReal>::quiet_NaN();
+    nonFiniteBeforePhysical.body_mass(body) = -1.0;
+    AssertBodyValidationFailure(nonFiniteBeforePhysical, dtDynValidationCode::NonFiniteValue,
+                                "compiled body[1] contains a non-finite value");
+
+    dtDynModel physicalBeforeTopology = valid;
+    physicalBeforeTopology.body_mass(body) = -1.0;
+    physicalBeforeTopology.body_parentid[static_cast<std::size_t>(body)] = body;
+    AssertBodyValidationFailure(physicalBeforeTopology, dtDynValidationCode::InvalidReference,
+                                "compiled body has invalid physical or frame-pair values");
+}
+
 void TestCompileSpecSupportsMaximumRootMappingWithoutNestedLookup()
 {
     constexpr dtDynIndex rootCount = 10922;
@@ -4819,6 +4947,9 @@ int main()
     TestSpecValidationRejectsInvalidPhysicalValues();
     TestModelValidationRejectsInvalidPhysicalValues();
     TestModelValidationRejectsInvalidFramePairs();
+    TestModelValidationPreservesEveryBodyNonFiniteFailure();
+    TestModelValidationPreservesEveryBodyPhysicalOrFrameFailure();
+    TestModelValidationPreservesBodyValidationPhasePrecedence();
     TestCompileSpecSupportsMaximumRootMappingWithoutNestedLookup();
     TestJointSizes();
     TestDtArrayDirectHeader();
