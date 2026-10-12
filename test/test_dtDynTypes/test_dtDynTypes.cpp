@@ -2898,6 +2898,23 @@ void TestSpecXmlRejectsInvalidBooleanValue()
     assert(rejected);
 }
 
+void TestSpecXmlPreservesLimitedBooleanGrammar()
+{
+    const std::string xml =
+        "<mujoco><worldbody><body name=\"base\">"
+        "<joint name=\"word_true\" limited=\"true\"/>"
+        "<joint name=\"numeric_true\" limited=\"1\"/>"
+        "<joint name=\"word_false\" limited=\"false\"/>"
+        "<joint name=\"numeric_false\" limited=\"0\"/>"
+        "</body></worldbody></mujoco>";
+    const dtDynSpec decoded = dtDynSpec::DecodeXml(xml);
+    assert(decoded.Joints().size() == 4);
+    assert(decoded.Joints()[0].limited);
+    assert(decoded.Joints()[1].limited);
+    assert(!decoded.Joints()[2].limited);
+    assert(!decoded.Joints()[3].limited);
+}
+
 void TestSpecXmlRequiresSingleRootElement()
 {
     const auto expectMalformed = [](const std::string &xml, const std::size_t expectedOffset)
@@ -5677,6 +5694,7 @@ int main()
     TestSpecXmlRejectsInvalidJointRange();
     TestSpecXmlRejectsUnsupportedSemanticValues();
     TestSpecXmlRejectsInvalidBooleanValue();
+    TestSpecXmlPreservesLimitedBooleanGrammar();
     TestSpecXmlRequiresSingleRootElement();
     TestSpecXmlRejectsSupportedElementInWrongContext();
     TestSpecXmlAcceptsEverySupportedElementInItsDocumentedParent();

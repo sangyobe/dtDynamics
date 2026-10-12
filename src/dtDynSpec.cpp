@@ -1394,15 +1394,37 @@ dtDynSpec DecodeXmlImpl(const std::string &xml, const std::string &sourcePath)
                 if (hasLimitedAttribute)
                 {
                     const AttributeValue &limited = attrs.at("limited");
-                    if (limited.text == "true" || limited.text == "1")
+                    bool parsedLimitedValue = false;
+                    if (limited.text == "true")
                     {
                         draft.limited = true;
+                        parsedLimitedValue = true;
                     }
-                    else if (limited.text == "false" || limited.text == "0")
+                    if (!parsedLimitedValue)
                     {
-                        draft.limited = false;
+                        if (limited.text == "1")
+                        {
+                            draft.limited = true;
+                            parsedLimitedValue = true;
+                        }
                     }
-                    else
+                    if (!parsedLimitedValue)
+                    {
+                        if (limited.text == "false")
+                        {
+                            draft.limited = false;
+                            parsedLimitedValue = true;
+                        }
+                    }
+                    if (!parsedLimitedValue)
+                    {
+                        if (limited.text == "0")
+                        {
+                            draft.limited = false;
+                            parsedLimitedValue = true;
+                        }
+                    }
+                    if (!parsedLimitedValue)
                     {
                         throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath,
                                             limited.offset,
