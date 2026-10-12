@@ -46,6 +46,27 @@ bool Fail(dtDynValidationError *error,
     return false;
 }
 
+bool RequireModelArraySize(const char *name,
+                           const std::size_t actual,
+                           const dtDynIndex expected,
+                           dtDynValidationError *error)
+{
+    if (actual == static_cast<std::size_t>(expected))
+    {
+        return true;
+    }
+    return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body,
+                DTDYN_INVALID_INDEX, std::string("model array ") + name + " has size " + std::to_string(actual) + ", expected " + std::to_string(expected));
+}
+
+bool RequireModelDenseSize(const char *name,
+                           const dtDynDenseVector &vector,
+                           const dtDynIndex expected,
+                           dtDynValidationError *error)
+{
+    return RequireModelArraySize(name, static_cast<std::size_t>(vector.GetDim()), expected, error);
+}
+
 bool FailNonFiniteBody(dtDynValidationError *error, const dtDynIndex bodyId)
 {
     return Fail(error, dtDynValidationCode::NonFiniteValue, dtDynObjectType::Body, bodyId,
@@ -496,27 +517,12 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
                     DTDYN_INVALID_INDEX, "compiled model has no world body[0]");
     }
 
-    const auto requireSize = [error](const char *name, const std::size_t actual,
-                                     const dtDynIndex expected) -> bool
-    {
-        if (actual == static_cast<std::size_t>(expected))
-        {
-            return true;
-        }
-        return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body,
-                    DTDYN_INVALID_INDEX, std::string("model array ") + name + " has size " + std::to_string(actual) + ", expected " + std::to_string(expected));
-    };
-    const auto requireDense = [&requireSize](const char *name, const dtDynDenseVector &vector,
-                                             const dtDynIndex expected) -> bool
-    {
-        return requireSize(name, static_cast<std::size_t>(vector.GetDim()), expected);
-    };
-
-#define DTDYN_REQUIRE_ARRAY(member, count)                       \
-    if (!requireSize(#member, model.member.size(), model.count)) \
+#define DTDYN_REQUIRE_ARRAY(member, count)                                \
+    if (!RequireModelArraySize(#member, model.member.size(), model.count, \
+                               error))                                    \
     return false
-#define DTDYN_REQUIRE_DENSE(member, count)                 \
-    if (!requireDense(#member, model.member, model.count)) \
+#define DTDYN_REQUIRE_DENSE(member, count)                                 \
+    if (!RequireModelDenseSize(#member, model.member, model.count, error)) \
     return false
 
     DTDYN_REQUIRE_ARRAY(body_names, nbody);

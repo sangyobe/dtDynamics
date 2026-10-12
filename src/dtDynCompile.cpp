@@ -76,19 +76,20 @@ dtDynIndex GetJointSpecId(const dtDynBodySpec &body, const dtDynIndex jointIndex
     return body.joints[static_cast<std::size_t>(jointIndex)];
 }
 
+bool HasArraySize(const std::size_t actual, const dtDynIndex expected) noexcept
+{
+    return expected >= 0 && actual == static_cast<std::size_t>(expected);
+}
+
+bool HasDenseSize(const dtDynDenseVector &value, const dtDynIndex expected) noexcept
+{
+    return expected >= 0 && value.GetDim() == expected;
+}
+
 } // namespace
 
 bool UpdateSpec(const dtDynSpec &spec, dtDynModel &model) noexcept
 {
-    const auto hasArraySize = [](const std::size_t actual, const dtDynIndex expected) noexcept
-    {
-        return expected >= 0 && actual == static_cast<std::size_t>(expected);
-    };
-    const auto hasDenseSize = [](const dtDynDenseVector &value, const dtDynIndex expected) noexcept
-    {
-        return expected >= 0 && value.GetDim() == expected;
-    };
-
     const dtArray<dtDynBodySpec> &bodies = spec.Bodies();
     const dtArray<dtDynJointSpec> &joints = spec.Joints();
     const dtArray<dtDynSiteSpec> &sites = spec.Sites();
@@ -96,183 +97,183 @@ bool UpdateSpec(const dtDynSpec &spec, dtDynModel &model) noexcept
 
     if (model.nq < 0 || model.nv < 0 || model.nbody < 1 || model.njnt < 0 ||
         model.nsite < 0 || model.nu < 0 || model.nroot < 0 ||
-        !hasArraySize(bodies.size(), model.nbody) ||
-        !hasArraySize(joints.size(), model.njnt) ||
-        !hasArraySize(sites.size(), model.nsite) ||
-        !hasArraySize(actuators.size(), model.nu))
+        !HasArraySize(bodies.size(), model.nbody) ||
+        !HasArraySize(joints.size(), model.njnt) ||
+        !HasArraySize(sites.size(), model.nsite) ||
+        !HasArraySize(actuators.size(), model.nu))
     {
         return false;
     }
 
-    if (!hasArraySize(model.body_names.size(), model.nbody))
+    if (!HasArraySize(model.body_names.size(), model.nbody))
     {
         return false;
     }
-    if (!hasArraySize(model.body_parentid.size(), model.nbody))
+    if (!HasArraySize(model.body_parentid.size(), model.nbody))
     {
         return false;
     }
-    if (!hasArraySize(model.body_rootid.size(), model.nbody))
+    if (!HasArraySize(model.body_rootid.size(), model.nbody))
     {
         return false;
     }
-    if (!hasArraySize(model.body_rootidx.size(), model.nbody))
+    if (!HasArraySize(model.body_rootidx.size(), model.nbody))
     {
         return false;
     }
-    if (!hasArraySize(model.body_jntnum.size(), model.nbody))
+    if (!HasArraySize(model.body_jntnum.size(), model.nbody))
     {
         return false;
     }
-    if (!hasArraySize(model.body_jntadr.size(), model.nbody))
+    if (!HasArraySize(model.body_jntadr.size(), model.nbody))
     {
         return false;
     }
-    if (!hasArraySize(model.body_dofnum.size(), model.nbody))
+    if (!HasArraySize(model.body_dofnum.size(), model.nbody))
     {
         return false;
     }
-    if (!hasArraySize(model.body_dofadr.size(), model.nbody))
+    if (!HasArraySize(model.body_dofadr.size(), model.nbody))
     {
         return false;
     }
-    if (!hasArraySize(model.body_weldid.size(), model.nbody))
+    if (!HasArraySize(model.body_weldid.size(), model.nbody))
     {
         return false;
     }
-    if (!hasDenseSize(model.body_mass, model.nbody))
+    if (!HasDenseSize(model.body_mass, model.nbody))
     {
         return false;
     }
-    if (!hasDenseSize(model.body_subtreemass, model.nbody))
+    if (!HasDenseSize(model.body_subtreemass, model.nbody))
     {
         return false;
     }
-    if (!hasArraySize(model.body_pos.size(), model.nbody))
+    if (!HasArraySize(model.body_pos.size(), model.nbody))
     {
         return false;
     }
-    if (!hasArraySize(model.body_quat.size(), model.nbody))
+    if (!HasArraySize(model.body_quat.size(), model.nbody))
     {
         return false;
     }
-    if (!hasArraySize(model.body_mat.size(), model.nbody))
+    if (!HasArraySize(model.body_mat.size(), model.nbody))
     {
         return false;
     }
-    if (!hasArraySize(model.body_ipos.size(), model.nbody))
+    if (!HasArraySize(model.body_ipos.size(), model.nbody))
     {
         return false;
     }
-    if (!hasArraySize(model.body_iquat.size(), model.nbody))
+    if (!HasArraySize(model.body_iquat.size(), model.nbody))
     {
         return false;
     }
-    if (!hasArraySize(model.body_imat.size(), model.nbody))
+    if (!HasArraySize(model.body_imat.size(), model.nbody))
     {
         return false;
     }
-    if (!hasArraySize(model.body_inertia.size(), model.nbody))
+    if (!HasArraySize(model.body_inertia.size(), model.nbody))
     {
         return false;
     }
-    if (!hasArraySize(model.joint_names.size(), model.njnt))
+    if (!HasArraySize(model.joint_names.size(), model.njnt))
     {
         return false;
     }
-    if (!hasArraySize(model.jnt_type.size(), model.njnt))
+    if (!HasArraySize(model.jnt_type.size(), model.njnt))
     {
         return false;
     }
-    if (!hasArraySize(model.jnt_bodyid.size(), model.njnt))
+    if (!HasArraySize(model.jnt_bodyid.size(), model.njnt))
     {
         return false;
     }
-    if (!hasArraySize(model.jnt_specid.size(), model.njnt))
+    if (!HasArraySize(model.jnt_specid.size(), model.njnt))
     {
         return false;
     }
-    if (!hasArraySize(model.jnt_qposadr.size(), model.njnt))
+    if (!HasArraySize(model.jnt_qposadr.size(), model.njnt))
     {
         return false;
     }
-    if (!hasArraySize(model.jnt_dofadr.size(), model.njnt))
+    if (!HasArraySize(model.jnt_dofadr.size(), model.njnt))
     {
         return false;
     }
-    if (!hasArraySize(model.jnt_limited.size(), model.njnt))
+    if (!HasArraySize(model.jnt_limited.size(), model.njnt))
     {
         return false;
     }
-    if (!hasDenseSize(model.jnt_range_min, model.njnt))
+    if (!HasDenseSize(model.jnt_range_min, model.njnt))
     {
         return false;
     }
-    if (!hasDenseSize(model.jnt_range_max, model.njnt))
+    if (!HasDenseSize(model.jnt_range_max, model.njnt))
     {
         return false;
     }
-    if (!hasArraySize(model.jnt_pos.size(), model.njnt))
+    if (!HasArraySize(model.jnt_pos.size(), model.njnt))
     {
         return false;
     }
-    if (!hasArraySize(model.jnt_axis.size(), model.njnt))
+    if (!HasArraySize(model.jnt_axis.size(), model.njnt))
     {
         return false;
     }
-    if (!hasArraySize(model.dof_bodyid.size(), model.nv))
+    if (!HasArraySize(model.dof_bodyid.size(), model.nv))
     {
         return false;
     }
-    if (!hasArraySize(model.dof_parentid.size(), model.nv))
+    if (!HasArraySize(model.dof_parentid.size(), model.nv))
     {
         return false;
     }
-    if (!hasArraySize(model.dof_jntid.size(), model.nv))
+    if (!HasArraySize(model.dof_jntid.size(), model.nv))
     {
         return false;
     }
-    if (!hasDenseSize(model.dof_armature, model.nv))
+    if (!HasDenseSize(model.dof_armature, model.nv))
     {
         return false;
     }
-    if (!hasArraySize(model.site_names.size(), model.nsite))
+    if (!HasArraySize(model.site_names.size(), model.nsite))
     {
         return false;
     }
-    if (!hasArraySize(model.site_bodyid.size(), model.nsite))
+    if (!HasArraySize(model.site_bodyid.size(), model.nsite))
     {
         return false;
     }
-    if (!hasArraySize(model.site_pos.size(), model.nsite))
+    if (!HasArraySize(model.site_pos.size(), model.nsite))
     {
         return false;
     }
-    if (!hasArraySize(model.site_quat.size(), model.nsite))
+    if (!HasArraySize(model.site_quat.size(), model.nsite))
     {
         return false;
     }
-    if (!hasArraySize(model.site_mat.size(), model.nsite))
+    if (!HasArraySize(model.site_mat.size(), model.nsite))
     {
         return false;
     }
-    if (!hasArraySize(model.actuator_names.size(), model.nu))
+    if (!HasArraySize(model.actuator_names.size(), model.nu))
     {
         return false;
     }
-    if (!hasArraySize(model.actuator_jointid.size(), model.nu))
+    if (!HasArraySize(model.actuator_jointid.size(), model.nu))
     {
         return false;
     }
-    if (!hasDenseSize(model.actuator_gear, model.nu))
+    if (!HasDenseSize(model.actuator_gear, model.nu))
     {
         return false;
     }
-    if (!hasArraySize(model.root_bodyid.size(), model.nroot))
+    if (!HasArraySize(model.root_bodyid.size(), model.nroot))
     {
         return false;
     }
-    if (!hasDenseSize(model.root_mass, model.nroot))
+    if (!HasDenseSize(model.root_mass, model.nroot))
     {
         return false;
     }

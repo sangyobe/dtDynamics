@@ -860,7 +860,7 @@ void dtDynSpec::Clear()
     m_storage.m_joints.clear();
     m_storage.m_sites.clear();
     m_storage.m_actuators.clear();
-    AddBody("world", DTDYN_INVALID_INDEX);
+    static_cast<void>(AddBody("world", DTDYN_INVALID_INDEX));
 }
 
 std::string dtDynSpec::EncodeXml() const
@@ -903,7 +903,7 @@ void dtDynSpec::SaveXmlFile(const std::string &path) const
         throw std::runtime_error("dtDynSpec::SaveXmlFile: failed to open XML file for writing: " + path);
     }
 
-    output.write(xml.data(), static_cast<std::streamsize>(xml.size()));
+    static_cast<void>(output.write(xml.data(), static_cast<std::streamsize>(xml.size())));
     output.close();
     if (!output)
     {
@@ -1361,11 +1361,11 @@ dtDynSpec dtDynSpec::LoadXmlFile(const std::string &path)
     char buffer[4096];
     while (true)
     {
-        input.read(buffer, static_cast<std::streamsize>(sizeof(buffer)));
+        static_cast<void>(input.read(buffer, static_cast<std::streamsize>(sizeof(buffer))));
         const std::streamsize count = input.gcount();
         if (count > 0)
         {
-            xml.append(buffer, static_cast<std::size_t>(count));
+            static_cast<void>(xml.append(buffer, static_cast<std::size_t>(count)));
         }
         if (input.eof())
         {

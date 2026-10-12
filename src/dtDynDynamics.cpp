@@ -650,7 +650,7 @@ void ComputeBiasMatrix(const dt::Math::Matrix<6, 6, dtDynReal> &inertia,
     const dtDynReal vx = velocity.At(3);
     const dtDynReal vy = velocity.At(4);
     const dtDynReal vz = velocity.At(5);
-    const auto momentum = inertia * velocity;
+    const dt::Math::Vector6<dtDynReal> momentum(inertia * velocity);
 
     AddHalfSymmetricMotionCrossColumn4(inertia, 0, 1, wz, 2, -wy, 4, vz, 5, -vy, out);
     AddHalfSymmetricMotionCrossColumn4(inertia, 1, 0, -wz, 2, wx, 3, -vz, 5, vx, out);
@@ -659,12 +659,12 @@ void ComputeBiasMatrix(const dt::Math::Matrix<6, 6, dtDynReal> &inertia,
     AddHalfSymmetricMotionCrossColumn2(inertia, 4, 3, -wz, 5, wx, out);
     AddHalfSymmetricMotionCrossColumn2(inertia, 5, 3, wy, 4, -wx, out);
 
-    AddHalfMomentumCrossMatrix(momentum(0),
-                               momentum(1),
-                               momentum(2),
-                               momentum(3),
-                               momentum(4),
-                               momentum(5),
+    AddHalfMomentumCrossMatrix(momentum.At(0),
+                               momentum.At(1),
+                               momentum.At(2),
+                               momentum.At(3),
+                               momentum.At(4),
+                               momentum.At(5),
                                out);
 }
 
