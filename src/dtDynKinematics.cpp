@@ -200,8 +200,8 @@ void ComputePointJacobianDotColumn(const dtDynModel &model,
     const dtDynJointType jointType =
         static_cast<dtDynJointType>(model.jnt_type[static_cast<std::size_t>(jointId)]);
     dt::Math::Vector6<dtDynReal> cdofDot = data.cdof_dot[static_cast<std::size_t>(dofId)];
-    if (jointType == dtDynJointType::Ball ||
-        (jointType == dtDynJointType::Free && dofOffset >= 3))
+    if ((jointType == dtDynJointType::Ball) ||
+        ((jointType == dtDynJointType::Free) && (dofOffset >= 3)))
     {
         cdofDot = math::CrossSpatialMotion(data.cvel[static_cast<std::size_t>(dofBody)],
                                            data.cdof[static_cast<std::size_t>(dofId)]);
