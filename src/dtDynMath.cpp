@@ -384,9 +384,9 @@ dt::Math::Matrix3<dtDynReal> BodyInertiaInWorld(const dtDynModel &model,
     {
         for (dtDynIndex col = 0; col < 3; ++col)
         {
-            out.At(row, col) = rot.At(row, 0) * diag.At(0) * rot.At(col, 0) +
-                               rot.At(row, 1) * diag.At(1) * rot.At(col, 1) +
-                               rot.At(row, 2) * diag.At(2) * rot.At(col, 2);
+            out.At(row, col) = (((rot.At(row, 0) * diag.At(0)) * rot.At(col, 0)) +
+                                ((rot.At(row, 1) * diag.At(1)) * rot.At(col, 1))) +
+                               ((rot.At(row, 2) * diag.At(2)) * rot.At(col, 2));
         }
     }
 

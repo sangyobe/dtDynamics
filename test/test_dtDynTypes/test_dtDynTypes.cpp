@@ -4665,6 +4665,30 @@ void TestNormalizeOrIdentityPreservesUnitAndZeroCases()
     assert(std::fabs(identity(3)) < 1.0e-12);
 }
 
+void TestBodyInertiaInWorldPreservesRotatedPrincipalAxes()
+{
+    dtDynModel model;
+    model.body_inertia.resize(1);
+    model.body_inertia[0](0) = 2.0;
+    model.body_inertia[0](1) = 3.0;
+    model.body_inertia[0](2) = 5.0;
+
+    dtDynData data;
+    data.ximat.resize(1);
+    data.ximat[0].SetZero();
+    data.ximat[0](0, 1) = -1.0;
+    data.ximat[0](1, 0) = 1.0;
+    data.ximat[0](2, 2) = 1.0;
+
+    const dt::Math::Matrix3<dtDynReal> inertia = math::BodyInertiaInWorld(model, data, 0);
+    assert(std::fabs(inertia(0, 0) - 3.0) < 1.0e-12);
+    assert(std::fabs(inertia(1, 1) - 2.0) < 1.0e-12);
+    assert(std::fabs(inertia(2, 2) - 5.0) < 1.0e-12);
+    assert(std::fabs(inertia(0, 1)) < 1.0e-12);
+    assert(std::fabs(inertia(1, 2)) < 1.0e-12);
+    assert(std::fabs(inertia(2, 0)) < 1.0e-12);
+}
+
 void TestSpatialInertiaAtWorldOriginUsesParallelAxisTheorem()
 {
     dt::Math::Vector3<dtDynReal> com;
@@ -6052,6 +6076,7 @@ int main()
     TestMulQuatPreservesQuaternionProduct();
     TestMatrixRotatePreservesLinearCombination();
     TestNormalizeOrIdentityPreservesUnitAndZeroCases();
+    TestBodyInertiaInWorldPreservesRotatedPrincipalAxes();
     TestSpatialInertiaAtWorldOriginUsesParallelAxisTheorem();
     TestCompileSpecUsesNativeIndexLayout();
     TestCompileSpecSupportsMultipleMovableRoots();
