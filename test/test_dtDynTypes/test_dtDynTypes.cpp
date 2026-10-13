@@ -781,6 +781,131 @@ void TestSpecValidationRejectsDimensionOverflowBeforeCompile()
     assert(error.object == dtDynObjectType::Joint);
 }
 
+std::string P75ObjectName(const char *const kind, const std::size_t index)
+{
+    return std::string("p75_") + kind + "_" + std::to_string(index);
+}
+
+void AddP75BodyObjects(dtDynSpec &spec, const std::size_t count)
+{
+    assert(count >= 1U);
+    assert(spec.Bodies().size() == 1U);
+
+    dtDynIndex parent = 0;
+    for (std::size_t index = 1U; index < count; ++index)
+    {
+        const dtDynIndex body = spec.AddBody(P75ObjectName("body", index), parent);
+        assert(body == static_cast<dtDynIndex>(index));
+        parent = body;
+    }
+    assert(spec.Bodies().size() == count);
+}
+
+void AddP75JointObjects(dtDynSpec &spec, const std::size_t count)
+{
+    const dtDynIndex body = spec.AddBody("p75_joint_body", 0);
+    assert(body == 1);
+    for (std::size_t index = 0U; index < count; ++index)
+    {
+        const dtDynIndex joint =
+            spec.AddJoint(body, P75ObjectName("joint", index), dtDynJointType::Hinge);
+        assert(joint == static_cast<dtDynIndex>(index));
+    }
+    assert(spec.Joints().size() == count);
+}
+
+void AddP75SiteObjects(dtDynSpec &spec, const std::size_t count)
+{
+    const dtDynIndex body = spec.AddBody("p75_site_body", 0);
+    assert(body == 1);
+    for (std::size_t index = 0U; index < count; ++index)
+    {
+        const dtDynIndex site = spec.AddSite(body, P75ObjectName("site", index));
+        assert(site == static_cast<dtDynIndex>(index));
+    }
+    assert(spec.Sites().size() == count);
+}
+
+void AddP75ActuatorObjects(dtDynSpec &spec, const std::size_t count)
+{
+    const dtDynIndex body = spec.AddBody("p75_actuator_body", 0);
+    const dtDynIndex joint = spec.AddJoint(body, "p75_actuator_joint", dtDynJointType::Hinge);
+    assert(body == 1);
+    assert(joint == 0);
+    for (std::size_t index = 0U; index < count; ++index)
+    {
+        const dtDynIndex actuator = spec.AddActuator(joint, P75ObjectName("actuator", index));
+        assert(actuator == static_cast<dtDynIndex>(index));
+    }
+    assert(spec.Actuators().size() == count);
+}
+
+void AssertP75ObjectCountBaseline(const dtDynSpec &spec)
+{
+    dtDynValidationError error;
+    assert(ValidateSpec(spec, &error));
+    assert(error.code == dtDynValidationCode::None);
+}
+
+void AssertP75ObjectCountOverflow(const dtDynSpec &spec)
+{
+    dtDynValidationError error;
+    assert(!ValidateSpec(spec, &error));
+    assert(error.code == dtDynValidationCode::DimensionOverflow);
+    assert(error.object == dtDynObjectType::Body);
+    assert(error.index == DTDYN_INVALID_INDEX);
+    assert(error.message == "spec object count exceeds UINT16_MAX");
+}
+
+void TestSpecValidationPreservesPublicObjectCountBoundaries()
+{
+    constexpr std::size_t maximum = static_cast<std::size_t>(std::numeric_limits<uint16_t>::max());
+    constexpr std::size_t overflow = maximum + 1U;
+    assert(maximum == 65535U);
+    assert(overflow == 65536U);
+
+    {
+        dtDynSpec spec;
+        AddP75BodyObjects(spec, maximum);
+        AssertP75ObjectCountBaseline(spec);
+    }
+    {
+        dtDynSpec spec;
+        AddP75BodyObjects(spec, overflow);
+        AssertP75ObjectCountOverflow(spec);
+    }
+    {
+        dtDynSpec spec;
+        AddP75JointObjects(spec, maximum);
+        AssertP75ObjectCountBaseline(spec);
+    }
+    {
+        dtDynSpec spec;
+        AddP75JointObjects(spec, overflow);
+        AssertP75ObjectCountOverflow(spec);
+    }
+    {
+        dtDynSpec spec;
+        AddP75SiteObjects(spec, maximum);
+        AssertP75ObjectCountBaseline(spec);
+    }
+    {
+        dtDynSpec spec;
+        AddP75SiteObjects(spec, overflow);
+        AssertP75ObjectCountOverflow(spec);
+    }
+    {
+        dtDynSpec spec;
+        AddP75ActuatorObjects(spec, maximum);
+        AssertP75ObjectCountBaseline(spec);
+    }
+    {
+        dtDynSpec spec;
+        AddP75ActuatorObjects(spec, overflow);
+        AssertP75ObjectCountOverflow(spec);
+    }
+}
+
 void AddRootStackedBodies(dtDynSpec &spec, const dtDynIndex rootCount)
 {
     for (dtDynIndex rootIndex = 0; rootIndex < rootCount; ++rootIndex)
@@ -8863,6 +8988,7 @@ int main()
     TestModelValidationRejectsNegativeDimension();
     TestModelValidationRejectsDimensionOverflow();
     TestSpecValidationRejectsDimensionOverflowBeforeCompile();
+    TestSpecValidationPreservesPublicObjectCountBoundaries();
     TestSpecValidationPreservesRootStackedDimensionBoundary();
     TestModelValidationRejectsArrayShapeMismatch();
     TestModelValidationRejectsMissingWorld();

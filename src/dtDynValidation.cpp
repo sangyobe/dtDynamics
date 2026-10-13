@@ -419,10 +419,10 @@ bool ValidateSpec(const dtDynSpec &spec, dtDynValidationError *error)
     }
 
     const long long maximum = std::numeric_limits<uint16_t>::max();
-    if (bodies.size() > static_cast<std::size_t>(maximum) ||
-        spec.Joints().size() > static_cast<std::size_t>(maximum) ||
-        spec.Sites().size() > static_cast<std::size_t>(maximum) ||
-        spec.Actuators().size() > static_cast<std::size_t>(maximum))
+    if ((bodies.size() > static_cast<std::size_t>(maximum)) ||
+        (spec.Joints().size() > static_cast<std::size_t>(maximum)) ||
+        (spec.Sites().size() > static_cast<std::size_t>(maximum)) ||
+        (spec.Actuators().size() > static_cast<std::size_t>(maximum)))
     {
         return Fail(error, dtDynValidationCode::DimensionOverflow, dtDynObjectType::Body,
                     DTDYN_INVALID_INDEX, "spec object count exceeds UINT16_MAX");
