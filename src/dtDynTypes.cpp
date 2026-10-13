@@ -16,7 +16,7 @@ namespace dt::Dynamics
 
 uint16_t ToDtMathDim(const dtDynIndex value)
 {
-    assert(value >= 0 && value <= static_cast<dtDynIndex>(std::numeric_limits<uint16_t>::max()));
+    assert((value >= 0) && (value <= static_cast<dtDynIndex>(std::numeric_limits<uint16_t>::max())));
     return static_cast<uint16_t>(value);
 }
 
@@ -39,7 +39,7 @@ void ResizeDenseMatrix(dtDynDenseMatrix &matrix, const dtDynIndex rows, const dt
     const uint16_t mathRows = ToDtMathDim(rows);
     const uint16_t mathCols = ToDtMathDim(cols);
 
-    if (matrix.GetRowSize() == 0 && matrix.GetColSize() == 0)
+    if ((matrix.GetRowSize() == 0) && (matrix.GetColSize() == 0))
     {
         matrix.Release();
         matrix.NewSize(mathRows, mathCols);
@@ -62,7 +62,7 @@ void EnsureDenseMatrixSize(dtDynDenseMatrix &matrix, const dtDynIndex rows, cons
 {
     const uint16_t mathRows = ToDtMathDim(rows);
     const uint16_t mathCols = ToDtMathDim(cols);
-    if (matrix.GetRowSize() != mathRows || matrix.GetColSize() != mathCols)
+    if ((matrix.GetRowSize() != mathRows) || (matrix.GetColSize() != mathCols))
     {
         ResizeDenseMatrix(matrix, rows, cols);
     }
