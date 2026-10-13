@@ -684,7 +684,7 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
         {"nq", model.nq}, {"nv", model.nv}, {"nbody", model.nbody}, {"njnt", model.njnt}, {"nsite", model.nsite}, {"nu", model.nu}, {"nroot", model.nroot}, {"3*nroot", 3LL * model.nroot}, {"6*nroot", 6LL * model.nroot}};
     for (const NamedDimension &dimension : dimensions)
     {
-        if (dimension.value < 0 || dimension.value > maximum)
+        if ((dimension.value < 0) || (dimension.value > maximum))
         {
             return Fail(error, dtDynValidationCode::DimensionOverflow, dtDynObjectType::Body,
                         DTDYN_INVALID_INDEX, std::string("model dimension ") + dimension.name + "=" + std::to_string(dimension.value) + " is outside [0, UINT16_MAX]");

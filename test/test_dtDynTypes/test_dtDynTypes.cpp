@@ -674,15 +674,30 @@ void TestSpecValidationRejectsNonFiniteValues()
     assert(error.index == body);
 }
 
-void TestModelValidationRejectsDimensionOverflow()
+void AssertModelNqDimensionOverflow(const dtDynIndex nq, const std::string &expectedMessage)
 {
     dtDynModel model;
-    model.nq = static_cast<dtDynIndex>(std::numeric_limits<uint16_t>::max()) + 1;
+    model.nq = nq;
 
     dtDynValidationError error;
     assert(!ValidateModel(model, &error));
     assert(error.code == dtDynValidationCode::DimensionOverflow);
-    assert(error.message.find("nq") != std::string::npos);
+    assert(error.object == dtDynObjectType::Body);
+    assert(error.index == DTDYN_INVALID_INDEX);
+    assert(error.message == expectedMessage);
+}
+
+void TestModelValidationRejectsNegativeDimension()
+{
+    AssertModelNqDimensionOverflow(-1,
+                                   "model dimension nq=-1 is outside [0, UINT16_MAX]");
+}
+
+void TestModelValidationRejectsDimensionOverflow()
+{
+    AssertModelNqDimensionOverflow(
+        static_cast<dtDynIndex>(std::numeric_limits<uint16_t>::max()) + 1,
+        "model dimension nq=65536 is outside [0, UINT16_MAX]");
 }
 
 void TestSpecValidationRejectsDimensionOverflowBeforeCompile()
@@ -8384,6 +8399,7 @@ int main()
     TestSpecValidationRejectsDuplicateNames();
     TestSpecValidationRejectsDuplicateEmptyNames();
     TestSpecValidationRejectsNonFiniteValues();
+    TestModelValidationRejectsNegativeDimension();
     TestModelValidationRejectsDimensionOverflow();
     TestSpecValidationRejectsDimensionOverflowBeforeCompile();
     TestSpecValidationPreservesRootStackedDimensionBoundary();
