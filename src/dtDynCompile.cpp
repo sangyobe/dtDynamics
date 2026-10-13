@@ -590,8 +590,8 @@ bool UpdateSpec(const dtDynSpec &spec, dtDynModel &model) noexcept
         model.body_pos[bodyIndex] = body.pos;
         model.body_quat[bodyIndex] = math::NormalizeOrIdentity(body.quat);
         model.body_mat[bodyIndex] = math::QuatToMat(model.body_quat[bodyIndex]);
-        model.body_ipos[bodyIndex] = body.inertial.mass == 0.0 ? body.pos : body.inertial.pos;
-        model.body_iquat[bodyIndex] = body.inertial.mass == 0.0
+        model.body_ipos[bodyIndex] = (body.inertial.mass == 0.0) ? body.pos : body.inertial.pos;
+        model.body_iquat[bodyIndex] = (body.inertial.mass == 0.0)
                                           ? model.body_quat[bodyIndex]
                                           : math::NormalizeOrIdentity(body.inertial.quat);
         model.body_imat[bodyIndex] = math::QuatToMat(model.body_iquat[bodyIndex]);

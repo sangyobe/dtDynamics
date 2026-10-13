@@ -5500,7 +5500,22 @@ void TestUpdateSpecMatchesPhysicalRecompile()
                           draft.inertial.inertia(1) = 0.3;
                           draft.inertial.inertia(2) = 0.4; });
     original.EditBody(child, [](dtDynBodySpec &draft)
-                      { draft.inertial.mass = 0.0; });
+                      {
+                          dt::Math::Vector3<dtDynReal> xAxis;
+                          dt::Math::Vector3<dtDynReal> yAxis;
+                          xAxis.SetZero();
+                          yAxis.SetZero();
+                          xAxis(0) = 1.0;
+                          yAxis(1) = 1.0;
+                          draft.pos(0) = 0.45;
+                          draft.pos(1) = -0.35;
+                          draft.pos(2) = 0.2;
+                          draft.quat = math::AxisAngleQuat(xAxis, 0.25);
+                          draft.inertial.mass = 0.0;
+                          draft.inertial.pos(0) = -0.25;
+                          draft.inertial.pos(1) = 0.3;
+                          draft.inertial.pos(2) = -0.15;
+                          draft.inertial.quat = math::AxisAngleQuat(yAxis, -0.35); });
 
     dtDynModel model = CompileSpecChecked(original);
     assert(model.jnt_type[0] == static_cast<dtDynIndex>(dtDynJointType::Hinge));
@@ -5544,10 +5559,13 @@ void TestUpdateSpecMatchesPhysicalRecompile()
     updated.EditBody(child, [&](dtDynBodySpec &draft)
                      {
                          draft.pos(0) = 0.6;
+                         draft.pos(1) = -0.4;
                          draft.pos(2) = -0.2;
                          draft.quat = math::AxisAngleQuat(yAxis, -0.2);
                          draft.inertial.mass = 1.75;
                          draft.inertial.pos(0) = 0.3;
+                         draft.inertial.pos(1) = 0.15;
+                         draft.inertial.pos(2) = -0.35;
                          draft.inertial.quat = math::AxisAngleQuat(zAxis, -0.5);
                          draft.inertial.inertia(0) = 0.12;
                          draft.inertial.inertia(1) = 0.18;
@@ -5580,6 +5598,20 @@ void TestUpdateSpecMatchesPhysicalRecompile()
     const std::size_t allocationsBeforeUpdate = g_totalTestAllocations;
     assert(UpdateSpec(updated, model));
     assert(g_totalTestAllocations == allocationsBeforeUpdate);
+    const std::size_t childIndex = static_cast<std::size_t>(child);
+    const dtDynBodySpec &updatedChild = updated.Bodies()[childIndex];
+    for (dtDynIndex axis = 0; axis < 3; ++axis)
+    {
+        assert(!IsDtMathNear(updatedChild.pos(axis), updatedChild.inertial.pos(axis)));
+        assert(IsDtMathNear(model.body_ipos[childIndex](axis), updatedChild.inertial.pos(axis)));
+        assert(!IsDtMathNear(model.body_ipos[childIndex](axis), updatedChild.pos(axis)));
+    }
+    assert(!IsDtMathNear(updatedChild.quat(0), updatedChild.inertial.quat(0)));
+    for (dtDynIndex component = 0; component < 4; ++component)
+    {
+        assert(IsDtMathNear(model.body_iquat[childIndex](component),
+                            updatedChild.inertial.quat(component)));
+    }
 
     assert(model.body_parentid.data() == bodyParentStorage);
     assert(model.jnt_type.data() == jointTypeStorage);
@@ -5702,16 +5734,22 @@ void TestUpdateSpecMatchesPhysicalRecompile()
     const std::size_t allocationsBeforeZeroMassUpdate = g_totalTestAllocations;
     assert(UpdateSpec(original, model));
     assert(g_totalTestAllocations == allocationsBeforeZeroMassUpdate);
-    const std::size_t childIndex = static_cast<std::size_t>(child);
+    const dtDynBodySpec &zeroMassChild = original.Bodies()[childIndex];
     for (dtDynIndex axis = 0; axis < 3; ++axis)
     {
+        assert(!IsDtMathNear(zeroMassChild.pos(axis), zeroMassChild.inertial.pos(axis)));
+        assert(IsDtMathNear(model.body_ipos[childIndex](axis), zeroMassChild.pos(axis)));
+        assert(!IsDtMathNear(model.body_ipos[childIndex](axis), zeroMassChild.inertial.pos(axis)));
         assert(IsDtMathNear(model.body_ipos[childIndex](axis), zeroMassExpected.body_ipos[childIndex](axis)));
     }
+    assert(!IsDtMathNear(zeroMassChild.quat(0), zeroMassChild.inertial.quat(0)));
     for (dtDynIndex component = 0; component < 4; ++component)
     {
+        assert(IsDtMathNear(model.body_iquat[childIndex](component), zeroMassChild.quat(component)));
         assert(IsDtMathNear(model.body_iquat[childIndex](component),
                             zeroMassExpected.body_iquat[childIndex](component)));
     }
+    assert(ValidateModel(model, &error));
 }
 
 void TestUpdateSpecRefreshesMultiRootMultiDofCaches()
