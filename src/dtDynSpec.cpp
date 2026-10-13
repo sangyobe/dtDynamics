@@ -608,7 +608,7 @@ dtArray<dtDynReal> ParseVectorValues(const AttributeValue &attribute, const std:
 
     if (tokens.size() != expectedCount)
     {
-        const std::size_t offset = tokens.size() > expectedCount ? tokens[expectedCount].offset : attribute.offset;
+        const std::size_t offset = (tokens.size() > expectedCount) ? tokens[expectedCount].offset : attribute.offset;
         throw dtDynXmlError(dtDynXmlErrorCode::InvalidVectorArity, sourcePath, offset,
                             "expected " + std::to_string(expectedCount) +
                                 " vector values but found " + std::to_string(tokens.size()));
