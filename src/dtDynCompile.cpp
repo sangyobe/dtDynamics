@@ -311,8 +311,8 @@ bool UpdateSpec(const dtDynSpec &spec, dtDynModel &model) noexcept
         dtDynIndex parentDof = DTDYN_INVALID_INDEX;
         if (bodyId > 0)
         {
-            for (dtDynIndex ancestor = body.parent; ancestor > 0;
-                 ancestor = model.body_parentid[static_cast<std::size_t>(ancestor)])
+            dtDynIndex ancestor = body.parent;
+            while (ancestor > 0)
             {
                 const std::size_t ancestorIndex = static_cast<std::size_t>(ancestor);
                 const dtDynIndex ancestorDofCount = model.body_dofnum[ancestorIndex];
@@ -326,6 +326,7 @@ bool UpdateSpec(const dtDynSpec &spec, dtDynModel &model) noexcept
                     parentDof = ancestorDofAdr + ancestorDofCount - 1;
                     break;
                 }
+                ancestor = model.body_parentid[static_cast<std::size_t>(ancestor)];
             }
         }
 
@@ -520,7 +521,8 @@ bool UpdateSpec(const dtDynSpec &spec, dtDynModel &model) noexcept
     for (dtDynIndex bodyId = 0; bodyId < model.nbody; ++bodyId)
     {
         const dtDynBodySpec &body = bodies[static_cast<std::size_t>(bodyId)];
-        for (std::size_t localSiteId = 0; localSiteId < body.sites.size(); ++localSiteId)
+        std::size_t localSiteId = 0;
+        while (localSiteId < body.sites.size())
         {
             const dtDynIndex siteId = body.sites[localSiteId];
             if (siteId < 0 || siteId >= model.nsite ||
@@ -528,6 +530,7 @@ bool UpdateSpec(const dtDynSpec &spec, dtDynModel &model) noexcept
             {
                 return false;
             }
+            ++localSiteId;
         }
     }
     for (dtDynIndex siteId = 0; siteId < model.nsite; ++siteId)
@@ -535,7 +538,8 @@ bool UpdateSpec(const dtDynSpec &spec, dtDynModel &model) noexcept
         const dtDynSiteSpec &site = sites[static_cast<std::size_t>(siteId)];
         const dtDynBodySpec &owner = bodies[static_cast<std::size_t>(site.body)];
         dtDynIndex backlinkCount = 0;
-        for (std::size_t localSiteId = 0; localSiteId < owner.sites.size(); ++localSiteId)
+        std::size_t localSiteId = 0;
+        while (localSiteId < owner.sites.size())
         {
             if (owner.sites[localSiteId] == siteId)
             {
@@ -545,6 +549,7 @@ bool UpdateSpec(const dtDynSpec &spec, dtDynModel &model) noexcept
                     return false;
                 }
             }
+            ++localSiteId;
         }
         if (backlinkCount != 1)
         {
@@ -663,7 +668,8 @@ void CompileSpec(const dtDynSpec &spec, dtDynModel &model)
     for (dtDynIndex bodyId = 0; bodyId < model.nbody; ++bodyId)
     {
         const dtDynBodySpec &body = spec.Bodies()[static_cast<std::size_t>(bodyId)];
-        for (dtDynIndex localJointId = 0; localJointId < static_cast<dtDynIndex>(body.joints.size()); ++localJointId)
+        const dtDynIndex localJointCount = static_cast<dtDynIndex>(body.joints.size());
+        for (dtDynIndex localJointId = 0; localJointId < localJointCount; ++localJointId)
         {
             const dtDynJointSpec &joint = spec.Joints()[static_cast<std::size_t>(GetJointSpecId(body, localJointId))];
             const dtDynJointDofSize dofSize = GetJointDofSize(joint.type);
@@ -709,8 +715,9 @@ void CompileSpec(const dtDynSpec &spec, dtDynModel &model)
 
             dtDynIndex bodyDofNum = 0;
             dtDynIndex parentDof = parent >= 0 ? bodyLastDof[static_cast<std::size_t>(parent)] : DTDYN_INVALID_INDEX;
+            const dtDynIndex localJointCount = static_cast<dtDynIndex>(body.joints.size());
 
-            for (dtDynIndex localJointId = 0; localJointId < static_cast<dtDynIndex>(body.joints.size()); ++localJointId)
+            for (dtDynIndex localJointId = 0; localJointId < localJointCount; ++localJointId)
             {
                 const dtDynIndex specJointId = GetJointSpecId(body, localJointId);
                 const dtDynJointSpec &joint = spec.Joints()[static_cast<std::size_t>(specJointId)];

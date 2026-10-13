@@ -6222,6 +6222,285 @@ void TestUpdateSpecP83RejectsValidBodyNameAndParentChangesWithoutWriting()
     AssertP83RejectedUpdateLeavesOldModelUnchanged(reparented, parentOldModel);
 }
 
+struct P88LoopTraversalIds
+{
+    dtDynIndex root = DTDYN_INVALID_INDEX;
+    dtDynIndex fixed = DTDYN_INVALID_INDEX;
+    dtDynIndex child = DTDYN_INVALID_INDEX;
+    dtDynIndex rootJoint = DTDYN_INVALID_INDEX;
+    dtDynIndex childJoint = DTDYN_INVALID_INDEX;
+    dtDynIndex firstSite = DTDYN_INVALID_INDEX;
+    dtDynIndex secondSite = DTDYN_INVALID_INDEX;
+    dtDynIndex actuator = DTDYN_INVALID_INDEX;
+};
+
+struct P88JointPhysicalEditor
+{
+    dtDynReal armature = 0.0;
+    bool limited = true;
+
+    void operator()(dtDynJointSpec &draft) const
+    {
+        draft.pos.SetZero();
+        draft.pos.At(0) = 0.15 + armature;
+        draft.pos.At(1) = -0.25 - armature;
+        draft.pos.At(2) = 0.35 + armature;
+        draft.axis.SetZero();
+        if (limited)
+        {
+            draft.axis.At(0) = 1.0;
+        }
+        else
+        {
+            draft.axis.At(1) = 1.0;
+        }
+        draft.limited = limited;
+        draft.rangeMin = -0.75 - armature;
+        draft.rangeMax = 0.95 + armature;
+        draft.armature = armature;
+    }
+};
+
+struct P88SitePhysicalEditor
+{
+    dtDynReal offset = 0.0;
+
+    void operator()(dtDynSiteSpec &draft) const
+    {
+        dt::Math::Vector3<dtDynReal> axis;
+        axis.SetZero();
+        axis.At(2) = 1.0;
+        draft.pos.SetZero();
+        draft.pos.At(0) = 0.1 + offset;
+        draft.pos.At(1) = -0.2 - offset;
+        draft.pos.At(2) = 0.3 + offset;
+        draft.quat = math::AxisAngleQuat(axis, 0.2 + (0.1 * offset));
+    }
+};
+
+struct P88ActuatorPhysicalEditor
+{
+    dtDynReal gear = 1.0;
+
+    void operator()(dtDynActuatorSpec &draft) const
+    {
+        draft.gear = gear;
+    }
+};
+
+struct P88ActuatorNameEditor
+{
+    std::string name;
+
+    void operator()(dtDynActuatorSpec &draft) const
+    {
+        draft.name = name;
+    }
+};
+
+dtDynSpec MakeP88LoopTraversalSpec(P88LoopTraversalIds &ids)
+{
+    dtDynSpec spec;
+    ids.root = spec.AddBody("p88_root", 0);
+    ids.fixed = spec.AddBody("p88_fixed", ids.root);
+    ids.child = spec.AddBody("p88_child", ids.fixed);
+    ids.rootJoint = spec.AddJoint(ids.root, "p88_root_hinge", dtDynJointType::Hinge);
+    ids.childJoint = spec.AddJoint(ids.child, "p88_child_hinge", dtDynJointType::Hinge);
+    ids.firstSite = spec.AddSite(ids.child, "p88_first_site");
+    ids.secondSite = spec.AddSite(ids.child, "p88_second_site");
+    ids.actuator = spec.AddActuator(ids.childJoint, "p88_actuator");
+
+    spec.EditBody(ids.root, P81BodyPhysicalEditor{2.0, 0.25});
+    spec.EditBody(ids.fixed, P81BodyPhysicalEditor{3.0, -0.5});
+    spec.EditBody(ids.child, P81BodyPhysicalEditor{4.0, 0.75});
+    spec.EditJoint(ids.rootJoint, P88JointPhysicalEditor{0.1});
+    spec.EditJoint(ids.childJoint, P88JointPhysicalEditor{0.2});
+    spec.EditSite(ids.firstSite, P88SitePhysicalEditor{0.0});
+    spec.EditSite(ids.secondSite, P88SitePhysicalEditor{1.0});
+    spec.EditActuator(ids.actuator, P88ActuatorPhysicalEditor{1.5});
+
+    assert(ids.root == 1);
+    assert(ids.fixed == 2);
+    assert(ids.child == 3);
+    assert(ids.rootJoint == 0);
+    assert(ids.childJoint == 1);
+    assert(ids.firstSite == 0);
+    assert(ids.secondSite == 1);
+    assert(ids.actuator == 0);
+    assert(spec.Bodies()[static_cast<std::size_t>(ids.fixed)].joints.empty());
+    assert(spec.Bodies()[static_cast<std::size_t>(ids.child)].sites.size() == 2U);
+    assert(spec.Bodies()[static_cast<std::size_t>(ids.child)].sites[0] == ids.firstSite);
+    assert(spec.Bodies()[static_cast<std::size_t>(ids.child)].sites[1] == ids.secondSite);
+
+    dtDynValidationError error;
+    assert(ValidateSpec(spec, &error));
+    assert(error.code == dtDynValidationCode::None);
+    return spec;
+}
+
+void ConfigureP88RejectedPhysicalValues(dtDynSpec &spec, const P88LoopTraversalIds &ids)
+{
+    spec.EditBody(0, P85BodyPhysicalEditor{0.0});
+    spec.EditBody(ids.root, P85BodyPhysicalEditor{1.0});
+    spec.EditBody(ids.fixed, P85BodyPhysicalEditor{2.0});
+    spec.EditBody(ids.child, P85BodyPhysicalEditor{3.0});
+    spec.EditJoint(ids.rootJoint, P88JointPhysicalEditor{0.7, false});
+    spec.EditJoint(ids.childJoint, P88JointPhysicalEditor{0.8, false});
+    spec.EditSite(ids.firstSite, P88SitePhysicalEditor{4.0});
+    spec.EditSite(ids.secondSite, P88SitePhysicalEditor{5.0});
+    spec.EditActuator(ids.actuator, P88ActuatorPhysicalEditor{3.5});
+}
+
+void AssertP88SourcePhysicalWriteTargetsDiffer(const dtDynModel &actual,
+                                               const dtDynModel &expected)
+{
+    assert(actual.nbody == expected.nbody);
+    for (dtDynIndex bodyId = 0; bodyId < actual.nbody; ++bodyId)
+    {
+        AssertP85BodyPhysicalWriteTargetsDiffer(actual, expected, bodyId);
+    }
+
+    assert(actual.njnt == expected.njnt);
+    for (dtDynIndex jointId = 0; jointId < actual.njnt; ++jointId)
+    {
+        const std::size_t jointIndex = static_cast<std::size_t>(jointId);
+        const dtDynIndex actualDof = actual.jnt_dofadr[jointIndex];
+        const dtDynIndex expectedDof = expected.jnt_dofadr[jointIndex];
+        assert(actual.jnt_limited[jointIndex] != expected.jnt_limited[jointIndex]);
+        assert(actual.jnt_range_min.At(jointId) != expected.jnt_range_min.At(jointId));
+        assert(actual.jnt_range_max.At(jointId) != expected.jnt_range_max.At(jointId));
+        assert(actual.jnt_pos[jointIndex].At(0) != expected.jnt_pos[jointIndex].At(0));
+        assert(actual.jnt_axis[jointIndex].At(0) != expected.jnt_axis[jointIndex].At(0));
+        assert(actual.dof_armature.At(actualDof) != expected.dof_armature.At(expectedDof));
+    }
+
+    assert(actual.nsite == expected.nsite);
+    for (dtDynIndex siteId = 0; siteId < actual.nsite; ++siteId)
+    {
+        const std::size_t siteIndex = static_cast<std::size_t>(siteId);
+        assert(actual.site_pos[siteIndex].At(0) != expected.site_pos[siteIndex].At(0));
+        assert(actual.site_quat[siteIndex].At(0) != expected.site_quat[siteIndex].At(0));
+        assert(actual.site_mat[siteIndex].At(0, 0) != expected.site_mat[siteIndex].At(0, 0));
+    }
+
+    assert(actual.nu == expected.nu);
+    for (dtDynIndex actuatorId = 0; actuatorId < actual.nu; ++actuatorId)
+    {
+        assert(actual.actuator_gear.At(actuatorId) != expected.actuator_gear.At(actuatorId));
+    }
+
+    assert(actual.nroot == expected.nroot);
+    for (dtDynIndex rootId = 0; rootId < actual.nroot; ++rootId)
+    {
+        assert(actual.root_mass.At(rootId) != expected.root_mass.At(rootId));
+    }
+}
+
+void TestUpdateSpecP88PreservesAncestorAndSiteTraversal()
+{
+    P88LoopTraversalIds ids;
+    const dtDynSpec original = MakeP88LoopTraversalSpec(ids);
+    dtDynModel model = CompileSpecChecked(original);
+
+    assert(model.nbody == 4);
+    assert(model.njnt == 2);
+    assert(model.nsite == 2);
+    assert(model.nu == 1);
+    assert(model.nroot == 1);
+    assert(model.body_dofnum[static_cast<std::size_t>(ids.root)] == 1);
+    assert(model.body_dofnum[static_cast<std::size_t>(ids.fixed)] == 0);
+    assert(model.body_dofnum[static_cast<std::size_t>(ids.child)] == 1);
+    assert(model.jnt_specid[0] == ids.rootJoint);
+    assert(model.jnt_specid[1] == ids.childJoint);
+    const dtDynIndex rootDof = model.jnt_dofadr[0];
+    const dtDynIndex childDof = model.jnt_dofadr[1];
+    assert(model.dof_parentid[static_cast<std::size_t>(childDof)] == rootDof);
+
+    dtDynSpec updated = original;
+    updated.EditBody(ids.root, P81BodyPhysicalEditor{5.0, -1.25});
+    updated.EditBody(ids.fixed, P81BodyPhysicalEditor{6.0, 1.5});
+    updated.EditBody(ids.child, P81BodyPhysicalEditor{7.0, -1.75});
+    updated.EditJoint(ids.rootJoint, P88JointPhysicalEditor{0.4});
+    updated.EditJoint(ids.childJoint, P88JointPhysicalEditor{0.5});
+    updated.EditSite(ids.firstSite, P88SitePhysicalEditor{2.0});
+    updated.EditSite(ids.secondSite, P88SitePhysicalEditor{3.0});
+    updated.EditActuator(ids.actuator, P88ActuatorPhysicalEditor{2.5});
+
+    dtDynValidationError error;
+    assert(ValidateSpec(updated, &error));
+    assert(error.code == dtDynValidationCode::None);
+    const dtDynModel expected = CompileSpecChecked(updated);
+    const P81ModelStoragePointers storageBeforeUpdate = CaptureP81ModelStoragePointers(model);
+    const std::size_t allocationsBeforeUpdate = g_totalTestAllocations;
+
+    assert(UpdateSpec(updated, model));
+    assert(g_totalTestAllocations == allocationsBeforeUpdate);
+    AssertP81ModelStoragePointersUnchanged(model, storageBeforeUpdate);
+    AssertP81TopologyUnchanged(model, expected);
+    assert(model.dof_parentid[static_cast<std::size_t>(childDof)] == rootDof);
+
+    for (dtDynIndex bodyId = 0; bodyId < model.nbody; ++bodyId)
+    {
+        const std::size_t bodyIndex = static_cast<std::size_t>(bodyId);
+        assert(IsDtMathNear(model.body_mass.At(bodyId), expected.body_mass.At(bodyId)));
+        assert(IsDtMathNear(model.body_subtreemass.At(bodyId), expected.body_subtreemass.At(bodyId)));
+        assert(IsDtMathNear(model.body_pos[bodyIndex].At(0), expected.body_pos[bodyIndex].At(0)));
+    }
+    for (dtDynIndex jointId = 0; jointId < model.njnt; ++jointId)
+    {
+        assert(IsDtMathNear(model.dof_armature.At(model.jnt_dofadr[static_cast<std::size_t>(jointId)]),
+                            expected.dof_armature.At(expected.jnt_dofadr[static_cast<std::size_t>(jointId)])));
+    }
+    for (dtDynIndex siteId = 0; siteId < model.nsite; ++siteId)
+    {
+        const std::size_t siteIndex = static_cast<std::size_t>(siteId);
+        assert(model.site_bodyid[siteIndex] == ids.child);
+        for (dtDynIndex axis = 0; axis < 3; ++axis)
+        {
+            assert(IsDtMathNear(model.site_pos[siteIndex].At(axis), expected.site_pos[siteIndex].At(axis)));
+        }
+        for (dtDynIndex component = 0; component < 4; ++component)
+        {
+            assert(IsDtMathNear(model.site_quat[siteIndex].At(component),
+                                expected.site_quat[siteIndex].At(component)));
+        }
+    }
+    assert(IsDtMathNear(model.actuator_gear.At(ids.actuator),
+                        expected.actuator_gear.At(ids.actuator)));
+    assert(IsDtMathNear(model.root_mass.At(0), expected.root_mass.At(0)));
+    assert(ValidateModel(model, &error));
+    assert(error.code == dtDynValidationCode::None);
+
+    dtDynSpec incompatible = updated;
+    ConfigureP88RejectedPhysicalValues(incompatible, ids);
+    incompatible.EditActuator(ids.actuator, P88ActuatorNameEditor{"p88_renamed_actuator"});
+    assert(ValidateSpec(incompatible, &error));
+    assert(error.code == dtDynValidationCode::None);
+    const dtDynModel incompatibleRecompile = CompileSpecChecked(incompatible);
+    assert(ValidateModel(incompatibleRecompile, &error));
+    assert(error.code == dtDynValidationCode::None);
+    AssertP88SourcePhysicalWriteTargetsDiffer(incompatibleRecompile, expected);
+    assert(incompatibleRecompile.ActuatorId("p88_actuator") == DTDYN_INVALID_INDEX);
+    assert(incompatibleRecompile.ActuatorId("p88_renamed_actuator") == ids.actuator);
+
+    const dtDynModel modelBeforeRejectedUpdate = model;
+    const P81ModelStoragePointers storageBeforeRejectedUpdate =
+        CaptureP81ModelStoragePointers(model);
+    const dtDynIndex actuatorBeforeRejectedUpdate = model.ActuatorId("p88_actuator");
+    const dtDynIndex renamedActuatorBeforeRejectedUpdate =
+        model.ActuatorId("p88_renamed_actuator");
+    const std::size_t allocationsBeforeRejectedUpdate = g_totalTestAllocations;
+    assert(!UpdateSpec(incompatible, model));
+    assert(g_totalTestAllocations == allocationsBeforeRejectedUpdate);
+    AssertP81ModelStoragePointersUnchanged(model, storageBeforeRejectedUpdate);
+    AssertP81TopologyUnchanged(model, modelBeforeRejectedUpdate);
+    AssertP81PhysicalWriteTargetsUnchanged(model, modelBeforeRejectedUpdate);
+    assert(model.ActuatorId("p88_actuator") == actuatorBeforeRejectedUpdate);
+    assert(model.ActuatorId("p88_renamed_actuator") == renamedActuatorBeforeRejectedUpdate);
+    assert(ValidateModel(model, &error));
+    assert(error.code == dtDynValidationCode::None);
+}
+
 void TestUpdateSpecMatchesPhysicalRecompile()
 {
     dtDynSpec original;
@@ -6892,6 +7171,88 @@ void TestSpatialInertiaAtWorldOriginUsesParallelAxisTheorem()
     assert(inertia(3, 3) == 2.0);
     assert(inertia(0, 4) == -6.0);
     assert(inertia(3, 1) == 6.0);
+}
+
+dtDynSpec MakeP89MultiJointCompileSpec()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("p89_joint_stack", 0);
+    const dtDynIndex freeJoint = spec.AddJoint(body, "p89_free", dtDynJointType::Free);
+    const dtDynIndex ballJoint = spec.AddJoint(body, "p89_ball", dtDynJointType::Ball);
+    const dtDynIndex slideJoint = spec.AddJoint(body, "p89_slide", dtDynJointType::Slide);
+
+    assert(body == 1);
+    assert(freeJoint == 0);
+    assert(ballJoint == 1);
+    assert(slideJoint == 2);
+
+    dtDynValidationError error;
+    assert(ValidateSpec(spec, &error));
+    assert(error.code == dtDynValidationCode::None);
+    return spec;
+}
+
+void TestCompileSpecCheckedPreservesP89MultiJointLoopLayout()
+{
+    const dtDynSpec spec = MakeP89MultiJointCompileSpec();
+    const dtDynIndex body = spec.BodyId("p89_joint_stack");
+    const dtDynIndex freeJoint = spec.JointId("p89_free");
+    const dtDynIndex ballJoint = spec.JointId("p89_ball");
+    const dtDynIndex slideJoint = spec.JointId("p89_slide");
+
+    const dtDynModel model = CompileSpecChecked(spec);
+    assert(model.nbody == 2);
+    assert(model.njnt == 3);
+    assert(model.nq == 12);
+    assert(model.nv == 10);
+    assert(model.nroot == 1);
+    assert(model.root_bodyid[0] == body);
+    assert(model.body_jntadr[body] == 0);
+    assert(model.body_jntnum[body] == 3);
+    assert(model.body_dofadr[body] == 0);
+    assert(model.body_dofnum[body] == 10);
+
+    assert(model.jnt_specid[0] == freeJoint);
+    assert(model.jnt_specid[1] == ballJoint);
+    assert(model.jnt_specid[2] == slideJoint);
+    assert(model.joint_names[0] == "p89_free");
+    assert(model.joint_names[1] == "p89_ball");
+    assert(model.joint_names[2] == "p89_slide");
+    assert(model.jnt_type[0] == static_cast<dtDynIndex>(dtDynJointType::Free));
+    assert(model.jnt_type[1] == static_cast<dtDynIndex>(dtDynJointType::Ball));
+    assert(model.jnt_type[2] == static_cast<dtDynIndex>(dtDynJointType::Slide));
+    assert(model.jnt_bodyid[0] == body);
+    assert(model.jnt_bodyid[1] == body);
+    assert(model.jnt_bodyid[2] == body);
+    assert(model.jnt_qposadr[0] == 0);
+    assert(model.jnt_qposadr[1] == 7);
+    assert(model.jnt_qposadr[2] == 11);
+    assert(model.jnt_dofadr[0] == 0);
+    assert(model.jnt_dofadr[1] == 6);
+    assert(model.jnt_dofadr[2] == 9);
+
+    for (dtDynIndex dof = 0; dof < 6; ++dof)
+    {
+        assert(model.dof_bodyid[dof] == body);
+        assert(model.dof_jntid[dof] == freeJoint);
+        assert(model.dof_parentid[dof] == dof - 1);
+    }
+    assert(model.dof_bodyid[6] == body);
+    assert(model.dof_bodyid[7] == body);
+    assert(model.dof_bodyid[8] == body);
+    assert(model.dof_jntid[6] == ballJoint);
+    assert(model.dof_jntid[7] == ballJoint);
+    assert(model.dof_jntid[8] == ballJoint);
+    assert(model.dof_parentid[6] == 5);
+    assert(model.dof_parentid[7] == 6);
+    assert(model.dof_parentid[8] == 7);
+    assert(model.dof_bodyid[9] == body);
+    assert(model.dof_jntid[9] == slideJoint);
+    assert(model.dof_parentid[9] == 8);
+
+    dtDynValidationError error;
+    assert(ValidateModel(model, &error));
+    assert(error.code == dtDynValidationCode::None);
 }
 
 void TestCompileSpecUsesNativeIndexLayout()
@@ -9901,6 +10262,7 @@ int main()
     TestUpdateSpecP85RejectsValidSourceCollectionShapeChangesWithoutWriting();
     TestUpdateSpecP83UpdatesWorldRootChildPhysicalModel();
     TestUpdateSpecP83RejectsValidBodyNameAndParentChangesWithoutWriting();
+    TestUpdateSpecP88PreservesAncestorAndSiteTraversal();
     TestUpdateSpecMatchesPhysicalRecompile();
     TestUpdateSpecRefreshesMultiRootMultiDofCaches();
     TestDtMathDynamicResizeHelpers();
@@ -9914,6 +10276,7 @@ int main()
     TestNormalizeOrIdentityPreservesUnitAndZeroCases();
     TestBodyInertiaInWorldPreservesRotatedPrincipalAxes();
     TestSpatialInertiaAtWorldOriginUsesParallelAxisTheorem();
+    TestCompileSpecCheckedPreservesP89MultiJointLoopLayout();
     TestCompileSpecUsesNativeIndexLayout();
     TestCompileSpecSupportsMultipleMovableRoots();
     TestEffectiveRootCountPreservesFallback();
