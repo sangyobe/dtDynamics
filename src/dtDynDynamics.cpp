@@ -461,8 +461,8 @@ void SpatialMulPair(const dt::Math::Matrix<6, 6, dtDynReal> &matrix,
         const dtDynReal m3 = matrix.At(row, 3);
         const dtDynReal m4 = matrix.At(row, 4);
         const dtDynReal m5 = matrix.At(row, 5);
-        leftOut.At(row) = m0 * l0 + m1 * l1 + m2 * l2 + m3 * l3 + m4 * l4 + m5 * l5;
-        rightOut.At(row) = m0 * r0 + m1 * r1 + m2 * r2 + m3 * r3 + m4 * r4 + m5 * r5;
+        leftOut.At(row) = (m0 * l0) + (m1 * l1) + (m2 * l2) + (m3 * l3) + (m4 * l4) + (m5 * l5);
+        rightOut.At(row) = (m0 * r0) + (m1 * r1) + (m2 * r2) + (m3 * r3) + (m4 * r4) + (m5 * r5);
     }
 }
 
