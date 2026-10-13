@@ -348,27 +348,27 @@ void FillBodySpatialInertiaAtRootCom(const dtDynModel &model,
                                          rot.At(row, 2) * diag.At(2) * rot.At(col, 2);
 
             dtDynReal skew = 0.0;
-            if (row == 0 && col == 1)
+            if ((row == 0) && (col == 1))
             {
                 skew = -c2;
             }
-            else if (row == 0 && col == 2)
+            else if ((row == 0) && (col == 2))
             {
                 skew = c1;
             }
-            else if (row == 1 && col == 0)
+            else if ((row == 1) && (col == 0))
             {
                 skew = c2;
             }
-            else if (row == 1 && col == 2)
+            else if ((row == 1) && (col == 2))
             {
                 skew = -c0;
             }
-            else if (row == 2 && col == 0)
+            else if ((row == 2) && (col == 0))
             {
                 skew = -c1;
             }
-            else if (row == 2 && col == 1)
+            else if ((row == 2) && (col == 1))
             {
                 skew = c0;
             }
