@@ -163,7 +163,7 @@ void ComputeDofMotionSubspaces(const dtDynModel &model, dtDynData &data)
         const dtDynIndex bodyId = model.dof_bodyid[dofIdx];
         const dtDynIndex rootBody = model.body_rootid[static_cast<std::size_t>(bodyId)];
         const dt::Math::Vector3<dtDynReal> &rootCom =
-            data.subtree_com[static_cast<std::size_t>(rootBody > 0 ? rootBody : 0)];
+            data.subtree_com[static_cast<std::size_t>((rootBody > 0) ? rootBody : 0)];
         SetMotionSubspaceAtPoint(model, data, dofId, rootCom, data.cdof[dofIdx]);
     }
 }
