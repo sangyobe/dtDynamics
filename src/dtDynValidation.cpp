@@ -256,8 +256,8 @@ bool NearlyEqualInput(const dtDynReal lhs, const dtDynReal rhs)
 
 bool IsUnitVector(const dt::Math::Vector3<dtDynReal> &value)
 {
-    const dtDynReal squaredNorm = value.At(0) * value.At(0) + value.At(1) * value.At(1) +
-                                  value.At(2) * value.At(2);
+    const dtDynReal squaredNorm = ((value.At(0) * value.At(0)) + (value.At(1) * value.At(1))) +
+                                  (value.At(2) * value.At(2));
     return NearlyEqualInput(squaredNorm, static_cast<dtDynReal>(1.0));
 }
 
