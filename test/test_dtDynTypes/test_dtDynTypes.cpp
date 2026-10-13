@@ -2654,6 +2654,26 @@ void TestSpecXmlPreservesNumericWhitespaceAndFirstFailure()
     assert(whitespaceRejected);
 }
 
+void TestSpecXmlPreservesWhitespaceOnlyNumericOffset()
+{
+    const std::string xml =
+        "<mujoco><worldbody><body name=\"base\"><inertial mass=\" \t \n \"/>"
+        "</body></worldbody></mujoco>";
+    const std::size_t expectedOffset =
+        xml.find("mass=\"") + std::string("mass=\"").size();
+    bool rejected = false;
+    try
+    {
+        (void)dtDynSpec::DecodeXml(xml);
+    }
+    catch (const dtDynXmlError &error)
+    {
+        rejected = error.Code() == dtDynXmlErrorCode::InvalidNumber &&
+                   error.Offset() == expectedOffset;
+    }
+    assert(rejected);
+}
+
 void TestSpecXmlRejectsWrongVectorArity()
 {
     const auto expectInvalidArity = [](const std::string &value, const std::string &anchor)
@@ -6232,6 +6252,7 @@ int main()
     TestModelActuatorNameLookupUsesRebuiltCache();
     TestSpecXmlReportsTypedNumericErrors();
     TestSpecXmlPreservesNumericWhitespaceAndFirstFailure();
+    TestSpecXmlPreservesWhitespaceOnlyNumericOffset();
     TestSpecXmlRejectsWrongVectorArity();
     TestSpecXmlPreservesVectorWhitespaceAndArityOffset();
     TestSpecXmlRejectsMalformedAttributes();

@@ -516,7 +516,7 @@ dtDynReal ParseReal(const AttributeValue &attribute, const std::string &sourcePa
         }
         --last;
     }
-    const std::size_t tokenOffset = first == attribute.text.size() ? attribute.offset : attribute.offset + first;
+    const std::size_t tokenOffset = (first == attribute.text.size()) ? attribute.offset : (attribute.offset + first);
     const AttributeValue token = {attribute.text.substr(first, last - first), tokenOffset};
     std::size_t consumed = 0;
     try
