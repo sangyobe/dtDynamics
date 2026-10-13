@@ -1851,6 +1851,52 @@ void TestModelValidationRejectsCompiledActuatorJointBounds()
     AssertCompiledActuatorJointReferenceDiagnostic(onePastJoint, actuator);
 }
 
+void AssertCompiledJointQposDofSpanDiagnostic(const dtDynModel &model,
+                                              const dtDynIndex joint)
+{
+    dtDynValidationError error;
+    assert(!ValidateModel(model, &error));
+    assert(error.code == dtDynValidationCode::InvalidReference);
+    assert(error.object == dtDynObjectType::Joint);
+    assert(error.index == joint);
+    assert(error.message == "compiled joint qpos/DOF span is invalid");
+}
+
+void TestModelValidationRejectsCompiledJointQposDofSpanBounds()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("joint_span_bounds_body", 0);
+    const dtDynIndex joint = spec.AddJoint(body, "joint_span_bounds_joint", dtDynJointType::Hinge);
+    const dtDynModel valid = CompileSpecChecked(spec);
+
+    assert(body == 1);
+    assert(joint == 0);
+    assert(valid.njnt == 1);
+    assert(valid.nq == 1);
+    assert(valid.nv == 1);
+    assert(valid.jnt_qposadr[static_cast<std::size_t>(joint)] == 0);
+    assert(valid.jnt_dofadr[static_cast<std::size_t>(joint)] == 0);
+    dtDynValidationError validError;
+    assert(ValidateModel(valid, &validError));
+    assert(validError.code == dtDynValidationCode::None);
+
+    dtDynModel negativeQpos = valid;
+    negativeQpos.jnt_qposadr[static_cast<std::size_t>(joint)] = DTDYN_INVALID_INDEX;
+    AssertCompiledJointQposDofSpanDiagnostic(negativeQpos, joint);
+
+    dtDynModel negativeDof = valid;
+    negativeDof.jnt_dofadr[static_cast<std::size_t>(joint)] = DTDYN_INVALID_INDEX;
+    AssertCompiledJointQposDofSpanDiagnostic(negativeDof, joint);
+
+    dtDynModel onePastQpos = valid;
+    onePastQpos.jnt_qposadr[static_cast<std::size_t>(joint)] = onePastQpos.nq;
+    AssertCompiledJointQposDofSpanDiagnostic(onePastQpos, joint);
+
+    dtDynModel onePastDof = valid;
+    onePastDof.jnt_dofadr[static_cast<std::size_t>(joint)] = onePastDof.nv;
+    AssertCompiledJointQposDofSpanDiagnostic(onePastDof, joint);
+}
+
 void TestModelValidationPreservesUniqueNameValidationOrder()
 {
     dtDynSpec spec;
@@ -8710,6 +8756,7 @@ int main()
     TestModelValidationPreservesJointAndSiteValidationFailures();
     TestModelValidationRejectsCompiledSiteBodyBounds();
     TestModelValidationRejectsCompiledActuatorJointBounds();
+    TestModelValidationRejectsCompiledJointQposDofSpanBounds();
     TestModelValidationPreservesEveryBodyNonFiniteFailure();
     TestModelValidationPreservesEveryBodyPhysicalOrFrameFailure();
     TestModelValidationPreservesBodyValidationPhasePrecedence();

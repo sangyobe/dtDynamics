@@ -1143,9 +1143,9 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
         const dtDynJointDofSize size = GetJointDofSize(static_cast<dtDynJointType>(typeValue));
         const dtDynIndex qposAddress = model.jnt_qposadr[index];
         const dtDynIndex dofAddress = model.jnt_dofadr[index];
-        if (qposAddress < 0 || dofAddress < 0 ||
-            static_cast<long long>(qposAddress) + size.qposSize > model.nq ||
-            static_cast<long long>(dofAddress) + size.qvelSize > model.nv)
+        if ((qposAddress < 0) || (dofAddress < 0) ||
+            ((static_cast<long long>(qposAddress) + size.qposSize) > model.nq) ||
+            ((static_cast<long long>(dofAddress) + size.qvelSize) > model.nv))
         {
             return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Joint,
                         jointId, "compiled joint qpos/DOF span is invalid");
