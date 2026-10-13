@@ -24,13 +24,13 @@ bool DenseMatrixHasSize(const dtDynDenseMatrix &matrix,
                         const dtDynIndex rows,
                         const dtDynIndex cols)
 {
-    return matrix.GetRowSize() == ToDtMathDim(rows) &&
-           matrix.GetColSize() == ToDtMathDim(cols);
+    return (matrix.GetRowSize() == ToDtMathDim(rows)) &&
+           (matrix.GetColSize() == ToDtMathDim(cols));
 }
 
 void SetDenseMatrixZeroIfAllocated(dtDynDenseMatrix &matrix)
 {
-    if (matrix.GetRowSize() > 0 && matrix.GetColSize() > 0)
+    if ((matrix.GetRowSize() > 0) && (matrix.GetColSize() > 0))
     {
         matrix.SetZero();
     }
@@ -141,7 +141,7 @@ void dtDynData::Resize(const dtDynModel &model)
     ResizeDenseVector(coriolisTorq, model.nv);
     ResizeDenseVector(nonlinTorq, model.nv);
 
-    const dtDynIndex rootCount = model.nroot > 0 ? model.nroot : 1;
+    const dtDynIndex rootCount = (model.nroot > 0) ? model.nroot : 1;
     ResizeDenseMatrix(comJmat, 3 * rootCount, model.nv);
     ResizeDenseMatrix(comJmatDot, 3 * rootCount, model.nv);
     ResizeDenseMatrix(cmAmat, 6 * rootCount, model.nv);
