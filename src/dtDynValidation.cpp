@@ -566,7 +566,7 @@ bool ValidateSpec(const dtDynSpec &spec, dtDynValidationError *error)
         {
             return FailNonFiniteSpecJoint(error, jointId);
         }
-        if (joint.body <= 0 || static_cast<std::size_t>(joint.body) >= bodies.size())
+        if ((joint.body <= 0) || (static_cast<std::size_t>(joint.body) >= bodies.size()))
         {
             return Fail(error, dtDynValidationCode::DetachedObject, dtDynObjectType::Joint, jointId,
                         "joint[" + std::to_string(jointId) + "] '" + joint.name +
@@ -625,7 +625,7 @@ bool ValidateSpec(const dtDynSpec &spec, dtDynValidationError *error)
             return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Site,
                         siteId, "site quaternion must be unit length");
         }
-        if (site.body <= 0 || static_cast<std::size_t>(site.body) >= bodies.size())
+        if ((site.body <= 0) || (static_cast<std::size_t>(site.body) >= bodies.size()))
         {
             return Fail(error, dtDynValidationCode::DetachedObject, dtDynObjectType::Site, siteId,
                         "site[" + std::to_string(siteId) + "] '" + site.name +

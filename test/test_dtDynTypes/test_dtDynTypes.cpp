@@ -347,6 +347,19 @@ void AssertInvalidParentDiagnostic(const dtDynSpec &spec,
     assert(error.message == expectedMessage);
 }
 
+void AssertDetachedObjectDiagnostic(const dtDynSpec &spec,
+                                    const dtDynObjectType object,
+                                    const dtDynIndex index,
+                                    const std::string &expectedMessage)
+{
+    dtDynValidationError error;
+    assert(!ValidateSpec(spec, &error));
+    assert(error.code == dtDynValidationCode::DetachedObject);
+    assert(error.object == object);
+    assert(error.index == index);
+    assert(error.message == expectedMessage);
+}
+
 void TestCheckedCompileAcceptsValidSpec()
 {
     const dtDynSpec spec = MakeValidNormalSpec();
@@ -419,6 +432,58 @@ void TestSpecValidationRejectsDetachedJoint()
     assert(error.message.find("joint[0]") != std::string::npos);
 }
 
+void AssertDetachedJointAddedPublicly(dtDynSpec &spec,
+                                      const dtDynIndex body,
+                                      const std::string &name,
+                                      const bool expectWorldAttachment)
+{
+    const dtDynIndex base = spec.BodyId("base");
+    const std::size_t bodyCount = spec.Bodies().size();
+    const std::size_t jointCount = spec.Joints().size();
+    const std::size_t worldJointCount = spec.Bodies()[0].joints.size();
+    const std::size_t baseJointCount = spec.Bodies()[base].joints.size();
+    const dtDynIndex joint = spec.AddJoint(body, name, dtDynJointType::Hinge);
+
+    assert(base == 1);
+    assert(spec.Bodies().size() == bodyCount);
+    assert(joint == static_cast<dtDynIndex>(jointCount));
+    assert(spec.Joints().size() == jointCount + 1);
+    assert(spec.Joints()[joint].body == body);
+    assert(spec.Joints()[joint].name == name);
+    assert(spec.Bodies()[base].joints.size() == baseJointCount);
+    assert(spec.Bodies()[base].joints[0] == 0);
+    if (expectWorldAttachment)
+    {
+        assert(body == 0);
+        assert(spec.Bodies()[0].joints.size() == worldJointCount + 1);
+        assert(spec.Bodies()[0].joints[worldJointCount] == joint);
+    }
+    else
+    {
+        assert(body == static_cast<dtDynIndex>(bodyCount));
+        assert(spec.Bodies()[0].joints.size() == worldJointCount);
+    }
+
+    AssertDetachedObjectDiagnostic(
+        spec, dtDynObjectType::Joint, joint,
+        "joint[" + std::to_string(joint) + "] '" + name +
+            "' is not attached to a non-world body");
+}
+
+void TestSpecValidationRejectsWorldJointAddedPublicly()
+{
+    dtDynSpec spec = MakeValidNormalSpec();
+    AssertDetachedJointAddedPublicly(spec, 0, "world_joint", true);
+}
+
+void TestSpecValidationRejectsOnePastEndJointAddedPublicly()
+{
+    dtDynSpec spec = MakeValidNormalSpec();
+    const dtDynIndex onePastEnd = static_cast<dtDynIndex>(spec.Bodies().size());
+    assert(onePastEnd == 2);
+    AssertDetachedJointAddedPublicly(spec, onePastEnd, "one_past_joint", false);
+}
+
 void AssertUnsupportedJointTypeAddedPublicly(const dtDynJointType type,
                                              const std::string &name,
                                              const std::string &expectedMessage)
@@ -488,6 +553,57 @@ void TestSpecValidationRejectsDetachedSite()
     assert(error.code == dtDynValidationCode::DetachedObject);
     assert(error.object == dtDynObjectType::Site);
     assert(error.index == site);
+}
+
+void AssertDetachedSiteAddedPublicly(dtDynSpec &spec,
+                                     const dtDynIndex body,
+                                     const std::string &name,
+                                     const bool expectWorldAttachment)
+{
+    const dtDynIndex base = spec.BodyId("base");
+    const std::size_t bodyCount = spec.Bodies().size();
+    const std::size_t siteCount = spec.Sites().size();
+    const std::size_t worldSiteCount = spec.Bodies()[0].sites.size();
+    const std::size_t baseSiteCount = spec.Bodies()[base].sites.size();
+    const dtDynIndex site = spec.AddSite(body, name);
+
+    assert(base == 1);
+    assert(spec.Bodies().size() == bodyCount);
+    assert(site == static_cast<dtDynIndex>(siteCount));
+    assert(spec.Sites().size() == siteCount + 1);
+    assert(spec.Sites()[site].body == body);
+    assert(spec.Sites()[site].name == name);
+    assert(spec.Bodies()[base].sites.size() == baseSiteCount);
+    if (expectWorldAttachment)
+    {
+        assert(body == 0);
+        assert(spec.Bodies()[0].sites.size() == worldSiteCount + 1);
+        assert(spec.Bodies()[0].sites[worldSiteCount] == site);
+    }
+    else
+    {
+        assert(body == static_cast<dtDynIndex>(bodyCount));
+        assert(spec.Bodies()[0].sites.size() == worldSiteCount);
+    }
+
+    AssertDetachedObjectDiagnostic(
+        spec, dtDynObjectType::Site, site,
+        "site[" + std::to_string(site) + "] '" + name +
+            "' is not attached to a non-world body");
+}
+
+void TestSpecValidationRejectsWorldSiteAddedPublicly()
+{
+    dtDynSpec spec = MakeValidNormalSpec();
+    AssertDetachedSiteAddedPublicly(spec, 0, "world_site", true);
+}
+
+void TestSpecValidationRejectsOnePastEndSiteAddedPublicly()
+{
+    dtDynSpec spec = MakeValidNormalSpec();
+    const dtDynIndex onePastEnd = static_cast<dtDynIndex>(spec.Bodies().size());
+    assert(onePastEnd == 2);
+    AssertDetachedSiteAddedPublicly(spec, onePastEnd, "one_past_site", false);
 }
 
 void TestSpecValidationRejectsInvalidActuatorReference()
@@ -8215,10 +8331,14 @@ int main()
     TestSpecValidationRejectsNegativeParentAddedPublicly();
     TestSpecValidationRejectsForwardParentAddedPublicly();
     TestSpecValidationRejectsDetachedJoint();
+    TestSpecValidationRejectsWorldJointAddedPublicly();
+    TestSpecValidationRejectsOnePastEndJointAddedPublicly();
     TestSpecValidationRejectsJointTypeBelowFreeAddedPublicly();
     TestSpecValidationRejectsJointTypeAboveHingeAddedPublicly();
     TestSpecValidationRejectsSiblingCycle();
     TestSpecValidationRejectsDetachedSite();
+    TestSpecValidationRejectsWorldSiteAddedPublicly();
+    TestSpecValidationRejectsOnePastEndSiteAddedPublicly();
     TestSpecValidationRejectsInvalidActuatorReference();
     TestSpecValidationRejectsInvalidBodyJointReference();
     TestSpecValidationPreservesSignedReferenceBounds();
