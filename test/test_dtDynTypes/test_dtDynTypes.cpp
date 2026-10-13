@@ -419,6 +419,49 @@ void TestSpecValidationRejectsDetachedJoint()
     assert(error.message.find("joint[0]") != std::string::npos);
 }
 
+void AssertUnsupportedJointTypeAddedPublicly(const dtDynJointType type,
+                                             const std::string &name,
+                                             const std::string &expectedMessage)
+{
+    dtDynSpec spec;
+    const dtDynIndex base = spec.AddBody("base", 0);
+    const dtDynIndex joint = spec.AddJoint(base, name, type);
+
+    assert(base == 1);
+    assert(joint == 0);
+    assert(spec.Bodies().size() == 2);
+    assert(spec.Joints().size() == 1);
+    assert(spec.Bodies()[0].firstChild == base);
+    assert(spec.Bodies()[base].parent == 0);
+    assert(spec.Bodies()[base].joints.size() == 1);
+    assert(spec.Bodies()[base].joints[0] == joint);
+    assert(spec.Joints()[joint].name == name);
+    assert(spec.Joints()[joint].body == base);
+    assert(spec.Joints()[joint].type == type);
+    assert(spec.JointId(name) == joint);
+
+    dtDynValidationError error;
+    assert(!ValidateSpec(spec, &error));
+    assert(error.code == dtDynValidationCode::UnsupportedJoint);
+    assert(error.object == dtDynObjectType::Joint);
+    assert(error.index == joint);
+    assert(error.message == expectedMessage);
+}
+
+void TestSpecValidationRejectsJointTypeBelowFreeAddedPublicly()
+{
+    AssertUnsupportedJointTypeAddedPublicly(
+        static_cast<dtDynJointType>(-1), "below_free",
+        "joint[0] 'below_free' has an unsupported joint type");
+}
+
+void TestSpecValidationRejectsJointTypeAboveHingeAddedPublicly()
+{
+    AssertUnsupportedJointTypeAddedPublicly(
+        static_cast<dtDynJointType>(4), "above_hinge",
+        "joint[0] 'above_hinge' has an unsupported joint type");
+}
+
 void TestSpecValidationRejectsSiblingCycle()
 {
     dtDynSpec spec;
@@ -8172,6 +8215,8 @@ int main()
     TestSpecValidationRejectsNegativeParentAddedPublicly();
     TestSpecValidationRejectsForwardParentAddedPublicly();
     TestSpecValidationRejectsDetachedJoint();
+    TestSpecValidationRejectsJointTypeBelowFreeAddedPublicly();
+    TestSpecValidationRejectsJointTypeAboveHingeAddedPublicly();
     TestSpecValidationRejectsSiblingCycle();
     TestSpecValidationRejectsDetachedSite();
     TestSpecValidationRejectsInvalidActuatorReference();

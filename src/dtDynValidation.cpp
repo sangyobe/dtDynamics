@@ -539,8 +539,8 @@ bool ValidateSpec(const dtDynSpec &spec, dtDynValidationError *error)
         const dtDynIndex jointId = static_cast<dtDynIndex>(jointIndex);
         const dtDynJointSpec &joint = joints[jointIndex];
         const dtDynIndex type = static_cast<dtDynIndex>(joint.type);
-        if (type < static_cast<dtDynIndex>(dtDynJointType::Free) ||
-            type > static_cast<dtDynIndex>(dtDynJointType::Hinge))
+        if ((type < static_cast<dtDynIndex>(dtDynJointType::Free)) ||
+            (type > static_cast<dtDynIndex>(dtDynJointType::Hinge)))
         {
             return Fail(error, dtDynValidationCode::UnsupportedJoint, dtDynObjectType::Joint, jointId,
                         "joint[" + std::to_string(jointId) + "] '" + joint.name +
