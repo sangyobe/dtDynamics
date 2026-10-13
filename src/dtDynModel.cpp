@@ -129,15 +129,15 @@ dtDynIndex dtDynModel::ActuatorId(const std::string &name) const
 
 bool dtDynModel::IsFixedBody(const dtDynIndex body) const
 {
-    if (body < 0 || body >= static_cast<dtDynIndex>(body_jntnum.size()))
+    if ((body < 0) || (body >= static_cast<dtDynIndex>(body_jntnum.size())))
     {
         return false;
     }
 
-    return body_jntnum[body] == 0 &&
-           body_jntadr[body] == DTDYN_INVALID_INDEX &&
-           body_dofnum[body] == 0 &&
-           body_dofadr[body] == DTDYN_INVALID_INDEX;
+    return (body_jntnum[body] == 0) &&
+           (body_jntadr[body] == DTDYN_INVALID_INDEX) &&
+           (body_dofnum[body] == 0) &&
+           (body_dofadr[body] == DTDYN_INVALID_INDEX);
 }
 
 void dtDynModel::RebuildNameMaps()

@@ -3709,6 +3709,8 @@ void TestModelFixedBodyConvention()
     assert(!model.IsFixedBody(1));
     assert(model.IsFixedBody(2));
     assert(!model.IsFixedBody(3));
+    assert(!model.IsFixedBody(-1));
+    assert(!model.IsFixedBody(4));
 }
 
 void TestCompiledModelCopiesIntoDefaultModel()
