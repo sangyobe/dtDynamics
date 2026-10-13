@@ -2940,6 +2940,40 @@ void TestSpecXmlRejectsUnknownReferencesWithTypedError()
     assert(rejected);
 }
 
+void TestSpecXmlPreservesBodyAndActuatorValidationOrigins()
+{
+    const std::string invalidBody =
+        "<mujoco><worldbody><body name=\"base\"><inertial mass=\"-1\"/>"
+        "</body></worldbody></mujoco>";
+    bool bodyRejected = false;
+    try
+    {
+        (void)dtDynSpec::DecodeXml(invalidBody);
+    }
+    catch (const dtDynXmlError &error)
+    {
+        bodyRejected = error.Code() == dtDynXmlErrorCode::InvalidReference &&
+                       error.Offset() == invalidBody.find("<body");
+    }
+    assert(bodyRejected);
+
+    const std::string invalidActuator =
+        "<mujoco><worldbody><body name=\"base\"/></worldbody>"
+        "<actuator><motor name=\"motor\" joint=\"missing_joint\"/></actuator>"
+        "</mujoco>";
+    bool actuatorRejected = false;
+    try
+    {
+        (void)dtDynSpec::DecodeXml(invalidActuator);
+    }
+    catch (const dtDynXmlError &error)
+    {
+        actuatorRejected = error.Code() == dtDynXmlErrorCode::InvalidReference &&
+                           error.Offset() == invalidActuator.find("missing_joint");
+    }
+    assert(actuatorRejected);
+}
+
 void TestSpecXmlRejectsInvalidJointRange()
 {
     const std::string xml =
@@ -6261,6 +6295,7 @@ int main()
     TestSpecXmlPreservesClosingElementFailureOrder();
     TestSpecXmlRejectsDuplicateObjectNames();
     TestSpecXmlRejectsUnknownReferencesWithTypedError();
+    TestSpecXmlPreservesBodyAndActuatorValidationOrigins();
     TestSpecXmlRejectsInvalidJointRange();
     TestSpecXmlRejectsUnsupportedSemanticValues();
     TestSpecXmlRejectsInvalidBooleanValue();

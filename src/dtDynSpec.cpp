@@ -346,7 +346,7 @@ std::size_t ValidationOrigin(const dtDynValidationError &error,
     {
         origins = &actuatorOrigins;
     }
-    if (error.index >= 0 && static_cast<std::size_t>(error.index) < origins->size())
+    if ((error.index >= 0) && (static_cast<std::size_t>(error.index) < origins->size()))
     {
         return (*origins)[static_cast<std::size_t>(error.index)];
     }
