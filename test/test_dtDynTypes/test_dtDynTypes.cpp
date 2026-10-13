@@ -5826,7 +5826,7 @@ void TestIndexedJacobiansOnlyRefreshRequestedIds()
     spec.EditJoint(hinge, [&](dtDynJointSpec &draft)
                    { draft.axis(2) = 1.0; });
 
-    const dtDynModel model = CompileSpec(spec);
+    const dtDynModel model = CompileSpecChecked(spec);
 
     dtDynData data;
     data.Resize(model);

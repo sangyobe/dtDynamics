@@ -598,7 +598,7 @@ void ComputeIndexedBodyJacobians(const dtDynModel &model,
     for (std::size_t idx = 0; idx < bodyIds.size(); ++idx)
     {
         const dtDynIndex bodyId = bodyIds[idx];
-        assert(bodyId >= 0 && bodyId < model.nbody);
+        assert((bodyId >= 0) && (bodyId < model.nbody));
         ComputeBodyJacobiansIntoData(model, data, bodyId);
     }
 }
@@ -611,7 +611,7 @@ void ComputeIndexedSiteJacobians(const dtDynModel &model,
     for (std::size_t idx = 0; idx < siteIds.size(); ++idx)
     {
         const dtDynIndex siteId = siteIds[idx];
-        assert(siteId >= 0 && siteId < model.nsite);
+        assert((siteId >= 0) && (siteId < model.nsite));
         ComputeSiteJacobiansIntoData(model, data, siteId);
     }
 }
