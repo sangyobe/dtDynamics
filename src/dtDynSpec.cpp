@@ -757,7 +757,8 @@ void EncodeBody(const dtDynSpec &spec,
     const dtDynBodySpec &body = spec.Bodies()[static_cast<std::size_t>(bodyId)];
     const std::string indent(static_cast<std::size_t>(depth * 2), ' ');
     out << indent << "<body name=\"" << body.name << "\" pos=\"" << FormatVector3(body.pos) << "\"";
-    if (body.quat.At(0) != 0.0 || body.quat.At(1) != 0.0 || body.quat.At(2) != 0.0 || body.quat.At(3) != 0.0)
+    if ((body.quat.At(0) != 0.0) || (body.quat.At(1) != 0.0) ||
+        (body.quat.At(2) != 0.0) || (body.quat.At(3) != 0.0))
     {
         out << " quat=\"" << FormatVector4(body.quat) << "\"";
     }
@@ -768,8 +769,8 @@ void EncodeBody(const dtDynSpec &spec,
         out << indent << "  <inertial pos=\"" << FormatVector3(body.inertial.pos)
             << "\" mass=\"" << FormatReal(body.inertial.mass)
             << "\" diaginertia=\"" << FormatVector3(body.inertial.inertia) << "\"";
-        if (body.inertial.quat.At(0) != 0.0 || body.inertial.quat.At(1) != 0.0 ||
-            body.inertial.quat.At(2) != 0.0 || body.inertial.quat.At(3) != 0.0)
+        if ((body.inertial.quat.At(0) != 0.0) || (body.inertial.quat.At(1) != 0.0) ||
+            (body.inertial.quat.At(2) != 0.0) || (body.inertial.quat.At(3) != 0.0))
         {
             out << " quat=\"" << FormatVector4(body.inertial.quat) << "\"";
         }
@@ -797,7 +798,8 @@ void EncodeBody(const dtDynSpec &spec,
         const dtDynSiteSpec &site = spec.Sites()[static_cast<std::size_t>(siteId)];
         out << indent << "  <site name=\"" << site.name
             << "\" pos=\"" << FormatVector3(site.pos) << "\"";
-        if (site.quat.At(0) != 0.0 || site.quat.At(1) != 0.0 || site.quat.At(2) != 0.0 || site.quat.At(3) != 0.0)
+        if ((site.quat.At(0) != 0.0) || (site.quat.At(1) != 0.0) ||
+            (site.quat.At(2) != 0.0) || (site.quat.At(3) != 0.0))
         {
             out << " quat=\"" << FormatVector4(site.quat) << "\"";
         }

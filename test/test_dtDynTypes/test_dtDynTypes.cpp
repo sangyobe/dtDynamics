@@ -3691,6 +3691,55 @@ void TestSpecXmlRejectsDeclarationAfterLeadingWhitespace()
     assert(rejected);
 }
 
+void ConfigureEncodeBodyQuaternionRegressionBody(dtDynBodySpec &draft)
+{
+    draft.quat.At(0) = 1.0;
+    draft.quat.At(1) = 2.0;
+    draft.quat.At(2) = 3.0;
+    draft.quat.At(3) = 4.0;
+    draft.inertial.mass = 13.0;
+    draft.inertial.quat.At(0) = 5.0;
+    draft.inertial.quat.At(1) = 6.0;
+    draft.inertial.quat.At(2) = 7.0;
+    draft.inertial.quat.At(3) = 8.0;
+}
+
+void ConfigureEncodeBodyQuaternionRegressionSite(dtDynSiteSpec &draft)
+{
+    draft.quat.At(0) = 9.0;
+    draft.quat.At(1) = 10.0;
+    draft.quat.At(2) = 11.0;
+    draft.quat.At(3) = 12.0;
+}
+
+void AssertXmlElementOccursExactlyOnce(const std::string &xml, const std::string &element)
+{
+    const std::size_t first = xml.find(element);
+    assert(first != std::string::npos);
+    assert(xml.find(element, first + element.size()) == std::string::npos);
+}
+
+void TestSpecXmlEncodeBodyQuaternionAttributes()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("quaternion_body", 0);
+    const dtDynIndex site = spec.AddSite(body, "quaternion_site");
+    spec.EditBody(body, ConfigureEncodeBodyQuaternionRegressionBody);
+    spec.EditSite(site, ConfigureEncodeBodyQuaternionRegressionSite);
+
+    const std::string encoded = spec.EncodeXml();
+    const std::string bodyElement =
+        "    <body name=\"quaternion_body\" pos=\"0 0 0\" quat=\"1 2 3 4\">\n";
+    const std::string inertialElement =
+        "      <inertial pos=\"0 0 0\" mass=\"13\" diaginertia=\"0 0 0\" quat=\"5 6 7 8\"/>\n";
+    const std::string siteElement =
+        "      <site name=\"quaternion_site\" pos=\"0 0 0\" quat=\"9 10 11 12\"/>\n";
+
+    AssertXmlElementOccursExactlyOnce(encoded, bodyElement);
+    AssertXmlElementOccursExactlyOnce(encoded, inertialElement);
+    AssertXmlElementOccursExactlyOnce(encoded, siteElement);
+}
+
 void TestSpecXmlDecodeEncodeRoundTrip()
 {
     const std::string xml =
@@ -6677,6 +6726,7 @@ int main()
     TestSpecXmlRejectsMalformedDeclarationGrammar();
     TestSpecXmlPreservesDeclarationVersionAndAttributeGrammar();
     TestSpecXmlRejectsDeclarationAfterLeadingWhitespace();
+    TestSpecXmlEncodeBodyQuaternionAttributes();
     TestSpecXmlDecodeEncodeRoundTrip();
     TestSpecXmlEncodeOmitsInvalidActuatorJointReferences();
     TestSpecXmlLoadsFromFile();
