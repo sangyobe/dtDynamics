@@ -5443,6 +5443,84 @@ void TestCompileSpecSupportsFloatingBaseQuadrupedTree()
     assert(std::fabs(data.nonlinTorq(0) - data.coriolisTorq(0)) < 1.0e-9);
 }
 
+void ConfigureBallForwardKinematicsRegressionBody(dtDynBodySpec &draft)
+{
+    draft.pos(0) = 4.0;
+    draft.pos(1) = -2.0;
+    draft.pos(2) = 7.0;
+}
+
+void ConfigureBallForwardKinematicsRegressionJoint(dtDynJointSpec &draft)
+{
+    draft.pos(0) = 1.0;
+    draft.pos(1) = 2.0;
+    draft.pos(2) = 3.0;
+}
+
+void ConfigureBallForwardKinematicsRegressionSite(dtDynSiteSpec &draft)
+{
+    draft.pos(0) = 2.0;
+    draft.pos(1) = -1.0;
+    draft.pos(2) = 4.0;
+}
+
+void TestForwardKinematicsAppliesBallJointQuaternionPose()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("ball_body", 0);
+    const dtDynIndex joint = spec.AddJoint(body, "ball_joint", dtDynJointType::Ball);
+    const dtDynIndex site = spec.AddSite(body, "ball_site");
+    spec.EditBody(body, ConfigureBallForwardKinematicsRegressionBody);
+    spec.EditJoint(joint, ConfigureBallForwardKinematicsRegressionJoint);
+    spec.EditSite(site, ConfigureBallForwardKinematicsRegressionSite);
+
+    const dtDynModel model = CompileSpecChecked(spec);
+    assert(model.nq == 4);
+    assert(model.nv == 3);
+    assert(model.jnt_qposadr[static_cast<std::size_t>(joint)] == 0);
+    assert(model.jnt_dofadr[static_cast<std::size_t>(joint)] == 0);
+
+    dtDynData data;
+    data.Resize(model);
+    data.qpos(0) = 0.5;
+    data.qpos(1) = 0.5;
+    data.qpos(2) = 0.5;
+    data.qpos(3) = 0.5;
+    data.qvel(0) = 0.25;
+    data.qvel(1) = -0.5;
+    data.qvel(2) = 0.75;
+
+    ForwardKinematics(model, data);
+
+    assert(std::fabs(data.xquat[static_cast<std::size_t>(body)](0) - 0.5) < 1.0e-12);
+    assert(std::fabs(data.xquat[static_cast<std::size_t>(body)](1) - 0.5) < 1.0e-12);
+    assert(std::fabs(data.xquat[static_cast<std::size_t>(body)](2) - 0.5) < 1.0e-12);
+    assert(std::fabs(data.xquat[static_cast<std::size_t>(body)](3) - 0.5) < 1.0e-12);
+
+    assert(std::fabs(data.xmat[static_cast<std::size_t>(body)](0, 0)) < 1.0e-12);
+    assert(std::fabs(data.xmat[static_cast<std::size_t>(body)](0, 1)) < 1.0e-12);
+    assert(std::fabs(data.xmat[static_cast<std::size_t>(body)](0, 2) - 1.0) < 1.0e-12);
+    assert(std::fabs(data.xmat[static_cast<std::size_t>(body)](1, 0) - 1.0) < 1.0e-12);
+    assert(std::fabs(data.xmat[static_cast<std::size_t>(body)](1, 1)) < 1.0e-12);
+    assert(std::fabs(data.xmat[static_cast<std::size_t>(body)](1, 2)) < 1.0e-12);
+    assert(std::fabs(data.xmat[static_cast<std::size_t>(body)](2, 0)) < 1.0e-12);
+    assert(std::fabs(data.xmat[static_cast<std::size_t>(body)](2, 1) - 1.0) < 1.0e-12);
+    assert(std::fabs(data.xmat[static_cast<std::size_t>(body)](2, 2)) < 1.0e-12);
+
+    assert(std::fabs(data.xanchor[static_cast<std::size_t>(joint)](0) - 5.0) < 1.0e-12);
+    assert(std::fabs(data.xanchor[static_cast<std::size_t>(joint)](1)) < 1.0e-12);
+    assert(std::fabs(data.xanchor[static_cast<std::size_t>(joint)](2) - 10.0) < 1.0e-12);
+    assert(std::fabs(data.xpos[static_cast<std::size_t>(body)](0) - 2.0) < 1.0e-12);
+    assert(std::fabs(data.xpos[static_cast<std::size_t>(body)](1) + 1.0) < 1.0e-12);
+    assert(std::fabs(data.xpos[static_cast<std::size_t>(body)](2) - 8.0) < 1.0e-12);
+    assert(std::fabs(data.site_xpos[static_cast<std::size_t>(site)](0) - 6.0) < 1.0e-12);
+    assert(std::fabs(data.site_xpos[static_cast<std::size_t>(site)](1) - 1.0) < 1.0e-12);
+    assert(std::fabs(data.site_xpos[static_cast<std::size_t>(site)](2) - 7.0) < 1.0e-12);
+    assert(std::fabs(data.qvel(0) - 0.25) < 1.0e-12);
+    assert(std::fabs(data.qvel(1) + 0.5) < 1.0e-12);
+    assert(std::fabs(data.qvel(2) - 0.75) < 1.0e-12);
+}
+
 void TestForwardKinematicsAndPointJacobianForFixedChain()
 {
     dtDynSpec spec;
@@ -6532,6 +6610,7 @@ int main()
     TestFreeJointCdoFDotPreservesSpatialCrossTerms();
     TestAngularPointMotionSubspacePreservesCrossTerms();
     TestCompileSpecSupportsFloatingBaseQuadrupedTree();
+    TestForwardKinematicsAppliesBallJointQuaternionPose();
     TestForwardKinematicsAndPointJacobianForFixedChain();
     TestIndexedJacobiansOnlyRefreshRequestedIds();
     TestIndexedJacobiansRefreshFloatingBaseBodyAndTaskSite();

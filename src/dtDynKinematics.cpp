@@ -34,8 +34,8 @@ void ForwardKinematics(const dtDynModel &model, dtDynData &data)
         const dtDynIndex jntAdr = model.body_jntadr[static_cast<std::size_t>(bodyId)];
         const dtDynIndex jntNum = model.body_jntnum[static_cast<std::size_t>(bodyId)];
 
-        if (jntNum == 1 &&
-            model.jnt_type[static_cast<std::size_t>(jntAdr)] == static_cast<dtDynIndex>(dtDynJointType::Free))
+        if ((jntNum == 1) &&
+            (model.jnt_type[static_cast<std::size_t>(jntAdr)] == static_cast<dtDynIndex>(dtDynJointType::Free)))
         {
             const dtDynIndex qadr = model.jnt_qposadr[static_cast<std::size_t>(jntAdr)];
             xpos.At(0) = data.qpos.At(qadr + 0);
@@ -84,7 +84,7 @@ void ForwardKinematics(const dtDynModel &model, dtDynData &data)
                 {
                     xpos = xpos + xaxis * data.qpos.At(qadr);
                 }
-                else if (jointType == dtDynJointType::Hinge || jointType == dtDynJointType::Ball)
+                else if ((jointType == dtDynJointType::Hinge) || (jointType == dtDynJointType::Ball))
                 {
                     dt::Math::Vector4<dtDynReal> qloc;
                     if (jointType == dtDynJointType::Ball)
