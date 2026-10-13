@@ -568,7 +568,7 @@ void RequireUniqueName(const std::string &name,
     if (!names.insert(name).second)
     {
         const auto attribute = attrs.find("name");
-        const std::size_t offset = attribute == attrs.end() ? tagOffset : attribute->second.offset;
+        const std::size_t offset = (attribute == attrs.end()) ? tagOffset : attribute->second.offset;
         throw dtDynXmlError(dtDynXmlErrorCode::DuplicateName, sourcePath, offset,
                             "duplicate " + objectType + " name '" + name + "'");
     }

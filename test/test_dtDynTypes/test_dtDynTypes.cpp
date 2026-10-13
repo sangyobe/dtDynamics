@@ -3059,6 +3059,38 @@ void TestSpecXmlPreservesCompilerAngleFallbackAndInvalidOffset()
     assert(rejected);
 }
 
+void TestSpecXmlPreservesDuplicateNameOffsets()
+{
+    const std::string fallbackDuplicates =
+        "<mujoco><worldbody><body/><body/></worldbody></mujoco>";
+    bool fallbackRejected = false;
+    try
+    {
+        (void)dtDynSpec::DecodeXml(fallbackDuplicates);
+    }
+    catch (const dtDynXmlError &error)
+    {
+        fallbackRejected = error.Code() == dtDynXmlErrorCode::DuplicateName &&
+                           error.Offset() == fallbackDuplicates.rfind("<body");
+    }
+    assert(fallbackRejected);
+
+    const std::string explicitDuplicates =
+        "<mujoco><worldbody><body name=\"duplicate\"/><body name=\"duplicate\"/>"
+        "</worldbody></mujoco>";
+    bool explicitRejected = false;
+    try
+    {
+        (void)dtDynSpec::DecodeXml(explicitDuplicates);
+    }
+    catch (const dtDynXmlError &error)
+    {
+        explicitRejected = error.Code() == dtDynXmlErrorCode::DuplicateName &&
+                           error.Offset() == explicitDuplicates.rfind("duplicate");
+    }
+    assert(explicitRejected);
+}
+
 void TestSpecXmlPreservesTagWhitespaceAndClosingSuffixOffset()
 {
     const std::string whitespaceXml =
@@ -6194,6 +6226,7 @@ int main()
     TestSpecXmlPreservesAttributeFallbacks();
     TestSpecXmlPreservesNumericAttributeFallbacks();
     TestSpecXmlPreservesCompilerAngleFallbackAndInvalidOffset();
+    TestSpecXmlPreservesDuplicateNameOffsets();
     TestSpecXmlPreservesTagWhitespaceAndClosingSuffixOffset();
     TestSpecXmlRequiresSingleRootElement();
     TestSpecXmlRejectsSupportedElementInWrongContext();
