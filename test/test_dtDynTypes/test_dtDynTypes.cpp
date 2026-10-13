@@ -820,6 +820,47 @@ void AssertSpecValidationFailure(const dtDynSpec &spec,
     assert(error.message == message);
 }
 
+struct PhysicalInertiaEditor
+{
+    dtDynReal first;
+    dtDynReal second;
+    dtDynReal third;
+
+    void operator()(dtDynBodySpec &draft) const
+    {
+        draft.inertial.mass = 1.0;
+        draft.inertial.inertia.At(0) = first;
+        draft.inertial.inertia.At(1) = second;
+        draft.inertial.inertia.At(2) = third;
+    }
+};
+
+void AssertPhysicalInertiaTriangleInequalityFailure(const dtDynReal first,
+                                                    const dtDynReal second,
+                                                    const dtDynReal third)
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("triangle_inequality_body", 0);
+    spec.EditBody(body, PhysicalInertiaEditor{first, second, third});
+    AssertSpecValidationFailure(spec, dtDynValidationCode::InvalidReference,
+                                dtDynObjectType::Body, body,
+                                "body[1] has a negative mass or physically invalid principal inertia");
+}
+
+void TestSpecValidationPreservesPhysicalInertiaTriangleInequalities()
+{
+    AssertPhysicalInertiaTriangleInequalityFailure(3.0, 1.0, 1.0);
+    AssertPhysicalInertiaTriangleInequalityFailure(1.0, 3.0, 1.0);
+    AssertPhysicalInertiaTriangleInequalityFailure(1.0, 1.0, 3.0);
+
+    dtDynSpec boundary;
+    const dtDynIndex body = boundary.AddBody("triangle_inequality_boundary", 0);
+    boundary.EditBody(body, PhysicalInertiaEditor{2.0, 1.0, 1.0});
+    dtDynValidationError error;
+    assert(ValidateSpec(boundary, &error));
+    assert(error.code == dtDynValidationCode::None);
+}
+
 void TestSpecValidationPreservesOrderedPhysicalAndNameFailures()
 {
     const dtDynReal nan = std::numeric_limits<dtDynReal>::quiet_NaN();
@@ -6244,6 +6285,7 @@ int main()
     TestModelValidationRejectsIncorrectDofParentTopology();
     TestModelValidationRejectsInconsistentDerivedMasses();
     TestSpecValidationRejectsInvalidPhysicalValues();
+    TestSpecValidationPreservesPhysicalInertiaTriangleInequalities();
     TestSpecValidationPreservesOrderedPhysicalAndNameFailures();
     TestModelValidationRejectsInvalidPhysicalValues();
     TestModelValidationRejectsInvalidFramePairs();
