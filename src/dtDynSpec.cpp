@@ -248,7 +248,7 @@ std::size_t FindTagEnd(const std::string &xml,
             }
             continue;
         }
-        if (character == '"' || character == '\'')
+        if ((character == '"') || (character == '\''))
         {
             quote = character;
         }

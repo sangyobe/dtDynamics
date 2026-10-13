@@ -3281,6 +3281,27 @@ void TestSpecXmlScannerIsQuoteAwareAndFailClosed()
     expectError(unclosed, dtDynXmlErrorCode::MalformedSyntax, unclosed.find("<body"));
 }
 
+void TestSpecXmlScannerPreservesSingleQuoteTagScanning()
+{
+    const dtDynSpec decoded = dtDynSpec::DecodeXml(
+        "<mujoco><worldbody><body name='base>link'/></worldbody></mujoco>");
+    assert(decoded.Bodies().size() == 2);
+    assert(decoded.Bodies()[1].name == "base>link");
+
+    const std::string unclosed = "<mujoco><worldbody><body name='base>";
+    bool rejected = false;
+    try
+    {
+        (void)dtDynSpec::DecodeXml(unclosed);
+    }
+    catch (const dtDynXmlError &error)
+    {
+        rejected = error.Code() == dtDynXmlErrorCode::MalformedSyntax &&
+                   error.Offset() == unclosed.find("<body");
+    }
+    assert(rejected);
+}
+
 void TestSpecXmlRunsSetupValidationAfterParsing()
 {
     const std::string invalid =
@@ -6233,6 +6254,7 @@ int main()
     TestSpecXmlAcceptsEverySupportedElementInItsDocumentedParent();
     TestSpecXmlPreservesWhitespaceAndTagNameGrammar();
     TestSpecXmlScannerIsQuoteAwareAndFailClosed();
+    TestSpecXmlScannerPreservesSingleQuoteTagScanning();
     TestSpecXmlRunsSetupValidationAfterParsing();
     TestSpecXmlRejectsClosingTagAttributes();
     TestSpecXmlRejectsMalformedSelfClosingSuffix();
