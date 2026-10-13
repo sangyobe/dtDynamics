@@ -5190,6 +5190,206 @@ void TestCompileSpecCanFillExistingModel()
     assert(model.BodyId("link") == link);
 }
 
+template <typename T>
+void AssertP81ArrayUnchanged(const dtArray<T> &actual, const dtArray<T> &expected)
+{
+    assert(actual.size() == expected.size());
+    for (std::size_t index = 0; index < actual.size(); ++index)
+    {
+        assert(actual[index] == expected[index]);
+    }
+}
+
+void AssertP81DenseVectorUnchanged(const dtDynDenseVector &actual,
+                                   const dtDynDenseVector &expected)
+{
+    assert(actual.GetDim() == expected.GetDim());
+    for (dtDynIndex index = 0; index < static_cast<dtDynIndex>(actual.GetDim()); ++index)
+    {
+        assert(actual.At(index) == expected.At(index));
+    }
+}
+
+void AssertP81BodyPositionsUnchanged(const dtDynModel &actual, const dtDynModel &expected)
+{
+    assert(actual.body_pos.size() == expected.body_pos.size());
+    for (std::size_t bodyIndex = 0; bodyIndex < actual.body_pos.size(); ++bodyIndex)
+    {
+        for (dtDynIndex axis = 0; axis < 3; ++axis)
+        {
+            assert(actual.body_pos[bodyIndex].At(axis) == expected.body_pos[bodyIndex].At(axis));
+        }
+    }
+}
+
+void AssertP81TopologyUnchanged(const dtDynModel &actual, const dtDynModel &expected)
+{
+    assert(actual.nq == expected.nq);
+    assert(actual.nv == expected.nv);
+    assert(actual.nbody == expected.nbody);
+    assert(actual.njnt == expected.njnt);
+    assert(actual.nsite == expected.nsite);
+    assert(actual.nu == expected.nu);
+    assert(actual.nroot == expected.nroot);
+    AssertP81ArrayUnchanged(actual.body_names, expected.body_names);
+    AssertP81ArrayUnchanged(actual.joint_names, expected.joint_names);
+    AssertP81ArrayUnchanged(actual.site_names, expected.site_names);
+    AssertP81ArrayUnchanged(actual.actuator_names, expected.actuator_names);
+    AssertP81ArrayUnchanged(actual.body_parentid, expected.body_parentid);
+    AssertP81ArrayUnchanged(actual.body_rootid, expected.body_rootid);
+    AssertP81ArrayUnchanged(actual.body_rootidx, expected.body_rootidx);
+    AssertP81ArrayUnchanged(actual.body_jntnum, expected.body_jntnum);
+    AssertP81ArrayUnchanged(actual.body_jntadr, expected.body_jntadr);
+    AssertP81ArrayUnchanged(actual.body_dofnum, expected.body_dofnum);
+    AssertP81ArrayUnchanged(actual.body_dofadr, expected.body_dofadr);
+    AssertP81ArrayUnchanged(actual.body_weldid, expected.body_weldid);
+    AssertP81ArrayUnchanged(actual.jnt_type, expected.jnt_type);
+    AssertP81ArrayUnchanged(actual.jnt_bodyid, expected.jnt_bodyid);
+    AssertP81ArrayUnchanged(actual.jnt_specid, expected.jnt_specid);
+    AssertP81ArrayUnchanged(actual.jnt_qposadr, expected.jnt_qposadr);
+    AssertP81ArrayUnchanged(actual.jnt_dofadr, expected.jnt_dofadr);
+    AssertP81ArrayUnchanged(actual.jnt_limited, expected.jnt_limited);
+    AssertP81ArrayUnchanged(actual.dof_bodyid, expected.dof_bodyid);
+    AssertP81ArrayUnchanged(actual.dof_parentid, expected.dof_parentid);
+    AssertP81ArrayUnchanged(actual.dof_jntid, expected.dof_jntid);
+    AssertP81ArrayUnchanged(actual.site_bodyid, expected.site_bodyid);
+    AssertP81ArrayUnchanged(actual.actuator_jointid, expected.actuator_jointid);
+    AssertP81ArrayUnchanged(actual.root_bodyid, expected.root_bodyid);
+}
+
+struct P81ModelStoragePointers
+{
+    const dtDynIndex *bodyParent = nullptr;
+    const dtDynIndex *bodyRoot = nullptr;
+    const dtDynIndex *bodyRootSlot = nullptr;
+    const dtDynIndex *jointSpec = nullptr;
+    const dtDynIndex *dofParent = nullptr;
+    const dtDynIndex *rootBody = nullptr;
+    const dt::Math::Vector3<dtDynReal> *bodyPosition = nullptr;
+    const dtDynReal *bodyMass = nullptr;
+    const dtDynReal *bodySubtreeMass = nullptr;
+    const dtDynReal *rootMass = nullptr;
+};
+
+P81ModelStoragePointers CaptureP81ModelStoragePointers(const dtDynModel &model)
+{
+    return P81ModelStoragePointers{model.body_parentid.data(),
+                                   model.body_rootid.data(),
+                                   model.body_rootidx.data(),
+                                   model.jnt_specid.data(),
+                                   model.dof_parentid.data(),
+                                   model.root_bodyid.data(),
+                                   model.body_pos.data(),
+                                   model.body_mass.GetElementsAddr(),
+                                   model.body_subtreemass.GetElementsAddr(),
+                                   model.root_mass.GetElementsAddr()};
+}
+
+void AssertP81ModelStoragePointersUnchanged(const dtDynModel &model,
+                                            const P81ModelStoragePointers &expected)
+{
+    assert(model.body_parentid.data() == expected.bodyParent);
+    assert(model.body_rootid.data() == expected.bodyRoot);
+    assert(model.body_rootidx.data() == expected.bodyRootSlot);
+    assert(model.jnt_specid.data() == expected.jointSpec);
+    assert(model.dof_parentid.data() == expected.dofParent);
+    assert(model.root_bodyid.data() == expected.rootBody);
+    assert(model.body_pos.data() == expected.bodyPosition);
+    assert(model.body_mass.GetElementsAddr() == expected.bodyMass);
+    assert(model.body_subtreemass.GetElementsAddr() == expected.bodySubtreeMass);
+    assert(model.root_mass.GetElementsAddr() == expected.rootMass);
+}
+
+struct P81BodyPhysicalEditor
+{
+    dtDynReal mass = 0.0;
+    dtDynReal positionX = 0.0;
+
+    void operator()(dtDynBodySpec &draft) const
+    {
+        draft.inertial.mass = mass;
+        draft.pos.At(0) = positionX;
+    }
+};
+
+struct P81NextSiblingEditor
+{
+    dtDynIndex nextSibling = DTDYN_INVALID_INDEX;
+
+    void operator()(dtDynBodySpec &draft) const
+    {
+        draft.nextSibling = nextSibling;
+    }
+};
+
+dtDynSpec MakeP81MultiRootSpec(dtDynIndex &firstRoot, dtDynIndex &secondRoot)
+{
+    dtDynSpec spec;
+    firstRoot = spec.AddBody("p81_first_root", 0);
+    secondRoot = spec.AddBody("p81_second_root", 0);
+    const dtDynIndex firstJoint = spec.AddJoint(firstRoot, "p81_first_joint", dtDynJointType::Hinge);
+    const dtDynIndex secondJoint = spec.AddJoint(secondRoot, "p81_second_joint", dtDynJointType::Hinge);
+    spec.EditBody(firstRoot, P81BodyPhysicalEditor{1.0, 0.25});
+    spec.EditBody(secondRoot, P81BodyPhysicalEditor{2.0, -0.5});
+
+    assert(firstRoot == 1);
+    assert(secondRoot == 2);
+    assert(firstJoint == 0);
+    assert(secondJoint == 1);
+    assert(spec.Bodies()[0].nextSibling == DTDYN_INVALID_INDEX);
+    assert(spec.Bodies()[secondRoot].parent == 0);
+    assert(spec.Bodies()[secondRoot].nextSibling == firstRoot);
+
+    dtDynValidationError error;
+    assert(ValidateSpec(spec, &error));
+    assert(error.code == dtDynValidationCode::None);
+    return spec;
+}
+
+void TestUpdateSpecPreservesWorldSiblingCompatibility()
+{
+    dtDynIndex firstRoot = DTDYN_INVALID_INDEX;
+    dtDynIndex secondRoot = DTDYN_INVALID_INDEX;
+    const dtDynSpec original = MakeP81MultiRootSpec(firstRoot, secondRoot);
+
+    dtDynModel compatibleModel = CompileSpecChecked(original);
+    assert(compatibleModel.nroot == 2);
+    dtDynSpec compatible = original;
+    compatible.EditBody(firstRoot, P81BodyPhysicalEditor{3.0, 0.75});
+    const std::size_t allocationsBeforeCompatibleUpdate = g_totalTestAllocations;
+    assert(UpdateSpec(compatible, compatibleModel));
+    assert(g_totalTestAllocations == allocationsBeforeCompatibleUpdate);
+    assert(compatibleModel.body_mass.At(firstRoot) == 3.0);
+    assert(compatibleModel.body_pos[static_cast<std::size_t>(firstRoot)].At(0) == 0.75);
+
+    dtDynValidationError error;
+    assert(ValidateModel(compatibleModel, &error));
+    assert(error.code == dtDynValidationCode::None);
+
+    dtDynSpec incompatible = original;
+    incompatible.EditBody(0, P81NextSiblingEditor{secondRoot});
+    incompatible.EditBody(secondRoot, P81BodyPhysicalEditor{7.0, 8.0});
+    assert(incompatible.Bodies()[0].nextSibling == secondRoot);
+    assert(ValidateSpec(incompatible, &error));
+    assert(error.code == dtDynValidationCode::None);
+
+    dtDynModel rejectedModel = CompileSpecChecked(original);
+    const dtDynModel expectedModel = rejectedModel;
+    const P81ModelStoragePointers storageBeforeUpdate =
+        CaptureP81ModelStoragePointers(rejectedModel);
+    const std::size_t allocationsBeforeRejectedUpdate = g_totalTestAllocations;
+    assert(!UpdateSpec(incompatible, rejectedModel));
+    assert(g_totalTestAllocations == allocationsBeforeRejectedUpdate);
+    AssertP81ModelStoragePointersUnchanged(rejectedModel, storageBeforeUpdate);
+    AssertP81TopologyUnchanged(rejectedModel, expectedModel);
+    AssertP81BodyPositionsUnchanged(rejectedModel, expectedModel);
+    AssertP81DenseVectorUnchanged(rejectedModel.body_mass, expectedModel.body_mass);
+    AssertP81DenseVectorUnchanged(rejectedModel.body_subtreemass, expectedModel.body_subtreemass);
+    AssertP81DenseVectorUnchanged(rejectedModel.root_mass, expectedModel.root_mass);
+    assert(ValidateModel(rejectedModel, &error));
+    assert(error.code == dtDynValidationCode::None);
+}
+
 void TestUpdateSpecRejectsSameDofJointTypeChangeWithoutWriting()
 {
     dtDynSpec spec;
@@ -9150,6 +9350,7 @@ int main()
     TestCompiledModelCopiesIntoDefaultModel();
     TestCompiledModelCopiesZeroSizedOptionalDenseFields();
     TestCompileSpecCanFillExistingModel();
+    TestUpdateSpecPreservesWorldSiblingCompatibility();
     TestUpdateSpecRejectsSameDofJointTypeChangeWithoutWriting();
     TestUpdateSpecRejectsWorldParentMutationWithoutWriting();
     TestUpdateSpecRejectsChildListMutationWithoutWriting();

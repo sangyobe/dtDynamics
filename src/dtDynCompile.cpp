@@ -414,7 +414,7 @@ bool UpdateSpec(const dtDynSpec &spec, dtDynModel &model) noexcept
     for (dtDynIndex parentId = 0; parentId < model.nbody; ++parentId)
     {
         const dtDynBodySpec &parent = bodies[static_cast<std::size_t>(parentId)];
-        if (parentId == 0 && parent.nextSibling != DTDYN_INVALID_INDEX)
+        if ((parentId == 0) && (parent.nextSibling != DTDYN_INVALID_INDEX))
         {
             return false;
         }
