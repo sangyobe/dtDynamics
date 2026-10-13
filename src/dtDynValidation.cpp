@@ -1003,10 +1003,10 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
     for (dtDynIndex rootIndex = 0; rootIndex < model.nroot; ++rootIndex)
     {
         const dtDynIndex rootBody = model.root_bodyid[static_cast<std::size_t>(rootIndex)];
-        if (rootBody <= 0 || rootBody >= model.nbody ||
-            model.body_parentid[static_cast<std::size_t>(rootBody)] != 0 ||
-            model.body_rootid[static_cast<std::size_t>(rootBody)] != rootBody ||
-            model.body_rootidx[static_cast<std::size_t>(rootBody)] != rootIndex)
+        if ((rootBody <= 0) || (rootBody >= model.nbody) ||
+            (model.body_parentid[static_cast<std::size_t>(rootBody)] != 0) ||
+            (model.body_rootid[static_cast<std::size_t>(rootBody)] != rootBody) ||
+            (model.body_rootidx[static_cast<std::size_t>(rootBody)] != rootIndex))
         {
             return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body,
                         rootBody, "compiled root table contains inconsistent metadata");
