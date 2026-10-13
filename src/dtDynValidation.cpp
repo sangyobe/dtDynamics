@@ -1048,9 +1048,9 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
     {
         const std::size_t index = static_cast<std::size_t>(bodyId);
         const dtDynIndex parent = model.body_parentid[index];
-        const dtDynIndex expectedWeld = model.body_jntnum[index] > 0
+        const dtDynIndex expectedWeld = (model.body_jntnum[index] > 0)
                                             ? bodyId
-                                            : (parent > 0
+                                            : ((parent > 0)
                                                    ? model.body_weldid[static_cast<std::size_t>(parent)]
                                                    : 0);
         if (model.body_weldid[index] != expectedWeld)

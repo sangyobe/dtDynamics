@@ -392,6 +392,16 @@ void AssertBodyRootPropagationDiagnostic(const dtDynModel &model,
     assert(error.message == "compiled body root ID/slot is inconsistent");
 }
 
+void AssertWeldPropagationDiagnostic(const dtDynModel &model, const dtDynIndex expectedBody)
+{
+    dtDynValidationError error;
+    assert(!ValidateModel(model, &error));
+    assert(error.code == dtDynValidationCode::InvalidReference);
+    assert(error.object == dtDynObjectType::Body);
+    assert(error.index == expectedBody);
+    assert(error.message == "compiled body weld ID is inconsistent");
+}
+
 void TestCheckedCompileAcceptsValidSpec()
 {
     const dtDynSpec spec = MakeValidNormalSpec();
@@ -1081,6 +1091,45 @@ void TestModelValidationRejectsInvalidWeldId()
     assert(error.code == dtDynValidationCode::InvalidReference);
     assert(error.object == dtDynObjectType::Body);
     assert(error.index == fixed);
+}
+
+void TestModelValidationPreservesWeldPropagation()
+{
+    dtDynSpec spec;
+    const dtDynIndex fixedRoot = spec.AddBody("weld_fixed_root", 0);
+    const dtDynIndex jointedChild = spec.AddBody("weld_jointed_child", fixedRoot);
+    const dtDynIndex fixedGrandchild = spec.AddBody("weld_fixed_grandchild", jointedChild);
+    const dtDynIndex joint = spec.AddJoint(jointedChild, "weld_hinge", dtDynJointType::Hinge);
+    const dtDynModel valid = CompileSpecChecked(spec);
+
+    assert(valid.nbody == 4);
+    assert(valid.njnt == 1);
+    assert(joint == 0);
+    assert(valid.body_parentid[fixedRoot] == 0);
+    assert(valid.body_parentid[jointedChild] == fixedRoot);
+    assert(valid.body_parentid[fixedGrandchild] == jointedChild);
+    assert(valid.body_jntnum[fixedRoot] == 0);
+    assert(valid.body_jntnum[jointedChild] == 1);
+    assert(valid.body_jntnum[fixedGrandchild] == 0);
+    assert(valid.body_weldid[fixedRoot] == 0);
+    assert(valid.body_weldid[jointedChild] == jointedChild);
+    assert(valid.body_weldid[fixedGrandchild] == jointedChild);
+
+    dtDynValidationError validError;
+    assert(ValidateModel(valid, &validError));
+    assert(validError.code == dtDynValidationCode::None);
+
+    dtDynModel wrongFixedRoot = valid;
+    wrongFixedRoot.body_weldid[fixedRoot] = fixedRoot;
+    AssertWeldPropagationDiagnostic(wrongFixedRoot, fixedRoot);
+
+    dtDynModel wrongJointedChild = valid;
+    wrongJointedChild.body_weldid[jointedChild] = 0;
+    AssertWeldPropagationDiagnostic(wrongJointedChild, jointedChild);
+
+    dtDynModel wrongFixedGrandchild = valid;
+    wrongFixedGrandchild.body_weldid[fixedGrandchild] = 0;
+    AssertWeldPropagationDiagnostic(wrongFixedGrandchild, fixedGrandchild);
 }
 
 void TestModelValidationRejectsIncorrectDofParentTopology()
@@ -8537,6 +8586,7 @@ int main()
     TestModelValidationRejectsOrphanBodySegments();
     TestModelValidationRejectsDofOutsideDeclaredJointSpan();
     TestModelValidationRejectsInvalidWeldId();
+    TestModelValidationPreservesWeldPropagation();
     TestModelValidationRejectsIncorrectDofParentTopology();
     TestModelValidationRejectsInconsistentDerivedMasses();
     TestSpecValidationRejectsInvalidPhysicalValues();
