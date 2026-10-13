@@ -744,7 +744,7 @@ dtDynReal AngleScaleFromCompilerAttribute(const AttributeMap &attrs,
     }
 
     const auto attribute = attrs.find("angle");
-    const std::size_t offset = attribute == attrs.end() ? 0 : attribute->second.offset;
+    const std::size_t offset = (attribute == attrs.end()) ? 0 : attribute->second.offset;
     throw dtDynXmlError(dtDynXmlErrorCode::UnsupportedElement, sourcePath, offset,
                         "unsupported compiler angle unit '" + angle + "'");
 }

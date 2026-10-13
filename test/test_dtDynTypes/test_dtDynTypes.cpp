@@ -3034,6 +3034,31 @@ void TestSpecXmlPreservesNumericAttributeFallbacks()
     assert(std::fabs(explicitArmature.Joints()[0].armature - 2.5) < 1.0e-12);
 }
 
+void TestSpecXmlPreservesCompilerAngleFallbackAndInvalidOffset()
+{
+    const dtDynSpec defaultAngle = dtDynSpec::DecodeXml(
+        "<mujoco><worldbody><body name=\"base\"><joint name=\"hinge\" limited=\"true\" "
+        "range=\"-90 180\"/></body></worldbody></mujoco>");
+    assert(defaultAngle.Joints().size() == 1);
+    assert(std::fabs(defaultAngle.Joints()[0].rangeMin + (0.5 * 3.14159265358979323846)) < 1.0e-12);
+    assert(std::fabs(defaultAngle.Joints()[0].rangeMax - 3.14159265358979323846) < 1.0e-12);
+
+    const std::string invalid = "<mujoco><compiler angle=\"gradian\"/><worldbody/></mujoco>";
+    bool rejected = false;
+    try
+    {
+        (void)dtDynSpec::DecodeXml(invalid);
+    }
+    catch (const dtDynXmlError &error)
+    {
+        rejected = error.Code() == dtDynXmlErrorCode::UnsupportedElement &&
+                   error.Offset() == invalid.find("gradian") &&
+                   std::string(error.what()).find("unsupported compiler angle unit 'gradian'") !=
+                       std::string::npos;
+    }
+    assert(rejected);
+}
+
 void TestSpecXmlPreservesTagWhitespaceAndClosingSuffixOffset()
 {
     const std::string whitespaceXml =
@@ -6168,6 +6193,7 @@ int main()
     TestSpecXmlPreservesLimitedBooleanGrammar();
     TestSpecXmlPreservesAttributeFallbacks();
     TestSpecXmlPreservesNumericAttributeFallbacks();
+    TestSpecXmlPreservesCompilerAngleFallbackAndInvalidOffset();
     TestSpecXmlPreservesTagWhitespaceAndClosingSuffixOffset();
     TestSpecXmlRequiresSingleRootElement();
     TestSpecXmlRejectsSupportedElementInWrongContext();
