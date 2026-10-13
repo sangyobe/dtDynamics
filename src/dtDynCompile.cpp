@@ -688,7 +688,7 @@ void CompileSpec(const dtDynSpec &spec, dtDynModel &model)
         const dtDynBodySpec &body = spec.Bodies()[static_cast<std::size_t>(bodyId)];
 
         model.body_names[static_cast<std::size_t>(bodyId)] = body.name;
-        model.body_parentid[static_cast<std::size_t>(bodyId)] = bodyId == 0 ? 0 : body.parent;
+        model.body_parentid[static_cast<std::size_t>(bodyId)] = (bodyId == 0) ? 0 : body.parent;
 
         if (bodyId == 0)
         {
