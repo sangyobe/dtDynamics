@@ -365,7 +365,7 @@ bool ValidateSpec(const dtDynSpec &spec, dtDynValidationError *error)
     {
         const dtDynIndex bodyId = static_cast<dtDynIndex>(bodyIndex);
         const dtDynIndex parent = bodies[bodyIndex].parent;
-        if (parent < 0 || parent >= bodyId)
+        if ((parent < 0) || (parent >= bodyId))
         {
             return Fail(error, dtDynValidationCode::InvalidParent, dtDynObjectType::Body, bodyId,
                         "body[" + std::to_string(bodyId) + "] '" + bodies[bodyIndex].name +

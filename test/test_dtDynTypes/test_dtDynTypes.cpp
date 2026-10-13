@@ -303,16 +303,53 @@ std::filesystem::path UniqueTempPath(const std::string &stem)
            (stem + "_" + std::to_string(ticks) + "_" + std::to_string(sequence++));
 }
 
-void TestCheckedCompileAcceptsValidSpec()
+dtDynSpec MakeValidNormalSpec()
 {
     dtDynSpec spec;
-    const dtDynIndex body = spec.AddBody("base", 0);
-    spec.AddJoint(body, "hinge", dtDynJointType::Hinge);
+    const dtDynIndex base = spec.AddBody("base", 0);
+    const dtDynIndex hinge = spec.AddJoint(base, "hinge", dtDynJointType::Hinge);
+    assert(base == 1);
+    assert(hinge == 0);
 
     dtDynValidationError error;
     assert(ValidateSpec(spec, &error));
     assert(error.code == dtDynValidationCode::None);
 
+    const dtDynModel checked = CompileSpecChecked(spec);
+    assert(checked.nbody == 2);
+    assert(checked.njnt == 1);
+    return spec;
+}
+
+void AssertDetachedPublicBodyState(const dtDynSpec &spec,
+                                   const dtDynIndex base,
+                                   const dtDynIndex detached,
+                                   const dtDynIndex parent)
+{
+    assert(spec.Bodies().size() == 3);
+    assert(spec.Bodies()[0].firstChild == base);
+    assert(spec.Bodies()[base].parent == 0);
+    assert(spec.Bodies()[base].firstChild == DTDYN_INVALID_INDEX);
+    assert(spec.Bodies()[detached].parent == parent);
+    assert(spec.Bodies()[detached].firstChild == DTDYN_INVALID_INDEX);
+    assert(spec.Bodies()[detached].nextSibling == DTDYN_INVALID_INDEX);
+}
+
+void AssertInvalidParentDiagnostic(const dtDynSpec &spec,
+                                   const dtDynIndex body,
+                                   const std::string &expectedMessage)
+{
+    dtDynValidationError error;
+    assert(!ValidateSpec(spec, &error));
+    assert(error.code == dtDynValidationCode::InvalidParent);
+    assert(error.object == dtDynObjectType::Body);
+    assert(error.index == body);
+    assert(error.message == expectedMessage);
+}
+
+void TestCheckedCompileAcceptsValidSpec()
+{
+    const dtDynSpec spec = MakeValidNormalSpec();
     const dtDynModel trusted = CompileSpec(spec);
     const dtDynModel checked = CompileSpecChecked(spec);
     assert(checked.nbody == trusted.nbody);
@@ -321,19 +358,16 @@ void TestCheckedCompileAcceptsValidSpec()
     assert(checked.nv == trusted.nv);
 }
 
+void ConfigureP56InvalidParentForCheckedCompile(dtDynBodySpec &draft)
+{
+    draft.parent = 99;
+}
+
 void TestCheckedCompileRejectsInvalidParent()
 {
-    dtDynSpec spec;
-    const dtDynIndex body = spec.AddBody("base", 0);
-    spec.EditBody(body, [&](dtDynBodySpec &draft)
-                  { draft.parent = 99; });
-
-    dtDynValidationError error;
-    assert(!ValidateSpec(spec, &error));
-    assert(error.code == dtDynValidationCode::InvalidParent);
-    assert(error.object == dtDynObjectType::Body);
-    assert(error.index == body);
-    assert(error.message.find("body[1]") != std::string::npos);
+    dtDynSpec spec = MakeValidNormalSpec();
+    const dtDynIndex body = spec.BodyId("base");
+    spec.EditBody(body, ConfigureP56InvalidParentForCheckedCompile);
 
     bool rejected = false;
     try
@@ -347,19 +381,29 @@ void TestCheckedCompileRejectsInvalidParent()
     assert(rejected);
 }
 
-void TestSpecValidationRejectsDetachedBody()
+void TestSpecValidationRejectsNegativeParentAddedPublicly()
 {
-    dtDynSpec spec;
-    const dtDynIndex body = spec.AddBody("detached", 99);
-    assert(spec.Bodies().size() == 2);
-    assert(spec.Bodies()[0].firstChild == DTDYN_INVALID_INDEX);
-    assert(spec.Bodies()[body].parent == 99);
+    dtDynSpec spec = MakeValidNormalSpec();
+    const dtDynIndex base = spec.BodyId("base");
+    const dtDynIndex detached = spec.AddBody("negative_parent", DTDYN_INVALID_INDEX);
+    assert(detached == 2);
 
-    dtDynValidationError error;
-    assert(!ValidateSpec(spec, &error));
-    assert(error.code == dtDynValidationCode::InvalidParent);
-    assert(error.object == dtDynObjectType::Body);
-    assert(error.index == body);
+    AssertDetachedPublicBodyState(spec, base, detached, DTDYN_INVALID_INDEX);
+    AssertInvalidParentDiagnostic(spec, detached,
+                                  "body[2] 'negative_parent' has invalid parent -1");
+}
+
+void TestSpecValidationRejectsForwardParentAddedPublicly()
+{
+    dtDynSpec spec = MakeValidNormalSpec();
+    const dtDynIndex base = spec.BodyId("base");
+    const dtDynIndex forwardParent = 3;
+    const dtDynIndex detached = spec.AddBody("forward_parent", forwardParent);
+    assert(detached == 2);
+
+    AssertDetachedPublicBodyState(spec, base, detached, forwardParent);
+    AssertInvalidParentDiagnostic(spec, detached,
+                                  "body[2] 'forward_parent' has invalid parent 3");
 }
 
 void TestSpecValidationRejectsDetachedJoint()
@@ -8080,7 +8124,8 @@ int main()
 {
     TestCheckedCompileAcceptsValidSpec();
     TestCheckedCompileRejectsInvalidParent();
-    TestSpecValidationRejectsDetachedBody();
+    TestSpecValidationRejectsNegativeParentAddedPublicly();
+    TestSpecValidationRejectsForwardParentAddedPublicly();
     TestSpecValidationRejectsDetachedJoint();
     TestSpecValidationRejectsSiblingCycle();
     TestSpecValidationRejectsDetachedSite();
