@@ -5683,18 +5683,6 @@ void TestUpdateSpecRejectsLateCompatibilityMetadataMutationsWithoutWriting()
     }
 }
 
-struct P83BodyPhysicalEditor
-{
-    dtDynReal mass = 0.0;
-    dtDynReal positionX = 0.0;
-
-    void operator()(dtDynBodySpec &draft) const
-    {
-        draft.inertial.mass = mass;
-        draft.pos.At(0) = positionX;
-    }
-};
-
 struct P83BodyNameEditor
 {
     std::string name;
@@ -5731,8 +5719,8 @@ dtDynSpec MakeP83WorldRootChildSpec(dtDynIndex &root, dtDynIndex &child)
     dtDynSpec spec;
     root = spec.AddBody("p83_root", 0);
     child = spec.AddBody("p83_child", root);
-    spec.EditBody(root, P83BodyPhysicalEditor{1.0, 0.25});
-    spec.EditBody(child, P83BodyPhysicalEditor{2.0, -0.5});
+    spec.EditBody(root, P81BodyPhysicalEditor{1.0, 0.25});
+    spec.EditBody(child, P81BodyPhysicalEditor{2.0, -0.5});
 
     assert(root == 1);
     assert(child == 2);
@@ -5752,9 +5740,9 @@ dtDynSpec MakeP83ReparentableSpec(P83ReparentableBodyIds &ids)
     ids.rootA = spec.AddBody("p83_root_a", 0);
     ids.rootB = spec.AddBody("p83_root_b", 0);
     ids.child = spec.AddBody("p83_child", ids.rootA);
-    spec.EditBody(ids.rootA, P83BodyPhysicalEditor{1.0, 0.25});
-    spec.EditBody(ids.rootB, P83BodyPhysicalEditor{2.0, -0.5});
-    spec.EditBody(ids.child, P83BodyPhysicalEditor{3.0, 0.75});
+    spec.EditBody(ids.rootA, P81BodyPhysicalEditor{1.0, 0.25});
+    spec.EditBody(ids.rootB, P81BodyPhysicalEditor{2.0, -0.5});
+    spec.EditBody(ids.child, P81BodyPhysicalEditor{3.0, 0.75});
 
     assert(ids.rootA == 1);
     assert(ids.rootB == 2);
@@ -5819,8 +5807,8 @@ void TestUpdateSpecP83UpdatesWorldRootChildPhysicalModel()
     assert(model.body_parentid[static_cast<std::size_t>(child)] == root);
 
     dtDynSpec updated = original;
-    updated.EditBody(root, P83BodyPhysicalEditor{4.0, -1.25});
-    updated.EditBody(child, P83BodyPhysicalEditor{5.0, 1.5});
+    updated.EditBody(root, P81BodyPhysicalEditor{4.0, -1.25});
+    updated.EditBody(child, P81BodyPhysicalEditor{5.0, 1.5});
     dtDynValidationError error;
     assert(ValidateSpec(updated, &error));
     assert(error.code == dtDynValidationCode::None);
@@ -5846,8 +5834,8 @@ void TestUpdateSpecP83RejectsValidBodyNameAndParentChangesWithoutWriting()
     const dtDynSpec original = MakeP83ReparentableSpec(ids);
 
     dtDynSpec renamed = original;
-    renamed.EditBody(ids.rootA, P83BodyPhysicalEditor{7.0, -1.0});
-    renamed.EditBody(ids.child, P83BodyPhysicalEditor{8.0, 2.0});
+    renamed.EditBody(ids.rootA, P81BodyPhysicalEditor{7.0, -1.0});
+    renamed.EditBody(ids.child, P81BodyPhysicalEditor{8.0, 2.0});
     renamed.EditBody(ids.child, P83BodyNameEditor{"p83_child_renamed"});
     dtDynValidationError error;
     assert(ValidateSpec(renamed, &error));
@@ -5867,8 +5855,8 @@ void TestUpdateSpecP83RejectsValidBodyNameAndParentChangesWithoutWriting()
     reparented.EditBody(ids.child,
                         P83BodyHierarchyEditor{ids.rootB, DTDYN_INVALID_INDEX,
                                                DTDYN_INVALID_INDEX});
-    reparented.EditBody(ids.rootA, P83BodyPhysicalEditor{11.0, -1.25});
-    reparented.EditBody(ids.child, P83BodyPhysicalEditor{13.0, 1.5});
+    reparented.EditBody(ids.rootA, P81BodyPhysicalEditor{11.0, -1.25});
+    reparented.EditBody(ids.child, P81BodyPhysicalEditor{13.0, 1.5});
     assert(reparented.Bodies()[static_cast<std::size_t>(ids.rootA)].firstChild ==
            DTDYN_INVALID_INDEX);
     assert(reparented.Bodies()[static_cast<std::size_t>(ids.rootB)].firstChild == ids.child);
