@@ -493,7 +493,7 @@ bool HasAttribute(const AttributeMap &attrs, const std::string &key)
 std::string AttributeOr(const AttributeMap &attrs, const std::string &key, const std::string &fallback)
 {
     const auto it = attrs.find(key);
-    return it == attrs.end() ? fallback : it->second.text;
+    return (it == attrs.end()) ? fallback : it->second.text;
 }
 
 dtDynReal ParseReal(const AttributeValue &attribute, const std::string &sourcePath)
