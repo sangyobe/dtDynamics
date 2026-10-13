@@ -310,7 +310,7 @@ bool IsProperRotation(const dt::Math::Matrix3<dtDynReal> &value)
             {
                 dot += value.At(index, row) * value.At(index, column);
             }
-            const dtDynReal expected = row == column ? 1.0 : 0.0;
+            const dtDynReal expected = (row == column) ? 1.0 : 0.0;
             if (!NearlyEqualInput(dot, expected))
             {
                 return false;
@@ -318,9 +318,9 @@ bool IsProperRotation(const dt::Math::Matrix3<dtDynReal> &value)
         }
     }
     const dtDynReal determinant =
-        value.At(0, 0) * (value.At(1, 1) * value.At(2, 2) - value.At(1, 2) * value.At(2, 1)) -
-        value.At(0, 1) * (value.At(1, 0) * value.At(2, 2) - value.At(1, 2) * value.At(2, 0)) +
-        value.At(0, 2) * (value.At(1, 0) * value.At(2, 1) - value.At(1, 1) * value.At(2, 0));
+        ((value.At(0, 0) * ((value.At(1, 1) * value.At(2, 2)) - (value.At(1, 2) * value.At(2, 1)))) -
+         (value.At(0, 1) * ((value.At(1, 0) * value.At(2, 2)) - (value.At(1, 2) * value.At(2, 0))))) +
+        (value.At(0, 2) * ((value.At(1, 0) * value.At(2, 1)) - (value.At(1, 1) * value.At(2, 0))));
     return NearlyEqualInput(determinant, static_cast<dtDynReal>(1.0));
 }
 
