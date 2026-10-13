@@ -271,7 +271,7 @@ bool IsUnitQuaternion(const dt::Math::Vector4<dtDynReal> &value)
 
 bool IsPhysicalInertia(const dt::Math::Vector3<dtDynReal> &value)
 {
-    if (value.At(0) < 0.0 || value.At(1) < 0.0 || value.At(2) < 0.0)
+    if ((value.At(0) < 0.0) || (value.At(1) < 0.0) || (value.At(2) < 0.0))
     {
         return false;
     }

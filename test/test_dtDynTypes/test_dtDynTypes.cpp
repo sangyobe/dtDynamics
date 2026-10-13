@@ -928,30 +928,58 @@ struct PhysicalInertiaEditor
     }
 };
 
-void AssertPhysicalInertiaTriangleInequalityFailure(const dtDynReal first,
-                                                    const dtDynReal second,
-                                                    const dtDynReal third)
+void AssertPhysicalInertiaRejectedByCheckedCompile(const dtDynReal first,
+                                                   const dtDynReal second,
+                                                   const dtDynReal third)
 {
     dtDynSpec spec;
-    const dtDynIndex body = spec.AddBody("triangle_inequality_body", 0);
+    const dtDynIndex body = spec.AddBody("invalid_physical_inertia_body", 0);
     spec.EditBody(body, PhysicalInertiaEditor{first, second, third});
     AssertSpecValidationFailure(spec, dtDynValidationCode::InvalidReference,
                                 dtDynObjectType::Body, body,
                                 "body[1] has a negative mass or physically invalid principal inertia");
+
+    bool checkedCompileRejected = false;
+    try
+    {
+        (void)CompileSpecChecked(spec);
+    }
+    catch (const std::runtime_error &exception)
+    {
+        checkedCompileRejected =
+            std::string(exception.what()) ==
+            "CompileSpecChecked: body[1] has a negative mass or physically invalid principal inertia";
+    }
+    assert(checkedCompileRejected);
+}
+
+void AssertPhysicalInertiaAcceptedByCheckedCompile(const dtDynReal first,
+                                                   const dtDynReal second,
+                                                   const dtDynReal third)
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("valid_physical_inertia_body", 0);
+    spec.EditBody(body, PhysicalInertiaEditor{first, second, third});
+
+    const dtDynModel model = CompileSpecChecked(spec);
+    assert(model.nbody == 2);
+    assert(model.nroot == 1);
+    assert(model.body_mass(body) == 1.0);
+    assert(model.body_inertia[static_cast<std::size_t>(body)](0) == first);
+    assert(model.body_inertia[static_cast<std::size_t>(body)](1) == second);
+    assert(model.body_inertia[static_cast<std::size_t>(body)](2) == third);
 }
 
 void TestSpecValidationPreservesPhysicalInertiaTriangleInequalities()
 {
-    AssertPhysicalInertiaTriangleInequalityFailure(3.0, 1.0, 1.0);
-    AssertPhysicalInertiaTriangleInequalityFailure(1.0, 3.0, 1.0);
-    AssertPhysicalInertiaTriangleInequalityFailure(1.0, 1.0, 3.0);
+    AssertPhysicalInertiaRejectedByCheckedCompile(-1.0, 1.0, 1.0);
+    AssertPhysicalInertiaRejectedByCheckedCompile(1.0, -1.0, 1.0);
+    AssertPhysicalInertiaRejectedByCheckedCompile(1.0, 1.0, -1.0);
 
-    dtDynSpec boundary;
-    const dtDynIndex body = boundary.AddBody("triangle_inequality_boundary", 0);
-    boundary.EditBody(body, PhysicalInertiaEditor{2.0, 1.0, 1.0});
-    dtDynValidationError error;
-    assert(ValidateSpec(boundary, &error));
-    assert(error.code == dtDynValidationCode::None);
+    AssertPhysicalInertiaRejectedByCheckedCompile(3.0, 1.0, 1.0);
+    AssertPhysicalInertiaRejectedByCheckedCompile(1.0, 3.0, 1.0);
+    AssertPhysicalInertiaRejectedByCheckedCompile(1.0, 1.0, 3.0);
+    AssertPhysicalInertiaAcceptedByCheckedCompile(2.0, 1.0, 1.0);
 }
 
 void TestSpecValidationPreservesOrderedPhysicalAndNameFailures()
