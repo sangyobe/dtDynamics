@@ -263,8 +263,9 @@ bool IsUnitVector(const dt::Math::Vector3<dtDynReal> &value)
 
 bool IsUnitQuaternion(const dt::Math::Vector4<dtDynReal> &value)
 {
-    const dtDynReal squaredNorm = value.At(0) * value.At(0) + value.At(1) * value.At(1) +
-                                  value.At(2) * value.At(2) + value.At(3) * value.At(3);
+    const dtDynReal squaredNorm = (((value.At(0) * value.At(0)) + (value.At(1) * value.At(1))) +
+                                   (value.At(2) * value.At(2))) +
+                                  (value.At(3) * value.At(3));
     return NearlyEqualInput(squaredNorm, static_cast<dtDynReal>(1.0));
 }
 
