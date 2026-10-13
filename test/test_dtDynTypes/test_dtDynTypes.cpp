@@ -5683,6 +5683,206 @@ void TestUpdateSpecRejectsLateCompatibilityMetadataMutationsWithoutWriting()
     }
 }
 
+struct P83BodyPhysicalEditor
+{
+    dtDynReal mass = 0.0;
+    dtDynReal positionX = 0.0;
+
+    void operator()(dtDynBodySpec &draft) const
+    {
+        draft.inertial.mass = mass;
+        draft.pos.At(0) = positionX;
+    }
+};
+
+struct P83BodyNameEditor
+{
+    std::string name;
+
+    void operator()(dtDynBodySpec &draft) const
+    {
+        draft.name = name;
+    }
+};
+
+struct P83BodyHierarchyEditor
+{
+    dtDynIndex parent = DTDYN_INVALID_INDEX;
+    dtDynIndex firstChild = DTDYN_INVALID_INDEX;
+    dtDynIndex nextSibling = DTDYN_INVALID_INDEX;
+
+    void operator()(dtDynBodySpec &draft) const
+    {
+        draft.parent = parent;
+        draft.firstChild = firstChild;
+        draft.nextSibling = nextSibling;
+    }
+};
+
+struct P83ReparentableBodyIds
+{
+    dtDynIndex rootA = DTDYN_INVALID_INDEX;
+    dtDynIndex rootB = DTDYN_INVALID_INDEX;
+    dtDynIndex child = DTDYN_INVALID_INDEX;
+};
+
+dtDynSpec MakeP83WorldRootChildSpec(dtDynIndex &root, dtDynIndex &child)
+{
+    dtDynSpec spec;
+    root = spec.AddBody("p83_root", 0);
+    child = spec.AddBody("p83_child", root);
+    spec.EditBody(root, P83BodyPhysicalEditor{1.0, 0.25});
+    spec.EditBody(child, P83BodyPhysicalEditor{2.0, -0.5});
+
+    assert(root == 1);
+    assert(child == 2);
+    assert(spec.Bodies()[0].parent == DTDYN_INVALID_INDEX);
+    assert(spec.Bodies()[static_cast<std::size_t>(root)].parent == 0);
+    assert(spec.Bodies()[static_cast<std::size_t>(child)].parent == root);
+
+    dtDynValidationError error;
+    assert(ValidateSpec(spec, &error));
+    assert(error.code == dtDynValidationCode::None);
+    return spec;
+}
+
+dtDynSpec MakeP83ReparentableSpec(P83ReparentableBodyIds &ids)
+{
+    dtDynSpec spec;
+    ids.rootA = spec.AddBody("p83_root_a", 0);
+    ids.rootB = spec.AddBody("p83_root_b", 0);
+    ids.child = spec.AddBody("p83_child", ids.rootA);
+    spec.EditBody(ids.rootA, P83BodyPhysicalEditor{1.0, 0.25});
+    spec.EditBody(ids.rootB, P83BodyPhysicalEditor{2.0, -0.5});
+    spec.EditBody(ids.child, P83BodyPhysicalEditor{3.0, 0.75});
+
+    assert(ids.rootA == 1);
+    assert(ids.rootB == 2);
+    assert(ids.child == 3);
+    assert(spec.Bodies()[0].firstChild == ids.rootB);
+    assert(spec.Bodies()[static_cast<std::size_t>(ids.rootB)].nextSibling == ids.rootA);
+    assert(spec.Bodies()[static_cast<std::size_t>(ids.rootA)].firstChild == ids.child);
+
+    dtDynValidationError error;
+    assert(ValidateSpec(spec, &error));
+    assert(error.code == dtDynValidationCode::None);
+    const dtDynModel checked = CompileSpecChecked(spec);
+    assert(checked.body_parentid[static_cast<std::size_t>(ids.rootA)] == 0);
+    assert(checked.body_parentid[static_cast<std::size_t>(ids.rootB)] == 0);
+    assert(checked.body_parentid[static_cast<std::size_t>(ids.child)] == ids.rootA);
+    return spec;
+}
+
+void AssertP83PhysicalStateUnchanged(const dtDynModel &actual, const dtDynModel &expected)
+{
+    assert(actual.nbody == expected.nbody);
+    for (dtDynIndex bodyId = 0; bodyId < actual.nbody; ++bodyId)
+    {
+        const std::size_t bodyIndex = static_cast<std::size_t>(bodyId);
+        assert(actual.body_mass(bodyId) == expected.body_mass(bodyId));
+        for (dtDynIndex axis = 0; axis < 3; ++axis)
+        {
+            assert(actual.body_pos[bodyIndex].At(axis) == expected.body_pos[bodyIndex].At(axis));
+            assert(actual.body_ipos[bodyIndex].At(axis) == expected.body_ipos[bodyIndex].At(axis));
+        }
+    }
+    AssertP81DenseVectorUnchanged(actual.body_subtreemass, expected.body_subtreemass);
+    AssertP81DenseVectorUnchanged(actual.root_mass, expected.root_mass);
+}
+
+void AssertP83RejectedUpdateLeavesOldModelUnchanged(
+    const dtDynSpec &incompatible, dtDynModel &model)
+{
+    const dtDynModel expectedModel = model;
+    const P81ModelStoragePointers storageBeforeUpdate = CaptureP81ModelStoragePointers(model);
+    const std::size_t allocationsBeforeUpdate = g_totalTestAllocations;
+    assert(!UpdateSpec(incompatible, model));
+    assert(g_totalTestAllocations == allocationsBeforeUpdate);
+    AssertP81ModelStoragePointersUnchanged(model, storageBeforeUpdate);
+    AssertP81TopologyUnchanged(model, expectedModel);
+    AssertP83PhysicalStateUnchanged(model, expectedModel);
+
+    dtDynValidationError error;
+    assert(ValidateModel(model, &error));
+    assert(error.code == dtDynValidationCode::None);
+}
+
+void TestUpdateSpecP83UpdatesWorldRootChildPhysicalModel()
+{
+    dtDynIndex root = DTDYN_INVALID_INDEX;
+    dtDynIndex child = DTDYN_INVALID_INDEX;
+    const dtDynSpec original = MakeP83WorldRootChildSpec(root, child);
+    dtDynModel model = CompileSpecChecked(original);
+    assert(model.nbody == 3);
+    assert(model.body_parentid[0] == 0);
+    assert(model.body_parentid[static_cast<std::size_t>(root)] == 0);
+    assert(model.body_parentid[static_cast<std::size_t>(child)] == root);
+
+    dtDynSpec updated = original;
+    updated.EditBody(root, P83BodyPhysicalEditor{4.0, -1.25});
+    updated.EditBody(child, P83BodyPhysicalEditor{5.0, 1.5});
+    dtDynValidationError error;
+    assert(ValidateSpec(updated, &error));
+    assert(error.code == dtDynValidationCode::None);
+    const dtDynModel expected = CompileSpecChecked(updated);
+
+    const P81ModelStoragePointers storageBeforeUpdate = CaptureP81ModelStoragePointers(model);
+    const std::size_t allocationsBeforeUpdate = g_totalTestAllocations;
+    assert(UpdateSpec(updated, model));
+    assert(g_totalTestAllocations == allocationsBeforeUpdate);
+    AssertP81ModelStoragePointersUnchanged(model, storageBeforeUpdate);
+    AssertP81TopologyUnchanged(model, expected);
+    AssertP83PhysicalStateUnchanged(model, expected);
+    assert(IsDtMathNear(model.body_mass(root), 4.0));
+    assert(IsDtMathNear(model.body_mass(child), 5.0));
+    assert(IsDtMathNear(model.root_mass(0), expected.root_mass(0)));
+    assert(ValidateModel(model, &error));
+    assert(error.code == dtDynValidationCode::None);
+}
+
+void TestUpdateSpecP83RejectsValidBodyNameAndParentChangesWithoutWriting()
+{
+    P83ReparentableBodyIds ids;
+    const dtDynSpec original = MakeP83ReparentableSpec(ids);
+
+    dtDynSpec renamed = original;
+    renamed.EditBody(ids.rootA, P83BodyPhysicalEditor{7.0, -1.0});
+    renamed.EditBody(ids.child, P83BodyPhysicalEditor{8.0, 2.0});
+    renamed.EditBody(ids.child, P83BodyNameEditor{"p83_child_renamed"});
+    dtDynValidationError error;
+    assert(ValidateSpec(renamed, &error));
+    assert(error.code == dtDynValidationCode::None);
+    const dtDynModel renamedRecompile = CompileSpecChecked(renamed);
+    assert(renamedRecompile.BodyId("p83_child") == DTDYN_INVALID_INDEX);
+    assert(renamedRecompile.BodyId("p83_child_renamed") == ids.child);
+    assert(renamedRecompile.body_parentid[static_cast<std::size_t>(ids.child)] == ids.rootA);
+
+    dtDynModel nameOldModel = CompileSpecChecked(original);
+    AssertP83RejectedUpdateLeavesOldModelUnchanged(renamed, nameOldModel);
+
+    dtDynSpec reparented = original;
+    reparented.EditBody(ids.rootA,
+                        P83BodyHierarchyEditor{0, DTDYN_INVALID_INDEX, DTDYN_INVALID_INDEX});
+    reparented.EditBody(ids.rootB, P83BodyHierarchyEditor{0, ids.child, ids.rootA});
+    reparented.EditBody(ids.child,
+                        P83BodyHierarchyEditor{ids.rootB, DTDYN_INVALID_INDEX,
+                                               DTDYN_INVALID_INDEX});
+    reparented.EditBody(ids.rootA, P83BodyPhysicalEditor{11.0, -1.25});
+    reparented.EditBody(ids.child, P83BodyPhysicalEditor{13.0, 1.5});
+    assert(reparented.Bodies()[static_cast<std::size_t>(ids.rootA)].firstChild ==
+           DTDYN_INVALID_INDEX);
+    assert(reparented.Bodies()[static_cast<std::size_t>(ids.rootB)].firstChild == ids.child);
+    assert(reparented.Bodies()[static_cast<std::size_t>(ids.child)].parent == ids.rootB);
+    assert(ValidateSpec(reparented, &error));
+    assert(error.code == dtDynValidationCode::None);
+    const dtDynModel reparentedRecompile = CompileSpecChecked(reparented);
+    assert(reparentedRecompile.body_parentid[static_cast<std::size_t>(ids.child)] == ids.rootB);
+    assert(reparentedRecompile.body_rootid[static_cast<std::size_t>(ids.child)] == ids.rootB);
+
+    dtDynModel parentOldModel = CompileSpecChecked(original);
+    AssertP83RejectedUpdateLeavesOldModelUnchanged(reparented, parentOldModel);
+}
+
 void TestUpdateSpecMatchesPhysicalRecompile()
 {
     dtDynSpec original;
@@ -9358,6 +9558,8 @@ int main()
     TestUpdateSpecRejectsEarlyStorageMismatchWithoutWriting();
     TestUpdateSpecRejectsLateStorageMismatchWithoutWriting();
     TestUpdateSpecRejectsLateCompatibilityMetadataMutationsWithoutWriting();
+    TestUpdateSpecP83UpdatesWorldRootChildPhysicalModel();
+    TestUpdateSpecP83RejectsValidBodyNameAndParentChangesWithoutWriting();
     TestUpdateSpecMatchesPhysicalRecompile();
     TestUpdateSpecRefreshesMultiRootMultiDofCaches();
     TestDtMathDynamicResizeHelpers();

@@ -285,9 +285,9 @@ bool UpdateSpec(const dtDynSpec &spec, dtDynModel &model) noexcept
     {
         const std::size_t bodyIndex = static_cast<std::size_t>(bodyId);
         const dtDynBodySpec &body = bodies[bodyIndex];
-        const dtDynIndex expectedParent = bodyId == 0 ? 0 : body.parent;
-        if (model.body_names[bodyIndex] != body.name ||
-            model.body_parentid[bodyIndex] != expectedParent ||
+        const dtDynIndex expectedParent = (bodyId == 0) ? 0 : body.parent;
+        if ((model.body_names[bodyIndex] != body.name) ||
+            (model.body_parentid[bodyIndex] != expectedParent) ||
             (bodyId == 0 && body.parent != DTDYN_INVALID_INDEX) ||
             (bodyId > 0 && (body.parent < 0 || body.parent >= bodyId)) ||
             body.joints.size() > static_cast<std::size_t>(model.njnt))
