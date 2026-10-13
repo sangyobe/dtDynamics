@@ -505,7 +505,7 @@ bool ValidateSpec(const dtDynSpec &spec, dtDynValidationError *error)
         for (std::size_t localIndex = 0; localIndex < body.joints.size(); ++localIndex)
         {
             const dtDynIndex jointId = body.joints[localIndex];
-            if (jointId < 0 || static_cast<std::size_t>(jointId) >= joints.size())
+            if ((jointId < 0) || (static_cast<std::size_t>(jointId) >= joints.size()))
             {
                 return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body,
                             bodyId, "body[" + std::to_string(bodyId) + "] contains invalid joint " + std::to_string(jointId));
@@ -520,7 +520,7 @@ bool ValidateSpec(const dtDynSpec &spec, dtDynValidationError *error)
         for (std::size_t localIndex = 0; localIndex < body.sites.size(); ++localIndex)
         {
             const dtDynIndex siteId = body.sites[localIndex];
-            if (siteId < 0 || static_cast<std::size_t>(siteId) >= sites.size())
+            if ((siteId < 0) || (static_cast<std::size_t>(siteId) >= sites.size()))
             {
                 return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body,
                             bodyId, "body[" + std::to_string(bodyId) + "] contains invalid site " + std::to_string(siteId));
@@ -649,7 +649,8 @@ bool ValidateSpec(const dtDynSpec &spec, dtDynValidationError *error)
             return Fail(error, dtDynValidationCode::NonFiniteValue, dtDynObjectType::Actuator,
                         actuatorId, "actuator[" + std::to_string(actuatorId) + "] contains a non-finite value");
         }
-        if (actuator.joint < 0 || static_cast<std::size_t>(actuator.joint) >= joints.size())
+        if ((actuator.joint < 0) ||
+            (static_cast<std::size_t>(actuator.joint) >= joints.size()))
         {
             return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Actuator,
                         actuatorId, "actuator[" + std::to_string(actuatorId) + "] '" + actuator.name + "' references invalid joint " + std::to_string(actuator.joint));

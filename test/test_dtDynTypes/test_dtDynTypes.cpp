@@ -820,6 +820,99 @@ void AssertSpecValidationFailure(const dtDynSpec &spec,
     assert(error.message == message);
 }
 
+struct BodyJointReferenceEditor
+{
+    dtDynIndex reference;
+
+    void operator()(dtDynBodySpec &draft) const
+    {
+        draft.joints[0] = reference;
+    }
+};
+
+struct BodySiteReferenceEditor
+{
+    dtDynIndex reference;
+
+    void operator()(dtDynBodySpec &draft) const
+    {
+        draft.sites[0] = reference;
+    }
+};
+
+struct ActuatorJointReferenceEditor
+{
+    dtDynIndex reference;
+
+    void operator()(dtDynActuatorSpec &draft) const
+    {
+        draft.joint = reference;
+    }
+};
+
+void TestSpecValidationPreservesSignedReferenceBounds()
+{
+    {
+        dtDynSpec spec;
+        const dtDynIndex body = spec.AddBody("joint_body", 0);
+        spec.AddJoint(body, "joint", dtDynJointType::Hinge);
+        spec.EditBody(body, BodyJointReferenceEditor{DTDYN_INVALID_INDEX});
+        AssertSpecValidationFailure(spec, dtDynValidationCode::InvalidReference,
+                                    dtDynObjectType::Body, body,
+                                    "body[1] contains invalid joint -1");
+    }
+    {
+        dtDynSpec spec;
+        const dtDynIndex body = spec.AddBody("joint_body", 0);
+        spec.AddJoint(body, "joint", dtDynJointType::Hinge);
+        const dtDynIndex onePastEnd = static_cast<dtDynIndex>(spec.Joints().size());
+        spec.EditBody(body, BodyJointReferenceEditor{onePastEnd});
+        AssertSpecValidationFailure(spec, dtDynValidationCode::InvalidReference,
+                                    dtDynObjectType::Body, body,
+                                    "body[1] contains invalid joint 1");
+    }
+    {
+        dtDynSpec spec;
+        const dtDynIndex body = spec.AddBody("site_body", 0);
+        spec.AddSite(body, "site");
+        spec.EditBody(body, BodySiteReferenceEditor{DTDYN_INVALID_INDEX});
+        AssertSpecValidationFailure(spec, dtDynValidationCode::InvalidReference,
+                                    dtDynObjectType::Body, body,
+                                    "body[1] contains invalid site -1");
+    }
+    {
+        dtDynSpec spec;
+        const dtDynIndex body = spec.AddBody("site_body", 0);
+        spec.AddSite(body, "site");
+        const dtDynIndex onePastEnd = static_cast<dtDynIndex>(spec.Sites().size());
+        spec.EditBody(body, BodySiteReferenceEditor{onePastEnd});
+        AssertSpecValidationFailure(spec, dtDynValidationCode::InvalidReference,
+                                    dtDynObjectType::Body, body,
+                                    "body[1] contains invalid site 1");
+    }
+    {
+        dtDynSpec spec;
+        const dtDynIndex body = spec.AddBody("actuator_body", 0);
+        const dtDynIndex joint = spec.AddJoint(body, "joint", dtDynJointType::Hinge);
+        const dtDynIndex actuator = spec.AddActuator(joint, "motor");
+        spec.EditActuator(actuator, ActuatorJointReferenceEditor{DTDYN_INVALID_INDEX});
+        AssertSpecValidationFailure(spec, dtDynValidationCode::InvalidReference,
+                                    dtDynObjectType::Actuator, actuator,
+                                    "actuator[0] 'motor' references invalid joint -1");
+    }
+    {
+        dtDynSpec spec;
+        const dtDynIndex body = spec.AddBody("actuator_body", 0);
+        const dtDynIndex joint = spec.AddJoint(body, "joint", dtDynJointType::Hinge);
+        const dtDynIndex actuator = spec.AddActuator(joint, "motor");
+        const dtDynIndex onePastEnd = static_cast<dtDynIndex>(spec.Joints().size());
+        spec.EditActuator(actuator, ActuatorJointReferenceEditor{onePastEnd});
+        AssertSpecValidationFailure(spec, dtDynValidationCode::InvalidReference,
+                                    dtDynObjectType::Actuator, actuator,
+                                    "actuator[0] 'motor' references invalid joint 1");
+    }
+}
+
 struct PhysicalInertiaEditor
 {
     dtDynReal first;
@@ -6297,6 +6390,7 @@ int main()
     TestSpecValidationRejectsDetachedSite();
     TestSpecValidationRejectsInvalidActuatorReference();
     TestSpecValidationRejectsInvalidBodyJointReference();
+    TestSpecValidationPreservesSignedReferenceBounds();
     TestSpecValidationRejectsDuplicateNames();
     TestSpecValidationRejectsDuplicateEmptyNames();
     TestSpecValidationRejectsNonFiniteValues();
