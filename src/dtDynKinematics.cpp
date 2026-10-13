@@ -250,10 +250,10 @@ void ComputePointJacobianTermsImpl(const dtDynModel &model,
         angularJdotQvel->SetZero();
     }
 
-    const bool needJacobian = jacp != nullptr || jacr != nullptr;
+    const bool needJacobian = (jacp != nullptr) || (jacr != nullptr);
     const bool needDerivative =
-        jacpDot != nullptr || jacrDot != nullptr ||
-        linearJdotQvel != nullptr || angularJdotQvel != nullptr;
+        (jacpDot != nullptr) || (jacrDot != nullptr) ||
+        (linearJdotQvel != nullptr) || (angularJdotQvel != nullptr);
 
     PointJacobianDotContext dotContext;
     if (needDerivative)

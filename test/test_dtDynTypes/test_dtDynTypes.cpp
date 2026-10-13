@@ -6500,6 +6500,352 @@ void TestPointJacobianDotMatchesFiniteDifferenceForMaterialSite()
     }
 }
 
+constexpr dtDynReal kP51PointJacobianSentinel = -1234.5;
+
+void ConfigureP51PointJacobianFirstBody(dtDynBodySpec &draft)
+{
+    draft.pos.At(0) = 0.3;
+    draft.pos.At(1) = -0.4;
+    draft.pos.At(2) = 0.2;
+    draft.inertial.mass = 1.0;
+    draft.inertial.pos.At(0) = 0.15;
+    draft.inertial.pos.At(1) = -0.1;
+    draft.inertial.pos.At(2) = 0.2;
+    draft.inertial.inertia.At(0) = 0.2;
+    draft.inertial.inertia.At(1) = 0.25;
+    draft.inertial.inertia.At(2) = 0.3;
+}
+
+void ConfigureP51PointJacobianSecondBody(dtDynBodySpec &draft)
+{
+    draft.pos.At(0) = 1.0;
+    draft.pos.At(1) = 0.5;
+    draft.pos.At(2) = -0.3;
+    draft.inertial.mass = 0.75;
+    draft.inertial.pos.At(0) = 0.2;
+    draft.inertial.pos.At(1) = 0.3;
+    draft.inertial.pos.At(2) = -0.1;
+    draft.inertial.inertia.At(0) = 0.15;
+    draft.inertial.inertia.At(1) = 0.2;
+    draft.inertial.inertia.At(2) = 0.25;
+}
+
+void ConfigureP51PointJacobianSite(dtDynSiteSpec &draft)
+{
+    draft.pos.At(0) = 0.4;
+    draft.pos.At(1) = -0.2;
+    draft.pos.At(2) = 0.6;
+}
+
+void ConfigureP51PointJacobianFirstJoint(dtDynJointSpec &draft)
+{
+    draft.axis.SetZero();
+    draft.axis.At(2) = 1.0;
+}
+
+void ConfigureP51PointJacobianSecondJoint(dtDynJointSpec &draft)
+{
+    draft.axis.SetZero();
+    draft.axis.At(1) = 1.0;
+}
+
+void FillP51PointJacobianMatrixWithSentinel(dtDynDenseMatrix &matrix, const dtDynIndex nv)
+{
+    EnsureDenseMatrixSize(matrix, 3, nv);
+    matrix.SetFill(kP51PointJacobianSentinel);
+}
+
+void FillP51PointJacobianOutputsWithSentinel(
+    dtDynDenseMatrix &jacp,
+    dtDynDenseMatrix &jacr,
+    dtDynDenseMatrix &jacpDot,
+    dtDynDenseMatrix &jacrDot,
+    dt::Math::Vector3<dtDynReal> &linearJdotQvel,
+    dt::Math::Vector3<dtDynReal> &angularJdotQvel,
+    const dtDynIndex nv)
+{
+    FillP51PointJacobianMatrixWithSentinel(jacp, nv);
+    FillP51PointJacobianMatrixWithSentinel(jacr, nv);
+    FillP51PointJacobianMatrixWithSentinel(jacpDot, nv);
+    FillP51PointJacobianMatrixWithSentinel(jacrDot, nv);
+    linearJdotQvel.SetFill(kP51PointJacobianSentinel);
+    angularJdotQvel.SetFill(kP51PointJacobianSentinel);
+}
+
+void AssertP51PointJacobianMatrixMatches(const dtDynDenseMatrix &actual,
+                                         const dtDynDenseMatrix &expected,
+                                         const dtDynIndex nv)
+{
+    assert(actual.GetRowSize() == 3U);
+    assert(actual.GetColSize() == ToDtMathDim(nv));
+    assert(expected.GetRowSize() == 3U);
+    assert(expected.GetColSize() == ToDtMathDim(nv));
+    for (dtDynIndex row = 0; row < 3; ++row)
+    {
+        for (dtDynIndex column = 0; column < nv; ++column)
+        {
+            assert(std::fabs(actual.At(row, column) - expected.At(row, column)) < 1.0e-12);
+        }
+    }
+}
+
+void AssertP51PointJacobianMatrixIsSentinel(const dtDynDenseMatrix &matrix,
+                                            const dtDynIndex nv)
+{
+    assert(matrix.GetRowSize() == 3U);
+    assert(matrix.GetColSize() == ToDtMathDim(nv));
+    for (dtDynIndex row = 0; row < 3; ++row)
+    {
+        for (dtDynIndex column = 0; column < nv; ++column)
+        {
+            assert(std::fabs(matrix.At(row, column) - kP51PointJacobianSentinel) < 1.0e-12);
+        }
+    }
+}
+
+void AssertP51PointJacobianVectorMatches(const dt::Math::Vector3<dtDynReal> &actual,
+                                         const dt::Math::Vector3<dtDynReal> &expected)
+{
+    for (dtDynIndex row = 0; row < 3; ++row)
+    {
+        assert(std::fabs(actual.At(row) - expected.At(row)) < 1.0e-12);
+    }
+}
+
+void AssertP51PointJacobianVectorIsSentinel(const dt::Math::Vector3<dtDynReal> &vector)
+{
+    for (dtDynIndex row = 0; row < 3; ++row)
+    {
+        assert(std::fabs(vector.At(row) - kP51PointJacobianSentinel) < 1.0e-12);
+    }
+}
+
+void TestPointJacobianTermsSelectsEachOutputFamily()
+{
+    dtDynSpec spec;
+    const dtDynIndex link1 = spec.AddBody("p51_link1", 0);
+    const dtDynIndex link2 = spec.AddBody("p51_link2", link1);
+    const dtDynIndex tool = spec.AddSite(link2, "p51_tool");
+    spec.EditBody(link1, ConfigureP51PointJacobianFirstBody);
+    spec.EditBody(link2, ConfigureP51PointJacobianSecondBody);
+    spec.EditSite(tool, ConfigureP51PointJacobianSite);
+    const dtDynIndex joint1 = spec.AddJoint(link1, "p51_joint1", dtDynJointType::Hinge);
+    const dtDynIndex joint2 = spec.AddJoint(link2, "p51_joint2", dtDynJointType::Hinge);
+    spec.EditJoint(joint1, ConfigureP51PointJacobianFirstJoint);
+    spec.EditJoint(joint2, ConfigureP51PointJacobianSecondJoint);
+
+    const dtDynModel model = CompileSpecChecked(spec);
+    assert(model.nv == 2);
+
+    dtDynData data;
+    data.Resize(model);
+    data.qpos.At(0) = 0.35;
+    data.qpos.At(1) = -0.45;
+    data.qvel.At(0) = 1.1;
+    data.qvel.At(1) = -0.7;
+    dt::Math::Vector3<dtDynReal> gravity;
+    gravity.SetZero();
+    ComputeDynamicsCCRBA(model, data, gravity, DTDYN_CCRBA_TERM_ALL);
+
+    const dt::Math::Vector3<dtDynReal> &point = data.site_xpos[tool];
+    dtDynDenseMatrix expectedJacp;
+    dtDynDenseMatrix expectedJacr;
+    dtDynDenseMatrix expectedJacpDot;
+    dtDynDenseMatrix expectedJacrDot;
+    dt::Math::Vector3<dtDynReal> expectedLinearJdotQvel;
+    dt::Math::Vector3<dtDynReal> expectedAngularJdotQvel;
+    ComputePointJacobian(model, data, link2, point, expectedJacp, expectedJacr);
+    ComputePointJacobianDot(model, data, link2, point, expectedJacpDot, expectedJacrDot);
+    ComputePointJacobianDotTimesVelocity(model,
+                                         data,
+                                         link2,
+                                         point,
+                                         expectedLinearJdotQvel,
+                                         expectedAngularJdotQvel);
+
+    assert(std::fabs(expectedJacp.At(0, 0)) > 1.0e-12);
+    assert(std::fabs(expectedJacr.At(2, 0)) > 1.0e-12);
+    assert(std::fabs(expectedJacpDot.At(0, 0)) > 1.0e-12);
+    assert(std::fabs(expectedJacrDot.At(0, 1)) > 1.0e-12);
+    assert(std::fabs(expectedLinearJdotQvel.At(0)) > 1.0e-12);
+    assert(std::fabs(expectedAngularJdotQvel.At(0)) > 1.0e-12);
+
+    dtDynDenseMatrix jacp;
+    dtDynDenseMatrix jacr;
+    dtDynDenseMatrix jacpDot;
+    dtDynDenseMatrix jacrDot;
+    dt::Math::Vector3<dtDynReal> linearJdotQvel;
+    dt::Math::Vector3<dtDynReal> angularJdotQvel;
+
+    FillP51PointJacobianOutputsWithSentinel(jacp,
+                                            jacr,
+                                            jacpDot,
+                                            jacrDot,
+                                            linearJdotQvel,
+                                            angularJdotQvel,
+                                            model.nv);
+    ComputePointJacobianTerms(model,
+                              data,
+                              link2,
+                              point,
+                              &jacp,
+                              nullptr,
+                              nullptr,
+                              nullptr,
+                              nullptr,
+                              nullptr);
+    AssertP51PointJacobianMatrixMatches(jacp, expectedJacp, model.nv);
+    AssertP51PointJacobianMatrixIsSentinel(jacr, model.nv);
+    AssertP51PointJacobianMatrixIsSentinel(jacpDot, model.nv);
+    AssertP51PointJacobianMatrixIsSentinel(jacrDot, model.nv);
+    AssertP51PointJacobianVectorIsSentinel(linearJdotQvel);
+    AssertP51PointJacobianVectorIsSentinel(angularJdotQvel);
+
+    FillP51PointJacobianOutputsWithSentinel(jacp,
+                                            jacr,
+                                            jacpDot,
+                                            jacrDot,
+                                            linearJdotQvel,
+                                            angularJdotQvel,
+                                            model.nv);
+    ComputePointJacobianTerms(model,
+                              data,
+                              link2,
+                              point,
+                              nullptr,
+                              &jacr,
+                              nullptr,
+                              nullptr,
+                              nullptr,
+                              nullptr);
+    AssertP51PointJacobianMatrixIsSentinel(jacp, model.nv);
+    AssertP51PointJacobianMatrixMatches(jacr, expectedJacr, model.nv);
+    AssertP51PointJacobianMatrixIsSentinel(jacpDot, model.nv);
+    AssertP51PointJacobianMatrixIsSentinel(jacrDot, model.nv);
+    AssertP51PointJacobianVectorIsSentinel(linearJdotQvel);
+    AssertP51PointJacobianVectorIsSentinel(angularJdotQvel);
+
+    FillP51PointJacobianOutputsWithSentinel(jacp,
+                                            jacr,
+                                            jacpDot,
+                                            jacrDot,
+                                            linearJdotQvel,
+                                            angularJdotQvel,
+                                            model.nv);
+    ComputePointJacobianTerms(model,
+                              data,
+                              link2,
+                              point,
+                              nullptr,
+                              nullptr,
+                              &jacpDot,
+                              nullptr,
+                              nullptr,
+                              nullptr);
+    AssertP51PointJacobianMatrixIsSentinel(jacp, model.nv);
+    AssertP51PointJacobianMatrixIsSentinel(jacr, model.nv);
+    AssertP51PointJacobianMatrixMatches(jacpDot, expectedJacpDot, model.nv);
+    AssertP51PointJacobianMatrixIsSentinel(jacrDot, model.nv);
+    AssertP51PointJacobianVectorIsSentinel(linearJdotQvel);
+    AssertP51PointJacobianVectorIsSentinel(angularJdotQvel);
+
+    FillP51PointJacobianOutputsWithSentinel(jacp,
+                                            jacr,
+                                            jacpDot,
+                                            jacrDot,
+                                            linearJdotQvel,
+                                            angularJdotQvel,
+                                            model.nv);
+    ComputePointJacobianTerms(model,
+                              data,
+                              link2,
+                              point,
+                              nullptr,
+                              nullptr,
+                              nullptr,
+                              &jacrDot,
+                              nullptr,
+                              nullptr);
+    AssertP51PointJacobianMatrixIsSentinel(jacp, model.nv);
+    AssertP51PointJacobianMatrixIsSentinel(jacr, model.nv);
+    AssertP51PointJacobianMatrixIsSentinel(jacpDot, model.nv);
+    AssertP51PointJacobianMatrixMatches(jacrDot, expectedJacrDot, model.nv);
+    AssertP51PointJacobianVectorIsSentinel(linearJdotQvel);
+    AssertP51PointJacobianVectorIsSentinel(angularJdotQvel);
+
+    FillP51PointJacobianOutputsWithSentinel(jacp,
+                                            jacr,
+                                            jacpDot,
+                                            jacrDot,
+                                            linearJdotQvel,
+                                            angularJdotQvel,
+                                            model.nv);
+    ComputePointJacobianTerms(model,
+                              data,
+                              link2,
+                              point,
+                              nullptr,
+                              nullptr,
+                              nullptr,
+                              nullptr,
+                              &linearJdotQvel,
+                              nullptr);
+    AssertP51PointJacobianMatrixIsSentinel(jacp, model.nv);
+    AssertP51PointJacobianMatrixIsSentinel(jacr, model.nv);
+    AssertP51PointJacobianMatrixIsSentinel(jacpDot, model.nv);
+    AssertP51PointJacobianMatrixIsSentinel(jacrDot, model.nv);
+    AssertP51PointJacobianVectorMatches(linearJdotQvel, expectedLinearJdotQvel);
+    AssertP51PointJacobianVectorIsSentinel(angularJdotQvel);
+
+    FillP51PointJacobianOutputsWithSentinel(jacp,
+                                            jacr,
+                                            jacpDot,
+                                            jacrDot,
+                                            linearJdotQvel,
+                                            angularJdotQvel,
+                                            model.nv);
+    ComputePointJacobianTerms(model,
+                              data,
+                              link2,
+                              point,
+                              nullptr,
+                              nullptr,
+                              nullptr,
+                              nullptr,
+                              nullptr,
+                              &angularJdotQvel);
+    AssertP51PointJacobianMatrixIsSentinel(jacp, model.nv);
+    AssertP51PointJacobianMatrixIsSentinel(jacr, model.nv);
+    AssertP51PointJacobianMatrixIsSentinel(jacpDot, model.nv);
+    AssertP51PointJacobianMatrixIsSentinel(jacrDot, model.nv);
+    AssertP51PointJacobianVectorIsSentinel(linearJdotQvel);
+    AssertP51PointJacobianVectorMatches(angularJdotQvel, expectedAngularJdotQvel);
+
+    FillP51PointJacobianOutputsWithSentinel(jacp,
+                                            jacr,
+                                            jacpDot,
+                                            jacrDot,
+                                            linearJdotQvel,
+                                            angularJdotQvel,
+                                            model.nv);
+    ComputePointJacobianTerms(model,
+                              data,
+                              link2,
+                              point,
+                              &jacp,
+                              &jacr,
+                              &jacpDot,
+                              &jacrDot,
+                              &linearJdotQvel,
+                              &angularJdotQvel);
+    AssertP51PointJacobianMatrixMatches(jacp, expectedJacp, model.nv);
+    AssertP51PointJacobianMatrixMatches(jacr, expectedJacr, model.nv);
+    AssertP51PointJacobianMatrixMatches(jacpDot, expectedJacpDot, model.nv);
+    AssertP51PointJacobianMatrixMatches(jacrDot, expectedJacrDot, model.nv);
+    AssertP51PointJacobianVectorMatches(linearJdotQvel, expectedLinearJdotQvel);
+    AssertP51PointJacobianVectorMatches(angularJdotQvel, expectedAngularJdotQvel);
+}
+
 void TestPointJacobianTermsMatchesSeparateAPIs()
 {
     dtDynSpec spec;
@@ -7552,6 +7898,7 @@ int main()
     TestIndexedJacobiansOnlyRefreshRequestedIds();
     TestIndexedJacobiansRefreshFloatingBaseBodyAndTaskSite();
     TestPointJacobianDotMatchesFiniteDifferenceForMaterialSite();
+    TestPointJacobianTermsSelectsEachOutputFamily();
     TestPointJacobianTermsMatchesSeparateAPIs();
     TestBodyAndSiteJacobianTermsMatchSeparateAPIs();
     TestMassMatrixGravityAndSubtreeComForSingleHinge();
