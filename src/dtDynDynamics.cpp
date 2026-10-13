@@ -343,9 +343,9 @@ void FillBodySpatialInertiaAtRootCom(const dtDynModel &model,
     {
         for (dtDynIndex col = 0; col < 3; ++col)
         {
-            const dtDynReal rotInertia = (rot.At(row, 0) * diag.At(0)) * rot.At(col, 0) +
-                                         (rot.At(row, 1) * diag.At(1)) * rot.At(col, 1) +
-                                         (rot.At(row, 2) * diag.At(2)) * rot.At(col, 2);
+            const dtDynReal rotInertia = ((rot.At(row, 0) * diag.At(0)) * rot.At(col, 0)) +
+                                         ((rot.At(row, 1) * diag.At(1)) * rot.At(col, 1)) +
+                                         ((rot.At(row, 2) * diag.At(2)) * rot.At(col, 2));
 
             dtDynReal skew = 0.0;
             if ((row == 0) && (col == 1))
@@ -376,7 +376,7 @@ void FillBodySpatialInertiaAtRootCom(const dtDynModel &model,
             out.At(row, col) =
                 rotInertia +
                 ((row == col) ? (mass * c2sum) : 0.0) -
-                (mass * c[row]) * c[col];
+                ((mass * c[row]) * c[col]);
             out.At(row, col + 3) = mass * skew;
             out.At(row + 3, col) = -mass * skew;
             out.At(row + 3, col + 3) = (row == col) ? mass : 0.0;
