@@ -697,9 +697,9 @@ void CompileSpec(const dtDynSpec &spec, dtDynModel &model)
 
         const dtDynIndex parent = body.parent;
         model.body_rootid[static_cast<std::size_t>(bodyId)] =
-            parent > 0 ? model.body_rootid[static_cast<std::size_t>(parent)] : bodyId;
+            (parent > 0) ? model.body_rootid[static_cast<std::size_t>(parent)] : bodyId;
         model.body_weldid[static_cast<std::size_t>(bodyId)] =
-            parent > 0 ? model.body_weldid[static_cast<std::size_t>(parent)] : 0;
+            (parent > 0) ? model.body_weldid[static_cast<std::size_t>(parent)] : 0;
 
         if (!body.joints.empty())
         {
