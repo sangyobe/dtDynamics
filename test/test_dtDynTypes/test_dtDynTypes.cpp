@@ -5701,6 +5701,8 @@ void TestCcrbaHalfSymmetricMotionCrossColumn2UsesPhysicalNonzeroTerms()
     assert(model.nbody == 3);
     assert(model.nroot == 1);
     assert(model.root_bodyid[0] == root);
+    assert(model.body_parentid[static_cast<std::size_t>(root)] == 0);
+    assert(model.body_parentid[static_cast<std::size_t>(child)] == root);
     assert(model.nv == 6);
     assert(IsDtMathNear(model.root_mass.At(0), 5.0));
     for (dtDynIndex dofId = 0; dofId < model.nv; ++dofId)
@@ -5818,7 +5820,31 @@ void TestCcrbaHalfSymmetricMotionCrossColumn2UsesPhysicalNonzeroTerms()
     }
     AssertSpatialMatrixNearForHalfSymmetricMotionCrossColumn2(
         data.BmatComp[static_cast<std::size_t>(root)], expectedCompositeBias);
+    assert(data.BmatCompNonzero[0] == 1);
+    AssertSpatialMatrixNearForHalfSymmetricMotionCrossColumn2(data.BmatComp[0],
+                                                              expectedCompositeBias);
     AssertCcrbaBiasOutputsForHalfSymmetricMotionCrossColumn2(model, data, expectedCompositeBias);
+
+    data.qvel.SetZero();
+    ComputeDynamicsCCRBA(model, data, gravity, DTDYN_CCRBA_TERM_ALL);
+    assert(data.BmatCompNonzero[0] == 0);
+    assert(data.BmatCompNonzero[static_cast<std::size_t>(root)] == 0);
+    assert(data.BmatCompNonzero[static_cast<std::size_t>(child)] == 0);
+    for (dtDynIndex dofId = 0; dofId < model.nv; ++dofId)
+    {
+        for (dtDynIndex row = 0; row < 6; ++row)
+        {
+            assert(IsDtMathNear(data.f1[static_cast<std::size_t>(dofId)].At(row), 0.0));
+            assert(IsDtMathNear(data.f3[static_cast<std::size_t>(dofId)].At(row), 0.0));
+        }
+    }
+    for (dtDynIndex row = 0; row < model.nv; ++row)
+    {
+        for (dtDynIndex col = 0; col < model.nv; ++col)
+        {
+            assert(IsDtMathNear(data.Cmat.At(row, col), 0.0));
+        }
+    }
 }
 
 void ConfigureSpatialMulIntoAllComponentRoot(dtDynBodySpec &draft)

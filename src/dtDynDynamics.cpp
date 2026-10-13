@@ -701,7 +701,8 @@ void AccumulateCompositeBiasMatrices(const dtDynModel &model, dtDynData &data)
     for (dtDynIndex bodyId = model.nbody - 1; bodyId > 0; --bodyId)
     {
         const dtDynIndex parent = model.body_parentid[static_cast<std::size_t>(bodyId)];
-        if (parent >= 0 && data.BmatCompNonzero[static_cast<std::size_t>(bodyId)] != 0)
+        if ((parent >= 0) &&
+            (data.BmatCompNonzero[static_cast<std::size_t>(bodyId)] != 0))
         {
             const std::size_t parentIdx = static_cast<std::size_t>(parent);
             if (data.BmatCompNonzero[parentIdx] != 0)
