@@ -5210,6 +5210,66 @@ void AssertP81DenseVectorUnchanged(const dtDynDenseVector &actual,
     }
 }
 
+void AssertP81Vector3Unchanged(const dt::Math::Vector3<dtDynReal> &actual,
+                               const dt::Math::Vector3<dtDynReal> &expected)
+{
+    for (dtDynIndex axis = 0; axis < 3; ++axis)
+    {
+        assert(actual.At(axis) == expected.At(axis));
+    }
+}
+
+void AssertP81Vector4Unchanged(const dt::Math::Vector4<dtDynReal> &actual,
+                               const dt::Math::Vector4<dtDynReal> &expected)
+{
+    for (dtDynIndex component = 0; component < 4; ++component)
+    {
+        assert(actual.At(component) == expected.At(component));
+    }
+}
+
+void AssertP81Matrix3Unchanged(const dt::Math::Matrix3<dtDynReal> &actual,
+                               const dt::Math::Matrix3<dtDynReal> &expected)
+{
+    for (dtDynIndex row = 0; row < 3; ++row)
+    {
+        for (dtDynIndex column = 0; column < 3; ++column)
+        {
+            assert(actual.At(row, column) == expected.At(row, column));
+        }
+    }
+}
+
+void AssertP81Vector3ArrayUnchanged(const dtArray<dt::Math::Vector3<dtDynReal>> &actual,
+                                    const dtArray<dt::Math::Vector3<dtDynReal>> &expected)
+{
+    assert(actual.size() == expected.size());
+    for (std::size_t index = 0; index < actual.size(); ++index)
+    {
+        AssertP81Vector3Unchanged(actual[index], expected[index]);
+    }
+}
+
+void AssertP81Vector4ArrayUnchanged(const dtArray<dt::Math::Vector4<dtDynReal>> &actual,
+                                    const dtArray<dt::Math::Vector4<dtDynReal>> &expected)
+{
+    assert(actual.size() == expected.size());
+    for (std::size_t index = 0; index < actual.size(); ++index)
+    {
+        AssertP81Vector4Unchanged(actual[index], expected[index]);
+    }
+}
+
+void AssertP81Matrix3ArrayUnchanged(const dtArray<dt::Math::Matrix3<dtDynReal>> &actual,
+                                    const dtArray<dt::Math::Matrix3<dtDynReal>> &expected)
+{
+    assert(actual.size() == expected.size());
+    for (std::size_t index = 0; index < actual.size(); ++index)
+    {
+        AssertP81Matrix3Unchanged(actual[index], expected[index]);
+    }
+}
+
 void AssertP81BodyPositionsUnchanged(const dtDynModel &actual, const dtDynModel &expected)
 {
     assert(actual.body_pos.size() == expected.body_pos.size());
@@ -5262,6 +5322,11 @@ struct P81ModelStoragePointers
     const dtDynIndex *bodyParent = nullptr;
     const dtDynIndex *bodyRoot = nullptr;
     const dtDynIndex *bodyRootSlot = nullptr;
+    const dtDynIndex *bodyJointCount = nullptr;
+    const dtDynIndex *bodyJointAddress = nullptr;
+    const dtDynIndex *bodyDofCount = nullptr;
+    const dtDynIndex *bodyDofAddress = nullptr;
+    const dtDynIndex *bodyWeld = nullptr;
     const dtDynIndex *jointSpec = nullptr;
     const dtDynIndex *dofParent = nullptr;
     const dtDynIndex *rootBody = nullptr;
@@ -5271,18 +5336,32 @@ struct P81ModelStoragePointers
     const dtDynReal *rootMass = nullptr;
 };
 
+const dtDynReal *CaptureP81DenseStoragePointer(const dtDynDenseVector &value)
+{
+    if (value.GetDim() == 0)
+    {
+        return nullptr;
+    }
+    return value.GetElementsAddr();
+}
+
 P81ModelStoragePointers CaptureP81ModelStoragePointers(const dtDynModel &model)
 {
     return P81ModelStoragePointers{model.body_parentid.data(),
                                    model.body_rootid.data(),
                                    model.body_rootidx.data(),
+                                   model.body_jntnum.data(),
+                                   model.body_jntadr.data(),
+                                   model.body_dofnum.data(),
+                                   model.body_dofadr.data(),
+                                   model.body_weldid.data(),
                                    model.jnt_specid.data(),
                                    model.dof_parentid.data(),
                                    model.root_bodyid.data(),
                                    model.body_pos.data(),
-                                   model.body_mass.GetElementsAddr(),
-                                   model.body_subtreemass.GetElementsAddr(),
-                                   model.root_mass.GetElementsAddr()};
+                                   CaptureP81DenseStoragePointer(model.body_mass),
+                                   CaptureP81DenseStoragePointer(model.body_subtreemass),
+                                   CaptureP81DenseStoragePointer(model.root_mass)};
 }
 
 void AssertP81ModelStoragePointersUnchanged(const dtDynModel &model,
@@ -5291,13 +5370,45 @@ void AssertP81ModelStoragePointersUnchanged(const dtDynModel &model,
     assert(model.body_parentid.data() == expected.bodyParent);
     assert(model.body_rootid.data() == expected.bodyRoot);
     assert(model.body_rootidx.data() == expected.bodyRootSlot);
+    assert(model.body_jntnum.data() == expected.bodyJointCount);
+    assert(model.body_jntadr.data() == expected.bodyJointAddress);
+    assert(model.body_dofnum.data() == expected.bodyDofCount);
+    assert(model.body_dofadr.data() == expected.bodyDofAddress);
+    assert(model.body_weldid.data() == expected.bodyWeld);
     assert(model.jnt_specid.data() == expected.jointSpec);
     assert(model.dof_parentid.data() == expected.dofParent);
     assert(model.root_bodyid.data() == expected.rootBody);
     assert(model.body_pos.data() == expected.bodyPosition);
-    assert(model.body_mass.GetElementsAddr() == expected.bodyMass);
-    assert(model.body_subtreemass.GetElementsAddr() == expected.bodySubtreeMass);
-    assert(model.root_mass.GetElementsAddr() == expected.rootMass);
+    assert(CaptureP81DenseStoragePointer(model.body_mass) == expected.bodyMass);
+    assert(CaptureP81DenseStoragePointer(model.body_subtreemass) == expected.bodySubtreeMass);
+    assert(CaptureP81DenseStoragePointer(model.root_mass) == expected.rootMass);
+}
+
+void AssertP81PhysicalWriteTargetsUnchanged(const dtDynModel &actual,
+                                            const dtDynModel &expected)
+{
+    AssertP81Vector3ArrayUnchanged(actual.body_pos, expected.body_pos);
+    AssertP81Vector4ArrayUnchanged(actual.body_quat, expected.body_quat);
+    AssertP81Matrix3ArrayUnchanged(actual.body_mat, expected.body_mat);
+    AssertP81Vector3ArrayUnchanged(actual.body_ipos, expected.body_ipos);
+    AssertP81Vector4ArrayUnchanged(actual.body_iquat, expected.body_iquat);
+    AssertP81Matrix3ArrayUnchanged(actual.body_imat, expected.body_imat);
+    AssertP81Vector3ArrayUnchanged(actual.body_inertia, expected.body_inertia);
+    AssertP81DenseVectorUnchanged(actual.body_mass, expected.body_mass);
+    AssertP81DenseVectorUnchanged(actual.body_subtreemass, expected.body_subtreemass);
+
+    AssertP81ArrayUnchanged(actual.jnt_limited, expected.jnt_limited);
+    AssertP81DenseVectorUnchanged(actual.jnt_range_min, expected.jnt_range_min);
+    AssertP81DenseVectorUnchanged(actual.jnt_range_max, expected.jnt_range_max);
+    AssertP81Vector3ArrayUnchanged(actual.jnt_pos, expected.jnt_pos);
+    AssertP81Vector3ArrayUnchanged(actual.jnt_axis, expected.jnt_axis);
+    AssertP81DenseVectorUnchanged(actual.dof_armature, expected.dof_armature);
+
+    AssertP81Vector3ArrayUnchanged(actual.site_pos, expected.site_pos);
+    AssertP81Vector4ArrayUnchanged(actual.site_quat, expected.site_quat);
+    AssertP81Matrix3ArrayUnchanged(actual.site_mat, expected.site_mat);
+    AssertP81DenseVectorUnchanged(actual.actuator_gear, expected.actuator_gear);
+    AssertP81DenseVectorUnchanged(actual.root_mass, expected.root_mass);
 }
 
 struct P81BodyPhysicalEditor
@@ -5681,6 +5792,246 @@ void TestUpdateSpecRejectsLateCompatibilityMetadataMutationsWithoutWriting()
         assert(model.body_pos[static_cast<std::size_t>(body)](0) == position(0));
         assert(model.body_mass(body) == mass);
     }
+}
+
+void AssertP85ModelNameMapsUnchanged(const dtDynModel &model)
+{
+    assert(model.BodyId("world") == 0);
+    assert(model.BodyId("p85_root") == 1);
+    assert(model.JointId("p85_joint") == 0);
+    assert(model.SiteId("p85_site") == 0);
+    assert(model.ActuatorId("p85_actuator") == 0);
+    assert(model.BodyId("p85_extra_body") == DTDYN_INVALID_INDEX);
+    assert(model.JointId("p85_extra_joint") == DTDYN_INVALID_INDEX);
+    assert(model.SiteId("p85_extra_site") == DTDYN_INVALID_INDEX);
+    assert(model.ActuatorId("p85_extra_actuator") == DTDYN_INVALID_INDEX);
+}
+
+void AssertP85ModelUnchanged(const dtDynModel &actual, const dtDynModel &expected,
+                             const P81ModelStoragePointers &storageBeforeUpdate)
+{
+    AssertP81ModelStoragePointersUnchanged(actual, storageBeforeUpdate);
+    AssertP81TopologyUnchanged(actual, expected);
+    AssertP81PhysicalWriteTargetsUnchanged(actual, expected);
+    AssertP85ModelNameMapsUnchanged(actual);
+}
+
+struct P85BodyPhysicalEditor
+{
+    dtDynReal offset = 0.0;
+
+    void operator()(dtDynBodySpec &draft) const
+    {
+        dt::Math::Vector3<dtDynReal> bodyAxis;
+        dt::Math::Vector3<dtDynReal> inertialAxis;
+        bodyAxis.SetZero();
+        inertialAxis.SetZero();
+        bodyAxis.At(0) = 1.0;
+        inertialAxis.At(1) = 1.0;
+
+        draft.pos.At(0) = 0.25 + offset;
+        draft.pos.At(1) = -0.5 - offset;
+        draft.pos.At(2) = 0.75 + offset;
+        draft.quat = math::AxisAngleQuat(bodyAxis, 0.3 + (0.1 * offset));
+        draft.inertial.mass = 2.0 + offset;
+        draft.inertial.pos.At(0) = -0.15 - offset;
+        draft.inertial.pos.At(1) = 0.35 + offset;
+        draft.inertial.pos.At(2) = -0.55 - offset;
+        draft.inertial.quat = math::AxisAngleQuat(inertialAxis, -0.45 - (0.1 * offset));
+        draft.inertial.inertia.At(0) = 0.4 + (0.1 * offset);
+        draft.inertial.inertia.At(1) = 0.5 + (0.1 * offset);
+        draft.inertial.inertia.At(2) = 0.6 + (0.1 * offset);
+    }
+};
+
+struct P85JointPhysicalEditor
+{
+    void operator()(dtDynJointSpec &draft) const
+    {
+        draft.limited = true;
+        draft.rangeMin = -0.75;
+        draft.rangeMax = 0.95;
+        draft.pos.At(0) = 0.6;
+        draft.pos.At(1) = -0.4;
+        draft.pos.At(2) = 0.2;
+        draft.axis.SetZero();
+        draft.axis.At(0) = 1.0;
+        draft.armature = 0.35;
+    }
+};
+
+struct P85SitePhysicalEditor
+{
+    void operator()(dtDynSiteSpec &draft) const
+    {
+        dt::Math::Vector3<dtDynReal> axis;
+        axis.SetZero();
+        axis.At(2) = 1.0;
+        draft.pos.At(0) = 0.45;
+        draft.pos.At(1) = -0.25;
+        draft.pos.At(2) = 0.65;
+        draft.quat = math::AxisAngleQuat(axis, 0.6);
+    }
+};
+
+struct P85ActuatorPhysicalEditor
+{
+    void operator()(dtDynActuatorSpec &draft) const
+    {
+        draft.gear = 3.5;
+    }
+};
+
+void ConfigureP85DifferentPhysicalValues(dtDynSpec &spec)
+{
+    spec.EditBody(0, P85BodyPhysicalEditor{0.0});
+    spec.EditBody(1, P85BodyPhysicalEditor{1.0});
+    spec.EditJoint(0, P85JointPhysicalEditor{});
+    spec.EditSite(0, P85SitePhysicalEditor{});
+    spec.EditActuator(0, P85ActuatorPhysicalEditor{});
+}
+
+dtDynSpec MakeP85SourceShapeSpec()
+{
+    dtDynSpec spec;
+    const dtDynIndex root = spec.AddBody("p85_root", 0);
+    const dtDynIndex joint = spec.AddJoint(root, "p85_joint", dtDynJointType::Hinge);
+    const dtDynIndex site = spec.AddSite(root, "p85_site");
+    const dtDynIndex actuator = spec.AddActuator(joint, "p85_actuator");
+    assert(root == 1);
+    assert(joint == 0);
+    assert(site == 0);
+    assert(actuator == 0);
+
+    dtDynValidationError error;
+    assert(ValidateSpec(spec, &error));
+    assert(error.code == dtDynValidationCode::None);
+    return spec;
+}
+
+void AssertP85BodyPhysicalWriteTargetsDiffer(const dtDynModel &actual,
+                                             const dtDynModel &expected,
+                                             const dtDynIndex bodyId)
+{
+    const std::size_t bodyIndex = static_cast<std::size_t>(bodyId);
+    assert(actual.body_pos[bodyIndex].At(0) != expected.body_pos[bodyIndex].At(0));
+    assert(actual.body_quat[bodyIndex].At(0) != expected.body_quat[bodyIndex].At(0));
+    assert(actual.body_mat[bodyIndex].At(1, 1) != expected.body_mat[bodyIndex].At(1, 1));
+    assert(actual.body_ipos[bodyIndex].At(0) != expected.body_ipos[bodyIndex].At(0));
+    assert(actual.body_iquat[bodyIndex].At(0) != expected.body_iquat[bodyIndex].At(0));
+    assert(actual.body_imat[bodyIndex].At(0, 0) != expected.body_imat[bodyIndex].At(0, 0));
+    assert(actual.body_inertia[bodyIndex].At(0) != expected.body_inertia[bodyIndex].At(0));
+    assert(actual.body_mass.At(bodyId) != expected.body_mass.At(bodyId));
+    assert(actual.body_subtreemass.At(bodyId) != expected.body_subtreemass.At(bodyId));
+}
+
+void AssertP85SourcePhysicalWriteTargetsDiffer(const dtDynModel &actual,
+                                               const dtDynModel &expected)
+{
+    AssertP85BodyPhysicalWriteTargetsDiffer(actual, expected, 0);
+    AssertP85BodyPhysicalWriteTargetsDiffer(actual, expected, 1);
+
+    assert(actual.jnt_limited[0] != expected.jnt_limited[0]);
+    assert(actual.jnt_range_min.At(0) != expected.jnt_range_min.At(0));
+    assert(actual.jnt_range_max.At(0) != expected.jnt_range_max.At(0));
+    assert(actual.jnt_pos[0].At(0) != expected.jnt_pos[0].At(0));
+    assert(actual.jnt_axis[0].At(0) != expected.jnt_axis[0].At(0));
+    assert(actual.dof_armature.At(0) != expected.dof_armature.At(0));
+
+    assert(actual.site_pos[0].At(0) != expected.site_pos[0].At(0));
+    assert(actual.site_quat[0].At(0) != expected.site_quat[0].At(0));
+    assert(actual.site_mat[0].At(0, 0) != expected.site_mat[0].At(0, 0));
+    assert(actual.actuator_gear.At(0) != expected.actuator_gear.At(0));
+    assert(actual.root_mass.At(0) != expected.root_mass.At(0));
+}
+
+void AssertP85RejectsValidSourceShapeWithoutWriting(const dtDynSpec &incompatible,
+                                                    const dtDynModel &expected)
+{
+    dtDynValidationError error;
+    assert(ValidateSpec(incompatible, &error));
+    assert(error.code == dtDynValidationCode::None);
+    const dtDynModel recompiled = CompileSpecChecked(incompatible);
+    assert(ValidateModel(recompiled, &error));
+    assert(error.code == dtDynValidationCode::None);
+    AssertP85SourcePhysicalWriteTargetsDiffer(recompiled, expected);
+
+    dtDynModel actual = expected;
+    const P81ModelStoragePointers storageBeforeUpdate = CaptureP81ModelStoragePointers(actual);
+    const std::size_t allocationsBeforeUpdate = g_totalTestAllocations;
+    assert(!UpdateSpec(incompatible, actual));
+    assert(g_totalTestAllocations == allocationsBeforeUpdate);
+    AssertP85ModelUnchanged(actual, expected, storageBeforeUpdate);
+    assert(ValidateModel(actual, &error));
+    assert(error.code == dtDynValidationCode::None);
+}
+
+void TestUpdateSpecP85AcceptsZeroDimensionsWithoutTopologyWrites()
+{
+    const dtDynSpec spec;
+    dtDynValidationError error;
+    assert(ValidateSpec(spec, &error));
+    assert(error.code == dtDynValidationCode::None);
+
+    dtDynModel model = CompileSpecChecked(spec);
+    assert(model.nq == 0);
+    assert(model.nv == 0);
+    assert(model.nbody == 1);
+    assert(model.njnt == 0);
+    assert(model.nsite == 0);
+    assert(model.nu == 0);
+    assert(model.nroot == 0);
+    const dtDynModel expected = model;
+    const P81ModelStoragePointers storageBeforeUpdate = CaptureP81ModelStoragePointers(model);
+    const std::size_t allocationsBeforeUpdate = g_totalTestAllocations;
+
+    assert(UpdateSpec(spec, model));
+    assert(g_totalTestAllocations == allocationsBeforeUpdate);
+    AssertP81ModelStoragePointersUnchanged(model, storageBeforeUpdate);
+    AssertP81TopologyUnchanged(model, expected);
+    AssertP81PhysicalWriteTargetsUnchanged(model, expected);
+    assert(model.BodyId("world") == 0);
+    assert(model.JointId("p85_absent_joint") == DTDYN_INVALID_INDEX);
+    assert(model.SiteId("p85_absent_site") == DTDYN_INVALID_INDEX);
+    assert(model.ActuatorId("p85_absent_actuator") == DTDYN_INVALID_INDEX);
+    assert(ValidateModel(model, &error));
+    assert(error.code == dtDynValidationCode::None);
+}
+
+void TestUpdateSpecP85RejectsValidSourceCollectionShapeChangesWithoutWriting()
+{
+    const dtDynSpec original = MakeP85SourceShapeSpec();
+    const dtDynModel expected = CompileSpecChecked(original);
+    AssertP85ModelNameMapsUnchanged(expected);
+
+    dtDynSpec bodyAdded = original;
+    const dtDynIndex extraBody = bodyAdded.AddBody("p85_extra_body", 0);
+    assert(extraBody == 2);
+    assert(bodyAdded.Bodies().size() == 3U);
+    ConfigureP85DifferentPhysicalValues(bodyAdded);
+    AssertP85RejectsValidSourceShapeWithoutWriting(bodyAdded, expected);
+
+    dtDynSpec jointAdded = original;
+    const dtDynIndex extraJoint =
+        jointAdded.AddJoint(1, "p85_extra_joint", dtDynJointType::Hinge);
+    assert(extraJoint == 1);
+    assert(jointAdded.Joints().size() == 2U);
+    ConfigureP85DifferentPhysicalValues(jointAdded);
+    AssertP85RejectsValidSourceShapeWithoutWriting(jointAdded, expected);
+
+    dtDynSpec siteAdded = original;
+    const dtDynIndex extraSite = siteAdded.AddSite(1, "p85_extra_site");
+    assert(extraSite == 1);
+    assert(siteAdded.Sites().size() == 2U);
+    ConfigureP85DifferentPhysicalValues(siteAdded);
+    AssertP85RejectsValidSourceShapeWithoutWriting(siteAdded, expected);
+
+    dtDynSpec actuatorAdded = original;
+    const dtDynIndex extraActuator = actuatorAdded.AddActuator(0, "p85_extra_actuator");
+    assert(extraActuator == 1);
+    assert(actuatorAdded.Actuators().size() == 2U);
+    ConfigureP85DifferentPhysicalValues(actuatorAdded);
+    AssertP85RejectsValidSourceShapeWithoutWriting(actuatorAdded, expected);
 }
 
 struct P83BodyNameEditor
@@ -9546,6 +9897,8 @@ int main()
     TestUpdateSpecRejectsEarlyStorageMismatchWithoutWriting();
     TestUpdateSpecRejectsLateStorageMismatchWithoutWriting();
     TestUpdateSpecRejectsLateCompatibilityMetadataMutationsWithoutWriting();
+    TestUpdateSpecP85AcceptsZeroDimensionsWithoutTopologyWrites();
+    TestUpdateSpecP85RejectsValidSourceCollectionShapeChangesWithoutWriting();
     TestUpdateSpecP83UpdatesWorldRootChildPhysicalModel();
     TestUpdateSpecP83RejectsValidBodyNameAndParentChangesWithoutWriting();
     TestUpdateSpecMatchesPhysicalRecompile();

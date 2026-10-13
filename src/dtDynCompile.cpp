@@ -95,8 +95,8 @@ bool UpdateSpec(const dtDynSpec &spec, dtDynModel &model) noexcept
     const dtArray<dtDynSiteSpec> &sites = spec.Sites();
     const dtArray<dtDynActuatorSpec> &actuators = spec.Actuators();
 
-    if (model.nq < 0 || model.nv < 0 || model.nbody < 1 || model.njnt < 0 ||
-        model.nsite < 0 || model.nu < 0 || model.nroot < 0 ||
+    if ((model.nq < 0) || (model.nv < 0) || (model.nbody < 1) || (model.njnt < 0) ||
+        (model.nsite < 0) || (model.nu < 0) || (model.nroot < 0) ||
         !HasArraySize(bodies.size(), model.nbody) ||
         !HasArraySize(joints.size(), model.njnt) ||
         !HasArraySize(sites.size(), model.nsite) ||
