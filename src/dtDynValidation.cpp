@@ -243,14 +243,15 @@ bool NearlyEqual(const dtDynReal lhs, const dtDynReal rhs)
     const dtDynReal scale = std::max(static_cast<dtDynReal>(1.0),
                                      std::max(std::fabs(lhs), std::fabs(rhs)));
     return std::fabs(lhs - rhs) <=
-           static_cast<dtDynReal>(64.0) * std::numeric_limits<dtDynReal>::epsilon() * scale;
+           ((static_cast<dtDynReal>(64.0) * std::numeric_limits<dtDynReal>::epsilon()) * scale);
 }
 
 bool NearlyEqualInput(const dtDynReal lhs, const dtDynReal rhs)
 {
     const dtDynReal scale = std::max(static_cast<dtDynReal>(1.0),
                                      std::max(std::fabs(lhs), std::fabs(rhs)));
-    return std::fabs(lhs - rhs) <= std::sqrt(std::numeric_limits<dtDynReal>::epsilon()) * scale;
+    return std::fabs(lhs - rhs) <=
+           (std::sqrt(std::numeric_limits<dtDynReal>::epsilon()) * scale);
 }
 
 bool IsUnitVector(const dt::Math::Vector3<dtDynReal> &value)
