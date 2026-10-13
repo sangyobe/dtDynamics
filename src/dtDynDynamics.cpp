@@ -577,7 +577,7 @@ void AddHalfSymmetricMotionCrossColumn4(const dt::Math::Matrix<6, 6, dtDynReal> 
     // Adds one sparse column of:
     //   -0.5 * (crm(v).Transpose() * inertia + inertia * crm(v))
     // rows/value pairs describe the nonzero entries in crm(v).col(motionCol).
-    if (value0 == 0.0 && value1 == 0.0 && value2 == 0.0 && value3 == 0.0)
+    if ((value0 == 0.0) && (value1 == 0.0) && (value2 == 0.0) && (value3 == 0.0))
     {
         return;
     }
@@ -585,10 +585,10 @@ void AddHalfSymmetricMotionCrossColumn4(const dt::Math::Matrix<6, 6, dtDynReal> 
     for (dtDynIndex col = 0; col < 6; ++col)
     {
         const dtDynReal contribution =
-            -0.5 * (value0 * inertia.At(row0, col) +
-                    value1 * inertia.At(row1, col) +
-                    value2 * inertia.At(row2, col) +
-                    value3 * inertia.At(row3, col));
+            -0.5 * ((value0 * inertia.At(row0, col)) +
+                    (value1 * inertia.At(row1, col)) +
+                    (value2 * inertia.At(row2, col)) +
+                    (value3 * inertia.At(row3, col)));
         out.At(motionCol, col) += contribution;
         out.At(col, motionCol) += contribution;
     }
