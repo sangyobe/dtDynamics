@@ -4943,6 +4943,53 @@ void TestCcrbaPreservesRootMassGuardedComProducts()
     }
 }
 
+void SetUnitMassForFreeJointSpatialCrossRegression(dtDynBodySpec &draft)
+{
+    draft.inertial.mass = 1.0;
+}
+
+void TestFreeJointCdoFDotPreservesSpatialCrossTerms()
+{
+    dtDynSpec spec;
+    const dtDynIndex root = spec.AddBody("root", 0);
+    spec.EditBody(root, SetUnitMassForFreeJointSpatialCrossRegression);
+    spec.AddJoint(root, "free", dtDynJointType::Free);
+    const dtDynModel model = CompileSpec(spec);
+    assert(model.nv == 6);
+
+    dtDynData data;
+    data.Resize(model);
+    data.qpos(3) = 1.0;
+    data.qvel(0) = 0.1;
+    data.qvel(1) = 0.2;
+    data.qvel(2) = 0.3;
+    data.qvel(3) = 0.4;
+    data.qvel(4) = 0.5;
+    data.qvel(5) = 0.6;
+    dt::Math::Vector3<dtDynReal> gravity;
+    gravity.SetZero();
+    ComputeDynamicsCCRBA(model, data, gravity, DTDYN_CCRBA_TERM_ALL);
+
+    assert(std::fabs(data.cdof_dot[3](0)) < 1.0e-12);
+    assert(std::fabs(data.cdof_dot[3](1)) < 1.0e-12);
+    assert(std::fabs(data.cdof_dot[3](2)) < 1.0e-12);
+    assert(std::fabs(data.cdof_dot[3](3)) < 1.0e-12);
+    assert(std::fabs(data.cdof_dot[3](4) - 0.3) < 1.0e-12);
+    assert(std::fabs(data.cdof_dot[3](5) + 0.2) < 1.0e-12);
+    assert(std::fabs(data.cdof_dot[4](0)) < 1.0e-12);
+    assert(std::fabs(data.cdof_dot[4](1)) < 1.0e-12);
+    assert(std::fabs(data.cdof_dot[4](2)) < 1.0e-12);
+    assert(std::fabs(data.cdof_dot[4](3) + 0.3) < 1.0e-12);
+    assert(std::fabs(data.cdof_dot[4](4)) < 1.0e-12);
+    assert(std::fabs(data.cdof_dot[4](5) - 0.1) < 1.0e-12);
+    assert(std::fabs(data.cdof_dot[5](0)) < 1.0e-12);
+    assert(std::fabs(data.cdof_dot[5](1)) < 1.0e-12);
+    assert(std::fabs(data.cdof_dot[5](2)) < 1.0e-12);
+    assert(std::fabs(data.cdof_dot[5](3) - 0.2) < 1.0e-12);
+    assert(std::fabs(data.cdof_dot[5](4) + 0.1) < 1.0e-12);
+    assert(std::fabs(data.cdof_dot[5](5)) < 1.0e-12);
+}
+
 void TestCompileSpecSupportsFloatingBaseQuadrupedTree()
 {
     dtDynSpec spec;
@@ -6100,6 +6147,7 @@ int main()
     TestCompileSpecSupportsMultipleMovableRoots();
     TestEffectiveRootCountPreservesFallback();
     TestCcrbaPreservesRootMassGuardedComProducts();
+    TestFreeJointCdoFDotPreservesSpatialCrossTerms();
     TestCompileSpecSupportsFloatingBaseQuadrupedTree();
     TestForwardKinematicsAndPointJacobianForFixedChain();
     TestIndexedJacobiansOnlyRefreshRequestedIds();

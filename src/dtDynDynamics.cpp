@@ -59,12 +59,12 @@ void CrossSpatialMotionInto(const dt::Math::Vector6<dtDynReal> &velocity,
     const dtDynReal ml1 = motion.At(4);
     const dtDynReal ml2 = motion.At(5);
 
-    out.At(0) = wy * mz - wz * my;
-    out.At(1) = wz * mx - wx * mz;
-    out.At(2) = wx * my - wy * mx;
-    out.At(3) = wy * ml2 - wz * ml1 + vy * mz - vz * my;
-    out.At(4) = wz * ml0 - wx * ml2 + vz * mx - vx * mz;
-    out.At(5) = wx * ml1 - wy * ml0 + vx * my - vy * mx;
+    out.At(0) = (wy * mz) - (wz * my);
+    out.At(1) = (wz * mx) - (wx * mz);
+    out.At(2) = (wx * my) - (wy * mx);
+    out.At(3) = (((wy * ml2) - (wz * ml1)) + (vy * mz)) - (vz * my);
+    out.At(4) = (((wz * ml0) - (wx * ml2)) + (vz * mx)) - (vx * mz);
+    out.At(5) = (((wx * ml1) - (wy * ml0)) + (vx * my)) - (vy * mx);
 }
 
 void SetAngularPointMotionSubspace(const dtDynReal ax,
