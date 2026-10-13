@@ -106,25 +106,25 @@ dtDynModel &dtDynModel::operator=(const dtDynModel &other)
 dtDynIndex dtDynModel::BodyId(const std::string &name) const
 {
     const auto it = m_bodyNameToId.find(name);
-    return it == m_bodyNameToId.end() ? DTDYN_INVALID_INDEX : it->second;
+    return (it == m_bodyNameToId.end()) ? DTDYN_INVALID_INDEX : it->second;
 }
 
 dtDynIndex dtDynModel::JointId(const std::string &name) const
 {
     const auto it = m_jointNameToId.find(name);
-    return it == m_jointNameToId.end() ? DTDYN_INVALID_INDEX : it->second;
+    return (it == m_jointNameToId.end()) ? DTDYN_INVALID_INDEX : it->second;
 }
 
 dtDynIndex dtDynModel::SiteId(const std::string &name) const
 {
     const auto it = m_siteNameToId.find(name);
-    return it == m_siteNameToId.end() ? DTDYN_INVALID_INDEX : it->second;
+    return (it == m_siteNameToId.end()) ? DTDYN_INVALID_INDEX : it->second;
 }
 
 dtDynIndex dtDynModel::ActuatorId(const std::string &name) const
 {
     const auto it = m_actuatorNameToId.find(name);
-    return it == m_actuatorNameToId.end() ? DTDYN_INVALID_INDEX : it->second;
+    return (it == m_actuatorNameToId.end()) ? DTDYN_INVALID_INDEX : it->second;
 }
 
 bool dtDynModel::IsFixedBody(const dtDynIndex body) const

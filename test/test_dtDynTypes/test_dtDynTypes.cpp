@@ -2540,10 +2540,17 @@ void TestModelActuatorNameLookupUsesRebuiltCache()
     dtDynSpec spec;
     const dtDynIndex body = spec.AddBody("body", 0);
     const dtDynIndex joint = spec.AddJoint(body, "joint", dtDynJointType::Hinge);
+    const dtDynIndex site = spec.AddSite(body, "site");
     const dtDynIndex actuator = spec.AddActuator(joint, "actuator");
     dtDynModel model = CompileSpecChecked(spec);
 
+    assert(model.BodyId("body") == body);
+    assert(model.JointId("joint") == joint);
+    assert(model.SiteId("site") == site);
     assert(model.ActuatorId("actuator") == actuator);
+    assert(model.BodyId("missing") == DTDYN_INVALID_INDEX);
+    assert(model.JointId("missing") == DTDYN_INVALID_INDEX);
+    assert(model.SiteId("missing") == DTDYN_INVALID_INDEX);
     assert(model.ActuatorId("missing") == DTDYN_INVALID_INDEX);
 
     const dtDynModel copied = model;
