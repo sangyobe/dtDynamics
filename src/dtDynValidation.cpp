@@ -448,7 +448,7 @@ bool ValidateSpec(const dtDynSpec &spec, dtDynValidationError *error)
             ++nroot;
         }
     }
-    if (6LL * nroot > maximum)
+    if ((6LL * nroot) > maximum)
     {
         return Fail(error, dtDynValidationCode::DimensionOverflow, dtDynObjectType::Body,
                     DTDYN_INVALID_INDEX, "root-stacked dimension 6*nroot exceeds UINT16_MAX");

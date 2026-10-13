@@ -700,6 +700,44 @@ void TestSpecValidationRejectsDimensionOverflowBeforeCompile()
     assert(error.object == dtDynObjectType::Joint);
 }
 
+void AddRootStackedBodies(dtDynSpec &spec, const dtDynIndex rootCount)
+{
+    for (dtDynIndex rootIndex = 0; rootIndex < rootCount; ++rootIndex)
+    {
+        const dtDynIndex body = spec.AddBody("root_stacked_" + std::to_string(rootIndex), 0);
+        assert(body == rootIndex + 1);
+    }
+    assert(spec.Bodies().size() == static_cast<std::size_t>(rootCount) + 1U);
+}
+
+void TestSpecValidationPreservesRootStackedDimensionBoundary()
+{
+    constexpr dtDynIndex maximumRootCount =
+        static_cast<dtDynIndex>(std::numeric_limits<uint16_t>::max() / 6U);
+    constexpr dtDynIndex overflowRootCount = maximumRootCount + 1;
+    assert(maximumRootCount == 10922);
+    assert(overflowRootCount == 10923);
+
+    {
+        dtDynSpec validSpec;
+        AddRootStackedBodies(validSpec, maximumRootCount);
+
+        dtDynValidationError error;
+        assert(ValidateSpec(validSpec, &error));
+        assert(error.code == dtDynValidationCode::None);
+    }
+
+    dtDynSpec overflowSpec;
+    AddRootStackedBodies(overflowSpec, overflowRootCount);
+
+    dtDynValidationError error;
+    assert(!ValidateSpec(overflowSpec, &error));
+    assert(error.code == dtDynValidationCode::DimensionOverflow);
+    assert(error.object == dtDynObjectType::Body);
+    assert(error.index == DTDYN_INVALID_INDEX);
+    assert(error.message == "root-stacked dimension 6*nroot exceeds UINT16_MAX");
+}
+
 void TestModelValidationRejectsArrayShapeMismatch()
 {
     dtDynSpec spec;
@@ -8348,6 +8386,7 @@ int main()
     TestSpecValidationRejectsNonFiniteValues();
     TestModelValidationRejectsDimensionOverflow();
     TestSpecValidationRejectsDimensionOverflowBeforeCompile();
+    TestSpecValidationPreservesRootStackedDimensionBoundary();
     TestModelValidationRejectsArrayShapeMismatch();
     TestModelValidationRejectsMissingWorld();
     TestModelValidationRejectsNonFiniteValues();
