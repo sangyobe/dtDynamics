@@ -3019,6 +3019,21 @@ void TestSpecXmlPreservesAttributeFallbacks()
     assert(explicitNames.Joints()[0].name == "hinge");
 }
 
+void TestSpecXmlPreservesNumericAttributeFallbacks()
+{
+    const dtDynSpec fallback = dtDynSpec::DecodeXml(
+        "<mujoco><worldbody><body name=\"base\"><joint name=\"hinge\"/>"
+        "</body></worldbody></mujoco>");
+    assert(fallback.Joints().size() == 1);
+    assert(std::fabs(fallback.Joints()[0].armature) < 1.0e-12);
+
+    const dtDynSpec explicitArmature = dtDynSpec::DecodeXml(
+        "<mujoco><worldbody><body name=\"base\"><joint name=\"hinge\" armature=\"2.5\"/>"
+        "</body></worldbody></mujoco>");
+    assert(explicitArmature.Joints().size() == 1);
+    assert(std::fabs(explicitArmature.Joints()[0].armature - 2.5) < 1.0e-12);
+}
+
 void TestSpecXmlPreservesTagWhitespaceAndClosingSuffixOffset()
 {
     const std::string whitespaceXml =
@@ -6152,6 +6167,7 @@ int main()
     TestSpecXmlRejectsInvalidBooleanValue();
     TestSpecXmlPreservesLimitedBooleanGrammar();
     TestSpecXmlPreservesAttributeFallbacks();
+    TestSpecXmlPreservesNumericAttributeFallbacks();
     TestSpecXmlPreservesTagWhitespaceAndClosingSuffixOffset();
     TestSpecXmlRequiresSingleRootElement();
     TestSpecXmlRejectsSupportedElementInWrongContext();

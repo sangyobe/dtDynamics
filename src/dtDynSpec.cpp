@@ -555,7 +555,7 @@ dtDynReal RealAttributeOr(const AttributeMap &attrs, const std::string &key,
                           const dtDynReal fallback, const std::string &sourcePath)
 {
     const auto it = attrs.find(key);
-    return it == attrs.end() ? fallback : ParseReal(it->second, sourcePath);
+    return (it == attrs.end()) ? fallback : ParseReal(it->second, sourcePath);
 }
 
 void RequireUniqueName(const std::string &name,
