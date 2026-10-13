@@ -82,9 +82,9 @@ void SetAngularPointMotionSubspace(const dtDynReal ax,
     out.At(0) = ax;
     out.At(1) = ay;
     out.At(2) = az;
-    out.At(3) = ay * dz - az * dy;
-    out.At(4) = az * dx - ax * dz;
-    out.At(5) = ax * dy - ay * dx;
+    out.At(3) = (ay * dz) - (az * dy);
+    out.At(4) = (az * dx) - (ax * dz);
+    out.At(5) = (ax * dy) - (ay * dx);
 }
 
 void SetMotionSubspaceAtPoint(const dtDynModel &model,

@@ -4990,6 +4990,47 @@ void TestFreeJointCdoFDotPreservesSpatialCrossTerms()
     assert(std::fabs(data.cdof_dot[5](5)) < 1.0e-12);
 }
 
+void ConfigureAngularPointMotionRegressionBody(dtDynBodySpec &draft)
+{
+    draft.inertial.mass = 1.0;
+    draft.inertial.pos(0) = 1.0;
+    draft.inertial.pos(1) = 2.0;
+    draft.inertial.pos(2) = 3.0;
+}
+
+void ConfigureAngularPointMotionRegressionJoint(dtDynJointSpec &draft)
+{
+    const dtDynReal inverseAxisNorm = 1.0 / std::sqrt(77.0);
+    draft.axis(0) = 4.0 * inverseAxisNorm;
+    draft.axis(1) = 5.0 * inverseAxisNorm;
+    draft.axis(2) = 6.0 * inverseAxisNorm;
+}
+
+void TestAngularPointMotionSubspacePreservesCrossTerms()
+{
+    dtDynSpec spec;
+    const dtDynIndex root = spec.AddBody("root", 0);
+    spec.EditBody(root, ConfigureAngularPointMotionRegressionBody);
+    const dtDynIndex hinge = spec.AddJoint(root, "hinge", dtDynJointType::Hinge);
+    spec.EditJoint(hinge, ConfigureAngularPointMotionRegressionJoint);
+    const dtDynModel model = CompileSpec(spec);
+    assert(model.nv == 1);
+
+    dtDynData data;
+    data.Resize(model);
+    dt::Math::Vector3<dtDynReal> gravity;
+    gravity.SetZero();
+    ComputeDynamicsCCRBA(model, data, gravity, DTDYN_CCRBA_TERM_ALL);
+
+    const dtDynReal inverseAxisNorm = 1.0 / std::sqrt(77.0);
+    assert(std::fabs(data.cdof[0](0) - (4.0 * inverseAxisNorm)) < 1.0e-12);
+    assert(std::fabs(data.cdof[0](1) - (5.0 * inverseAxisNorm)) < 1.0e-12);
+    assert(std::fabs(data.cdof[0](2) - (6.0 * inverseAxisNorm)) < 1.0e-12);
+    assert(std::fabs(data.cdof[0](3) - (3.0 * inverseAxisNorm)) < 1.0e-12);
+    assert(std::fabs(data.cdof[0](4) + (6.0 * inverseAxisNorm)) < 1.0e-12);
+    assert(std::fabs(data.cdof[0](5) - (3.0 * inverseAxisNorm)) < 1.0e-12);
+}
+
 void TestCompileSpecSupportsFloatingBaseQuadrupedTree()
 {
     dtDynSpec spec;
@@ -6148,6 +6189,7 @@ int main()
     TestEffectiveRootCountPreservesFallback();
     TestCcrbaPreservesRootMassGuardedComProducts();
     TestFreeJointCdoFDotPreservesSpatialCrossTerms();
+    TestAngularPointMotionSubspacePreservesCrossTerms();
     TestCompileSpecSupportsFloatingBaseQuadrupedTree();
     TestForwardKinematicsAndPointJacobianForFixedChain();
     TestIndexedJacobiansOnlyRefreshRequestedIds();
