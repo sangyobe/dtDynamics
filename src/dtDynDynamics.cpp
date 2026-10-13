@@ -481,9 +481,9 @@ void SpatialMulInto(const dt::Math::Matrix<6, 6, dtDynReal> &matrix,
 
     for (dtDynIndex row = 0; row < 6; ++row)
     {
-        out.At(row) = matrix.At(row, 0) * v0 + matrix.At(row, 1) * v1 +
-                      matrix.At(row, 2) * v2 + matrix.At(row, 3) * v3 +
-                      matrix.At(row, 4) * v4 + matrix.At(row, 5) * v5;
+        out.At(row) = (matrix.At(row, 0) * v0) + (matrix.At(row, 1) * v1) +
+                      (matrix.At(row, 2) * v2) + (matrix.At(row, 3) * v3) +
+                      (matrix.At(row, 4) * v4) + (matrix.At(row, 5) * v5);
     }
 }
 

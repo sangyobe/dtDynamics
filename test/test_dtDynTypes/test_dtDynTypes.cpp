@@ -5321,6 +5321,117 @@ void TestFreeJointCdoFDotPreservesSpatialCrossTerms()
     assert(std::fabs(data.cdof_dot[5](5)) < 1.0e-12);
 }
 
+void ConfigureSpatialMulIntoAllComponentRoot(dtDynBodySpec &draft)
+{
+    draft.inertial.mass = 2.0;
+    draft.inertial.inertia(0) = 2.0;
+    draft.inertial.inertia(1) = 3.0;
+    draft.inertial.inertia(2) = 4.0;
+}
+
+void ConfigureSpatialMulIntoAllComponentChild(dtDynBodySpec &draft)
+{
+    draft.pos(0) = 1.0;
+    draft.pos(1) = 1.0;
+    draft.pos(2) = 1.0;
+    draft.inertial.mass = 3.0;
+    draft.inertial.pos(0) = 2.0;
+    draft.inertial.pos(1) = 3.0;
+    draft.inertial.pos(2) = 5.0;
+    draft.inertial.inertia(0) = 5.0;
+    draft.inertial.inertia(1) = 6.0;
+    draft.inertial.inertia(2) = 7.0;
+}
+
+void ConfigureSpatialMulIntoAllComponentHinge(dtDynJointSpec &draft)
+{
+    const dtDynReal inverseAxisNorm = 1.0 / std::sqrt(14.0);
+    draft.axis(0) = inverseAxisNorm;
+    draft.axis(1) = 2.0 * inverseAxisNorm;
+    draft.axis(2) = 3.0 * inverseAxisNorm;
+}
+
+void AssertSpatialMulIntoAllComponentContributions(
+    const dt::Math::Matrix<6, 6, dtDynReal> &inertia,
+    const dt::Math::Vector6<dtDynReal> &motion)
+{
+    assert(std::fabs(inertia(0, 0) - (749.0 / 25.0)) < 1.0e-12);
+    assert(std::fabs(inertia(0, 1) + (144.0 / 25.0)) < 1.0e-12);
+    assert(std::fabs(inertia(0, 2) + (216.0 / 25.0)) < 1.0e-12);
+    assert(std::fabs(inertia(1, 3) - (36.0 / 5.0)) < 1.0e-12);
+    assert(std::fabs(inertia(0, 4) + (36.0 / 5.0)) < 1.0e-12);
+    assert(std::fabs(inertia(0, 5) - (24.0 / 5.0)) < 1.0e-12);
+
+    assert(std::fabs(inertia(0, 0) * motion(0)) > 1.0e-12);
+    assert(std::fabs(inertia(0, 1) * motion(1)) > 1.0e-12);
+    assert(std::fabs(inertia(0, 2) * motion(2)) > 1.0e-12);
+    assert(std::fabs(inertia(1, 3) * motion(3)) > 1.0e-12);
+    assert(std::fabs(inertia(0, 4) * motion(4)) > 1.0e-12);
+    assert(std::fabs(inertia(0, 5) * motion(5)) > 1.0e-12);
+}
+
+void TestCcrbaSpatialMulIntoZeroDofDotCoversAllComponents()
+{
+    dtDynSpec spec;
+    const dtDynIndex root = spec.AddBody("spatial_mul_root", 0);
+    const dtDynIndex child = spec.AddBody("spatial_mul_child", root);
+    spec.EditBody(root, ConfigureSpatialMulIntoAllComponentRoot);
+    spec.EditBody(child, ConfigureSpatialMulIntoAllComponentChild);
+    const dtDynIndex hinge = spec.AddJoint(child, "spatial_mul_hinge", dtDynJointType::Hinge);
+    spec.EditJoint(hinge, ConfigureSpatialMulIntoAllComponentHinge);
+
+    const dtDynModel model = CompileSpecChecked(spec);
+    assert(model.nroot == 1);
+    assert(model.nv == 1);
+    assert(model.dof_bodyid[0] == child);
+    assert(std::fabs(model.root_mass(0) - 5.0) < 1.0e-12);
+
+    dtDynData data;
+    data.Resize(model);
+    data.qpos(0) = 0.0;
+    data.qvel(0) = 0.0;
+    dt::Math::Vector3<dtDynReal> gravity;
+    gravity.SetZero();
+    ComputeDynamicsCCRBA(model, data, gravity, DTDYN_CCRBA_TERM_ALL);
+
+    // The root CoM is (9/5, 12/5, 18/5), so this zero-configuration hinge
+    // column is (1, 2, 3, 1, -1/5, -1/5) / sqrt(14). The child spatial inertia
+    // about that root CoM maps it to (-7, 114/5, 99/5, 3, 3, -3) / sqrt(14).
+    const dtDynReal inverseAxisNorm = 1.0 / std::sqrt(14.0);
+    const dtDynReal expectedMotion[6] = {inverseAxisNorm,
+                                         2.0 * inverseAxisNorm,
+                                         3.0 * inverseAxisNorm,
+                                         inverseAxisNorm,
+                                         -0.2 * inverseAxisNorm,
+                                         -0.2 * inverseAxisNorm};
+    const dtDynReal expectedForce[6] = {-7.0 * inverseAxisNorm,
+                                        (114.0 / 5.0) * inverseAxisNorm,
+                                        (99.0 / 5.0) * inverseAxisNorm,
+                                        3.0 * inverseAxisNorm,
+                                        3.0 * inverseAxisNorm,
+                                        -3.0 * inverseAxisNorm};
+    const dt::Math::Vector6<dtDynReal> &motion = data.cdof[0];
+    const dt::Math::Vector6<dtDynReal> &motionDot = data.cdof_dot[0];
+    const dt::Math::Vector6<dtDynReal> &force = data.f2[0];
+
+    for (dtDynIndex component = 0; component < 6; ++component)
+    {
+        assert(std::fabs(motion(component) - expectedMotion[component]) < 1.0e-12);
+        assert(std::fabs(motion(component)) > 1.0e-12);
+        assert(std::fabs(motionDot(component)) < 1.0e-12);
+        assert(std::fabs(data.f1[0](component)) < 1.0e-12);
+        assert(std::fabs(force(component) - expectedForce[component]) < 1.0e-12);
+    }
+
+    AssertSpatialMulIntoAllComponentContributions(data.crb[child], motion);
+    assert(force(0) < 0.0);
+    assert(force(1) > 0.0);
+    assert(force(2) > 0.0);
+    assert(force(3) > 0.0);
+    assert(force(4) > 0.0);
+    assert(force(5) < 0.0);
+}
+
 void ConfigureAngularPointMotionRegressionBody(dtDynBodySpec &draft)
 {
     draft.inertial.mass = 1.0;
@@ -6608,6 +6719,7 @@ int main()
     TestEffectiveRootCountPreservesFallback();
     TestCcrbaPreservesRootMassGuardedComProducts();
     TestFreeJointCdoFDotPreservesSpatialCrossTerms();
+    TestCcrbaSpatialMulIntoZeroDofDotCoversAllComponents();
     TestAngularPointMotionSubspacePreservesCrossTerms();
     TestCompileSpecSupportsFloatingBaseQuadrupedTree();
     TestForwardKinematicsAppliesBallJointQuaternionPose();
