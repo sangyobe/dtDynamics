@@ -1070,16 +1070,20 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
         const dtDynIndex jointCount = model.body_jntnum[index];
         const dtDynIndex dofAddress = model.body_dofadr[index];
         const dtDynIndex dofCount = model.body_dofnum[index];
-        if (jointCount < 0 || (jointCount == 0 && jointAddress != DTDYN_INVALID_INDEX) ||
-            (jointCount > 0 &&
-             (jointAddress < 0 || static_cast<long long>(jointAddress) + jointCount > model.njnt)))
+        if ((jointCount < 0) ||
+            ((jointCount == 0) && (jointAddress != DTDYN_INVALID_INDEX)) ||
+            ((jointCount > 0) &&
+             ((jointAddress < 0) ||
+              ((static_cast<long long>(jointAddress) + jointCount) > model.njnt))))
         {
             return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body, bodyId,
                         "compiled body joint segment is invalid");
         }
-        if (dofCount < 0 || (dofCount == 0 && dofAddress != DTDYN_INVALID_INDEX) ||
-            (dofCount > 0 &&
-             (dofAddress < 0 || static_cast<long long>(dofAddress) + dofCount > model.nv)))
+        if ((dofCount < 0) ||
+            ((dofCount == 0) && (dofAddress != DTDYN_INVALID_INDEX)) ||
+            ((dofCount > 0) &&
+             ((dofAddress < 0) ||
+              ((static_cast<long long>(dofAddress) + dofCount) > model.nv))))
         {
             return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body, bodyId,
                         "compiled body DOF segment is invalid");

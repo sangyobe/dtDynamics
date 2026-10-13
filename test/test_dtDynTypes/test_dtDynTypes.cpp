@@ -1897,6 +1897,86 @@ void TestModelValidationRejectsCompiledJointQposDofSpanBounds()
     AssertCompiledJointQposDofSpanDiagnostic(onePastDof, joint);
 }
 
+void AssertCompiledBodySegmentDiagnostic(const dtDynModel &model,
+                                         const dtDynIndex body,
+                                         const std::string &expectedMessage)
+{
+    dtDynValidationError error;
+    assert(!ValidateModel(model, &error));
+    assert(error.code == dtDynValidationCode::InvalidReference);
+    assert(error.object == dtDynObjectType::Body);
+    assert(error.index == body);
+    assert(error.message == expectedMessage);
+}
+
+void TestModelValidationRejectsCompiledBodySegmentBounds()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("body_segment_bounds_body", 0);
+    const dtDynIndex joint =
+        spec.AddJoint(body, "body_segment_bounds_joint", dtDynJointType::Hinge);
+    const dtDynModel valid = CompileSpecChecked(spec);
+
+    assert(body == 1);
+    assert(joint == 0);
+    assert(valid.nbody == 2);
+    assert(valid.njnt == 1);
+    assert(valid.nv == 1);
+    assert(valid.body_jntnum[0] == 0);
+    assert(valid.body_jntadr[0] == DTDYN_INVALID_INDEX);
+    assert(valid.body_dofnum[0] == 0);
+    assert(valid.body_dofadr[0] == DTDYN_INVALID_INDEX);
+    assert(valid.body_jntnum[static_cast<std::size_t>(body)] == 1);
+    assert(valid.body_jntadr[static_cast<std::size_t>(body)] == 0);
+    assert(valid.body_dofnum[static_cast<std::size_t>(body)] == 1);
+    assert(valid.body_dofadr[static_cast<std::size_t>(body)] == 0);
+    dtDynValidationError validError;
+    assert(ValidateModel(valid, &validError));
+    assert(validError.code == dtDynValidationCode::None);
+
+    dtDynModel negativeWorldJointCount = valid;
+    negativeWorldJointCount.body_jntnum[0] = DTDYN_INVALID_INDEX;
+    AssertCompiledBodySegmentDiagnostic(negativeWorldJointCount, 0,
+                                        "compiled body joint segment is invalid");
+
+    dtDynModel zeroWorldJointAddress = valid;
+    zeroWorldJointAddress.body_jntadr[0] = 0;
+    AssertCompiledBodySegmentDiagnostic(zeroWorldJointAddress, 0,
+                                        "compiled body joint segment is invalid");
+
+    dtDynModel positiveWorldJointCount = valid;
+    positiveWorldJointCount.body_jntnum[0] = 1;
+    AssertCompiledBodySegmentDiagnostic(positiveWorldJointCount, 0,
+                                        "compiled body joint segment is invalid");
+
+    dtDynModel onePastBodyJointAddress = valid;
+    onePastBodyJointAddress.body_jntadr[static_cast<std::size_t>(body)] =
+        onePastBodyJointAddress.njnt;
+    AssertCompiledBodySegmentDiagnostic(onePastBodyJointAddress, body,
+                                        "compiled body joint segment is invalid");
+
+    dtDynModel negativeWorldDofCount = valid;
+    negativeWorldDofCount.body_dofnum[0] = DTDYN_INVALID_INDEX;
+    AssertCompiledBodySegmentDiagnostic(negativeWorldDofCount, 0,
+                                        "compiled body DOF segment is invalid");
+
+    dtDynModel zeroWorldDofAddress = valid;
+    zeroWorldDofAddress.body_dofadr[0] = 0;
+    AssertCompiledBodySegmentDiagnostic(zeroWorldDofAddress, 0,
+                                        "compiled body DOF segment is invalid");
+
+    dtDynModel positiveWorldDofCount = valid;
+    positiveWorldDofCount.body_dofnum[0] = 1;
+    AssertCompiledBodySegmentDiagnostic(positiveWorldDofCount, 0,
+                                        "compiled body DOF segment is invalid");
+
+    dtDynModel onePastBodyDofAddress = valid;
+    onePastBodyDofAddress.body_dofadr[static_cast<std::size_t>(body)] =
+        onePastBodyDofAddress.nv;
+    AssertCompiledBodySegmentDiagnostic(onePastBodyDofAddress, body,
+                                        "compiled body DOF segment is invalid");
+}
+
 void TestModelValidationPreservesUniqueNameValidationOrder()
 {
     dtDynSpec spec;
@@ -8757,6 +8837,7 @@ int main()
     TestModelValidationRejectsCompiledSiteBodyBounds();
     TestModelValidationRejectsCompiledActuatorJointBounds();
     TestModelValidationRejectsCompiledJointQposDofSpanBounds();
+    TestModelValidationRejectsCompiledBodySegmentBounds();
     TestModelValidationPreservesEveryBodyNonFiniteFailure();
     TestModelValidationPreservesEveryBodyPhysicalOrFrameFailure();
     TestModelValidationPreservesBodyValidationPhasePrecedence();
