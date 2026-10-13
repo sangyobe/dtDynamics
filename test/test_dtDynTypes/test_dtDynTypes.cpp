@@ -4643,6 +4643,28 @@ void TestMatrixRotatePreservesLinearCombination()
     assert(std::fabs(rotated(2) + 4.0) < 1.0e-12);
 }
 
+void TestNormalizeOrIdentityPreservesUnitAndZeroCases()
+{
+    dt::Math::Vector4<dtDynReal> scaledIdentity;
+    scaledIdentity(0) = 2.0;
+    scaledIdentity(1) = 0.0;
+    scaledIdentity(2) = 0.0;
+    scaledIdentity(3) = 0.0;
+    const dt::Math::Vector4<dtDynReal> normalized = math::NormalizeOrIdentity(scaledIdentity);
+    assert(std::fabs(normalized(0) - 1.0) < 1.0e-12);
+    assert(std::fabs(normalized(1)) < 1.0e-12);
+    assert(std::fabs(normalized(2)) < 1.0e-12);
+    assert(std::fabs(normalized(3)) < 1.0e-12);
+
+    dt::Math::Vector4<dtDynReal> zero;
+    zero.SetZero();
+    const dt::Math::Vector4<dtDynReal> identity = math::NormalizeOrIdentity(zero);
+    assert(std::fabs(identity(0) - 1.0) < 1.0e-12);
+    assert(std::fabs(identity(1)) < 1.0e-12);
+    assert(std::fabs(identity(2)) < 1.0e-12);
+    assert(std::fabs(identity(3)) < 1.0e-12);
+}
+
 void TestSpatialInertiaAtWorldOriginUsesParallelAxisTheorem()
 {
     dt::Math::Vector3<dtDynReal> com;
@@ -6029,6 +6051,7 @@ int main()
     TestQuatToMatPreservesQuarterTurn();
     TestMulQuatPreservesQuaternionProduct();
     TestMatrixRotatePreservesLinearCombination();
+    TestNormalizeOrIdentityPreservesUnitAndZeroCases();
     TestSpatialInertiaAtWorldOriginUsesParallelAxisTheorem();
     TestCompileSpecUsesNativeIndexLayout();
     TestCompileSpecSupportsMultipleMovableRoots();

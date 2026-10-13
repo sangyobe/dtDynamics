@@ -42,7 +42,9 @@ dt::Math::Vector3<dtDynReal> NormalizeOrDefault(const dt::Math::Vector3<dtDynRea
 
 dt::Math::Vector4<dtDynReal> NormalizeOrIdentity(const dt::Math::Vector4<dtDynReal> &q)
 {
-    const dtDynReal norm = std::sqrt(q.At(0) * q.At(0) + q.At(1) * q.At(1) + q.At(2) * q.At(2) + q.At(3) * q.At(3));
+    const dtDynReal norm = std::sqrt((((q.At(0) * q.At(0)) + (q.At(1) * q.At(1))) +
+                                      (q.At(2) * q.At(2))) +
+                                     (q.At(3) * q.At(3)));
     dt::Math::Vector4<dtDynReal> out;
     if (norm <= std::numeric_limits<dtDynReal>::epsilon())
     {
