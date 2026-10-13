@@ -104,9 +104,9 @@ dt::Math::Vector3<dtDynReal> Rotate(const dt::Math::Matrix3<dtDynReal> &m,
                                     const dt::Math::Vector3<dtDynReal> &v)
 {
     dt::Math::Vector3<dtDynReal> out;
-    out.At(0) = m.At(0, 0) * v.At(0) + m.At(0, 1) * v.At(1) + m.At(0, 2) * v.At(2);
-    out.At(1) = m.At(1, 0) * v.At(0) + m.At(1, 1) * v.At(1) + m.At(1, 2) * v.At(2);
-    out.At(2) = m.At(2, 0) * v.At(0) + m.At(2, 1) * v.At(1) + m.At(2, 2) * v.At(2);
+    out.At(0) = ((m.At(0, 0) * v.At(0)) + (m.At(0, 1) * v.At(1))) + (m.At(0, 2) * v.At(2));
+    out.At(1) = ((m.At(1, 0) * v.At(0)) + (m.At(1, 1) * v.At(1))) + (m.At(1, 2) * v.At(2));
+    out.At(2) = ((m.At(2, 0) * v.At(0)) + (m.At(2, 1) * v.At(1))) + (m.At(2, 2) * v.At(2));
     return out;
 }
 
