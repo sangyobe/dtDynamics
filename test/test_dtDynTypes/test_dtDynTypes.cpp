@@ -4598,6 +4598,27 @@ void TestQuatToMatPreservesQuarterTurn()
     assert(std::fabs(matrix(2, 2) - 1.0) < 1.0e-12);
 }
 
+void TestMulQuatPreservesQuaternionProduct()
+{
+    dt::Math::Vector4<dtDynReal> a;
+    a(0) = 0.5;
+    a(1) = 0.5;
+    a(2) = 0.5;
+    a(3) = 0.5;
+
+    dt::Math::Vector4<dtDynReal> b;
+    b(0) = 0.5;
+    b(1) = -0.5;
+    b(2) = 0.5;
+    b(3) = -0.5;
+
+    const dt::Math::Vector4<dtDynReal> product = math::MulQuat(a, b);
+    assert(std::fabs(product(0) - 0.5) < 1.0e-12);
+    assert(std::fabs(product(1) + 0.5) < 1.0e-12);
+    assert(std::fabs(product(2) - 0.5) < 1.0e-12);
+    assert(std::fabs(product(3) - 0.5) < 1.0e-12);
+}
+
 void TestSpatialInertiaAtWorldOriginUsesParallelAxisTheorem()
 {
     dt::Math::Vector3<dtDynReal> com;
@@ -5982,6 +6003,7 @@ int main()
     TestDataResizeSupportsFullyFixedZeroDofModel();
     TestDtDynMathHelpersAreReusable();
     TestQuatToMatPreservesQuarterTurn();
+    TestMulQuatPreservesQuaternionProduct();
     TestSpatialInertiaAtWorldOriginUsesParallelAxisTheorem();
     TestCompileSpecUsesNativeIndexLayout();
     TestCompileSpecSupportsMultipleMovableRoots();

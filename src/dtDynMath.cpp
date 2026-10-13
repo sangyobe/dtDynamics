@@ -61,10 +61,14 @@ dt::Math::Vector4<dtDynReal> MulQuat(const dt::Math::Vector4<dtDynReal> &a,
                                      const dt::Math::Vector4<dtDynReal> &b)
 {
     dt::Math::Vector4<dtDynReal> out;
-    out.At(0) = a.At(0) * b.At(0) - a.At(1) * b.At(1) - a.At(2) * b.At(2) - a.At(3) * b.At(3);
-    out.At(1) = a.At(0) * b.At(1) + a.At(1) * b.At(0) + a.At(2) * b.At(3) - a.At(3) * b.At(2);
-    out.At(2) = a.At(0) * b.At(2) - a.At(1) * b.At(3) + a.At(2) * b.At(0) + a.At(3) * b.At(1);
-    out.At(3) = a.At(0) * b.At(3) + a.At(1) * b.At(2) - a.At(2) * b.At(1) + a.At(3) * b.At(0);
+    out.At(0) = (((a.At(0) * b.At(0)) - (a.At(1) * b.At(1))) - (a.At(2) * b.At(2))) -
+                (a.At(3) * b.At(3));
+    out.At(1) = (((a.At(0) * b.At(1)) + (a.At(1) * b.At(0))) + (a.At(2) * b.At(3))) -
+                (a.At(3) * b.At(2));
+    out.At(2) = (((a.At(0) * b.At(2)) - (a.At(1) * b.At(3))) + (a.At(2) * b.At(0))) +
+                (a.At(3) * b.At(1));
+    out.At(3) = (((a.At(0) * b.At(3)) + (a.At(1) * b.At(2))) - (a.At(2) * b.At(1))) +
+                (a.At(3) * b.At(0));
     return NormalizeOrIdentity(out);
 }
 
