@@ -6394,6 +6394,322 @@ void TestIndexedJacobiansRefreshFloatingBaseBodyAndTaskSite()
     }
 }
 
+constexpr dtDynReal kP52JacobianTolerance = 1.0e-12;
+
+void ConfigureP52FreeRootBody(dtDynBodySpec &draft)
+{
+    draft.pos.At(0) = 0.25;
+    draft.pos.At(1) = -0.35;
+    draft.pos.At(2) = 0.45;
+    draft.inertial.mass = 2.0;
+    draft.inertial.pos.At(0) = 0.15;
+    draft.inertial.pos.At(1) = -0.20;
+    draft.inertial.pos.At(2) = 0.30;
+    draft.inertial.inertia.At(0) = 0.30;
+    draft.inertial.inertia.At(1) = 0.40;
+    draft.inertial.inertia.At(2) = 0.50;
+}
+
+void ConfigureP52BallBody(dtDynBodySpec &draft)
+{
+    draft.pos.At(0) = 0.55;
+    draft.pos.At(1) = -0.65;
+    draft.pos.At(2) = 0.75;
+    draft.inertial.mass = 1.5;
+    draft.inertial.pos.At(0) = -0.10;
+    draft.inertial.pos.At(1) = 0.25;
+    draft.inertial.pos.At(2) = 0.35;
+    draft.inertial.inertia.At(0) = 0.25;
+    draft.inertial.inertia.At(1) = 0.35;
+    draft.inertial.inertia.At(2) = 0.45;
+}
+
+void ConfigureP52BallJoint(dtDynJointSpec &draft)
+{
+    draft.pos.At(0) = -0.30;
+    draft.pos.At(1) = 0.40;
+    draft.pos.At(2) = 0.50;
+}
+
+void ConfigureP52TaskSite(dtDynSiteSpec &draft)
+{
+    draft.pos.At(0) = 0.60;
+    draft.pos.At(1) = -0.45;
+    draft.pos.At(2) = 0.35;
+}
+
+void SetP52NormalizedQuaternion(dtDynData &data,
+                                const dtDynIndex qposAddress,
+                                const dtDynReal w,
+                                const dtDynReal x,
+                                const dtDynReal y,
+                                const dtDynReal z)
+{
+    const dtDynReal norm = std::sqrt((w * w) + (x * x) + (y * y) + (z * z));
+    assert(norm > kP52JacobianTolerance);
+    data.qpos.At(qposAddress + 0) = w / norm;
+    data.qpos.At(qposAddress + 1) = x / norm;
+    data.qpos.At(qposAddress + 2) = y / norm;
+    data.qpos.At(qposAddress + 3) = z / norm;
+
+    const dtDynReal normalizedSquaredNorm =
+        (data.qpos.At(qposAddress + 0) * data.qpos.At(qposAddress + 0)) +
+        (data.qpos.At(qposAddress + 1) * data.qpos.At(qposAddress + 1)) +
+        (data.qpos.At(qposAddress + 2) * data.qpos.At(qposAddress + 2)) +
+        (data.qpos.At(qposAddress + 3) * data.qpos.At(qposAddress + 3));
+    assert(std::fabs(normalizedSquaredNorm - 1.0) < kP52JacobianTolerance);
+}
+
+dt::Math::Vector3<dtDynReal> ReadP52QposPosition(const dtDynData &data,
+                                                 const dtDynIndex qposAddress)
+{
+    dt::Math::Vector3<dtDynReal> position;
+    for (dtDynIndex axis = 0; axis < 3; ++axis)
+    {
+        position.At(axis) = data.qpos.At(qposAddress + axis);
+    }
+    return position;
+}
+
+dt::Math::Vector4<dtDynReal> ReadP52QposQuaternion(const dtDynData &data,
+                                                   const dtDynIndex qposAddress)
+{
+    dt::Math::Vector4<dtDynReal> quaternion;
+    for (dtDynIndex component = 0; component < 4; ++component)
+    {
+        quaternion.At(component) = data.qpos.At(qposAddress + component);
+    }
+    return quaternion;
+}
+
+void AssertP52Vector3Matches(const dt::Math::Vector3<dtDynReal> &actual,
+                             const dt::Math::Vector3<dtDynReal> &expected)
+{
+    for (dtDynIndex axis = 0; axis < 3; ++axis)
+    {
+        assert(std::fabs(actual.At(axis) - expected.At(axis)) < kP52JacobianTolerance);
+    }
+}
+
+void AssertP52Vector4Matches(const dt::Math::Vector4<dtDynReal> &actual,
+                             const dt::Math::Vector4<dtDynReal> &expected)
+{
+    for (dtDynIndex component = 0; component < 4; ++component)
+    {
+        assert(std::fabs(actual.At(component) - expected.At(component)) < kP52JacobianTolerance);
+    }
+}
+
+void AssertP52Matrix3Matches(const dt::Math::Matrix3<dtDynReal> &actual,
+                             const dt::Math::Matrix3<dtDynReal> &expected)
+{
+    for (dtDynIndex row = 0; row < 3; ++row)
+    {
+        for (dtDynIndex column = 0; column < 3; ++column)
+        {
+            assert(std::fabs(actual.At(row, column) - expected.At(row, column)) < kP52JacobianTolerance);
+        }
+    }
+}
+
+void AssertP52BallKinematicFrames(const dtDynModel &model,
+                                  const dtDynData &data,
+                                  const dtDynIndex freeJoint,
+                                  const dtDynIndex ballJoint,
+                                  const dtDynIndex ballBody,
+                                  const dtDynIndex taskSite)
+{
+    const std::size_t freeJointIndex = static_cast<std::size_t>(freeJoint);
+    const std::size_t ballJointIndex = static_cast<std::size_t>(ballJoint);
+    const std::size_t ballBodyIndex = static_cast<std::size_t>(ballBody);
+    const std::size_t taskSiteIndex = static_cast<std::size_t>(taskSite);
+    const dtDynIndex freeQposAddress = model.jnt_qposadr[freeJointIndex];
+    const dtDynIndex ballQposAddress = model.jnt_qposadr[ballJointIndex];
+    const dt::Math::Vector3<dtDynReal> rootPosition = ReadP52QposPosition(data, freeQposAddress);
+    const dt::Math::Vector4<dtDynReal> rootQuaternion =
+        ReadP52QposQuaternion(data, freeQposAddress + 3);
+    const dt::Math::Vector4<dtDynReal> ballQuaternion =
+        ReadP52QposQuaternion(data, ballQposAddress);
+    const dt::Math::Matrix3<dtDynReal> rootMatrix = math::QuatToMat(rootQuaternion);
+    const dt::Math::Vector3<dtDynReal> beforeBallPosition =
+        rootPosition + math::Rotate(rootMatrix, model.body_pos[ballBodyIndex]);
+    const dt::Math::Vector4<dtDynReal> beforeBallQuaternion =
+        math::MulQuat(rootQuaternion, model.body_quat[ballBodyIndex]);
+    const dt::Math::Matrix3<dtDynReal> beforeBallMatrix = math::QuatToMat(beforeBallQuaternion);
+    const dt::Math::Vector3<dtDynReal> expectedAnchor =
+        beforeBallPosition + math::Rotate(beforeBallMatrix, model.jnt_pos[ballJointIndex]);
+    const dt::Math::Vector4<dtDynReal> expectedBallQuaternion =
+        math::MulQuat(beforeBallQuaternion, ballQuaternion);
+    const dt::Math::Matrix3<dtDynReal> expectedBallMatrix = math::QuatToMat(expectedBallQuaternion);
+    const dt::Math::Vector3<dtDynReal> expectedBallPosition =
+        expectedAnchor - math::Rotate(expectedBallMatrix, model.jnt_pos[ballJointIndex]);
+    const dt::Math::Vector3<dtDynReal> expectedSitePosition =
+        expectedBallPosition + math::Rotate(expectedBallMatrix, model.site_pos[taskSiteIndex]);
+
+    AssertP52Vector4Matches(data.xquat[ballBodyIndex], expectedBallQuaternion);
+    AssertP52Matrix3Matches(data.xmat[ballBodyIndex], expectedBallMatrix);
+    AssertP52Vector3Matches(data.xanchor[ballJointIndex], expectedAnchor);
+    AssertP52Vector3Matches(data.xpos[ballBodyIndex], expectedBallPosition);
+    AssertP52Vector3Matches(data.site_xpos[taskSiteIndex], expectedSitePosition);
+    assert(std::fabs(data.xquat[ballBodyIndex].At(0) - 1.0) > kP52JacobianTolerance);
+}
+
+void AssertP52MatrixMatches(const dtDynDenseMatrix &actual,
+                            const dtDynDenseMatrix &expected,
+                            const dtDynIndex nv)
+{
+    assert(actual.GetRowSize() == 3U);
+    assert(actual.GetColSize() == ToDtMathDim(nv));
+    assert(expected.GetRowSize() == 3U);
+    assert(expected.GetColSize() == ToDtMathDim(nv));
+    for (dtDynIndex row = 0; row < 3; ++row)
+    {
+        for (dtDynIndex column = 0; column < nv; ++column)
+        {
+            assert(std::fabs(actual.At(row, column) - expected.At(row, column)) < kP52JacobianTolerance);
+        }
+    }
+}
+
+void AssertP52CachedMatricesMatchSeparatePointApis(const dtDynModel &model,
+                                                   const dtDynData &data,
+                                                   const dtDynIndex bodyId,
+                                                   const dt::Math::Vector3<dtDynReal> &point,
+                                                   const dtDynDenseMatrix &cachedJacp,
+                                                   const dtDynDenseMatrix &cachedJacr,
+                                                   const dtDynDenseMatrix &cachedJacpDot,
+                                                   const dtDynDenseMatrix &cachedJacrDot)
+{
+    dtDynDenseMatrix pointJacp;
+    dtDynDenseMatrix pointJacr;
+    dtDynDenseMatrix pointJacpDot;
+    dtDynDenseMatrix pointJacrDot;
+    ComputePointJacobian(model, data, bodyId, point, pointJacp, pointJacr);
+    ComputePointJacobianDot(model, data, bodyId, point, pointJacpDot, pointJacrDot);
+
+    AssertP52MatrixMatches(cachedJacp, pointJacp, model.nv);
+    AssertP52MatrixMatches(cachedJacr, pointJacr, model.nv);
+    AssertP52MatrixMatches(cachedJacpDot, pointJacpDot, model.nv);
+    AssertP52MatrixMatches(cachedJacrDot, pointJacrDot, model.nv);
+}
+
+bool AssertP52CachedDerivativeColumnUsesFinalBodyVelocity(const dtDynModel &model,
+                                                          const dtDynData &data,
+                                                          const dtDynIndex dofId,
+                                                          const dtDynDenseMatrix &cachedJacrDot)
+{
+    const std::size_t dofIndex = static_cast<std::size_t>(dofId);
+    const dtDynIndex dofBody = model.dof_bodyid[dofIndex];
+    const dt::Math::Vector6<dtDynReal> expected = math::CrossSpatialMotion(
+        data.cvel[static_cast<std::size_t>(dofBody)], data.cdof[dofIndex]);
+    bool hasNonzeroSignal = false;
+    bool differsFromPreparedDerivative = false;
+    for (dtDynIndex row = 0; row < 3; ++row)
+    {
+        assert(std::fabs(cachedJacrDot.At(row, dofId) - expected.At(row)) < kP52JacobianTolerance);
+        if (std::fabs(cachedJacrDot.At(row, dofId)) > kP52JacobianTolerance)
+        {
+            hasNonzeroSignal = true;
+        }
+        if (std::fabs(expected.At(row) - data.cdof_dot[dofIndex].At(row)) > kP52JacobianTolerance)
+        {
+            differsFromPreparedDerivative = true;
+        }
+    }
+    assert(hasNonzeroSignal);
+    return differsFromPreparedDerivative;
+}
+
+void TestP52CachedPointJacobianDerivativeDispatchUsesBallAndFreeRotations()
+{
+    dtDynSpec spec;
+    const dtDynIndex freeRoot = spec.AddBody("p52_free_root", 0);
+    const dtDynIndex ballBody = spec.AddBody("p52_ball_body", freeRoot);
+    const dtDynIndex freeJoint = spec.AddJoint(freeRoot, "p52_free", dtDynJointType::Free);
+    const dtDynIndex ballJoint = spec.AddJoint(ballBody, "p52_ball", dtDynJointType::Ball);
+    const dtDynIndex taskSite = spec.AddSite(ballBody, "p52_task_site");
+    spec.EditBody(freeRoot, ConfigureP52FreeRootBody);
+    spec.EditBody(ballBody, ConfigureP52BallBody);
+    spec.EditJoint(ballJoint, ConfigureP52BallJoint);
+    spec.EditSite(taskSite, ConfigureP52TaskSite);
+
+    const dtDynModel model = CompileSpecChecked(spec);
+    assert(model.nq == 11);
+    assert(model.nv == 9);
+    const std::size_t freeJointIndex = static_cast<std::size_t>(freeJoint);
+    const std::size_t ballJointIndex = static_cast<std::size_t>(ballJoint);
+    const dtDynIndex freeDofAddress = model.jnt_dofadr[freeJointIndex];
+    const dtDynIndex ballDofAddress = model.jnt_dofadr[ballJointIndex];
+    assert(freeDofAddress == 0);
+    assert(ballDofAddress == 6);
+    assert(model.jnt_qposadr[freeJointIndex] == 0);
+    assert(model.jnt_qposadr[ballJointIndex] == 7);
+
+    dtDynData data;
+    data.Resize(model);
+    data.qpos.At(0) = 0.20;
+    data.qpos.At(1) = -0.30;
+    data.qpos.At(2) = 0.40;
+    SetP52NormalizedQuaternion(data, 3, 1.0, -2.0, 3.0, -4.0);
+    SetP52NormalizedQuaternion(data, 7, 2.0, 3.0, -4.0, 5.0);
+    const dtDynReal qvelValues[9] = {0.31, -0.47, 0.59, -0.71, 0.83, -0.97, 1.09, -1.21, 1.33};
+    for (dtDynIndex dofId = 0; dofId < model.nv; ++dofId)
+    {
+        data.qvel.At(dofId) = qvelValues[dofId];
+    }
+
+    ForwardKinematics(model, data);
+    AssertP52BallKinematicFrames(model, data, freeJoint, ballJoint, ballBody, taskSite);
+    dt::Math::Vector3<dtDynReal> gravity;
+    gravity.SetZero();
+    ComputeDynamicsCCRBA(model, data, gravity, DTDYN_CCRBA_TERM_ALL);
+
+    const dtDynArray<dtDynIndex> bodyIds = {ballBody};
+    const dtDynArray<dtDynIndex> siteIds = {taskSite};
+    ComputeJacobians(model, data, bodyIds, siteIds);
+
+    AssertP52CachedMatricesMatchSeparatePointApis(model,
+                                                  data,
+                                                  ballBody,
+                                                  data.xpos[static_cast<std::size_t>(ballBody)],
+                                                  data.body_jacp[static_cast<std::size_t>(ballBody)],
+                                                  data.body_jacr[static_cast<std::size_t>(ballBody)],
+                                                  data.body_jacp_dot[static_cast<std::size_t>(ballBody)],
+                                                  data.body_jacr_dot[static_cast<std::size_t>(ballBody)]);
+    AssertP52CachedMatricesMatchSeparatePointApis(model,
+                                                  data,
+                                                  ballBody,
+                                                  data.site_xpos[static_cast<std::size_t>(taskSite)],
+                                                  data.site_jacp[static_cast<std::size_t>(taskSite)],
+                                                  data.site_jacr[static_cast<std::size_t>(taskSite)],
+                                                  data.site_jacp_dot[static_cast<std::size_t>(taskSite)],
+                                                  data.site_jacr_dot[static_cast<std::size_t>(taskSite)]);
+
+    bool freeBranchDiffersFromPreparedDerivative = false;
+    bool ballBranchDiffersFromPreparedDerivative = false;
+    for (dtDynIndex offset = 0; offset < 3; ++offset)
+    {
+        const dtDynIndex freeRotationalDof = freeDofAddress + 3 + offset;
+        const dtDynIndex ballDof = ballDofAddress + offset;
+        assert(model.dof_jntid[static_cast<std::size_t>(freeRotationalDof)] == freeJoint);
+        assert(model.dof_jntid[static_cast<std::size_t>(ballDof)] == ballJoint);
+        const bool bodyFreeDiffers = AssertP52CachedDerivativeColumnUsesFinalBodyVelocity(
+            model, data, freeRotationalDof, data.body_jacr_dot[static_cast<std::size_t>(ballBody)]);
+        const bool siteFreeDiffers = AssertP52CachedDerivativeColumnUsesFinalBodyVelocity(
+            model, data, freeRotationalDof, data.site_jacr_dot[static_cast<std::size_t>(taskSite)]);
+        const bool bodyBallDiffers = AssertP52CachedDerivativeColumnUsesFinalBodyVelocity(
+            model, data, ballDof, data.body_jacr_dot[static_cast<std::size_t>(ballBody)]);
+        const bool siteBallDiffers = AssertP52CachedDerivativeColumnUsesFinalBodyVelocity(
+            model, data, ballDof, data.site_jacr_dot[static_cast<std::size_t>(taskSite)]);
+        freeBranchDiffersFromPreparedDerivative =
+            freeBranchDiffersFromPreparedDerivative || bodyFreeDiffers || siteFreeDiffers;
+        ballBranchDiffersFromPreparedDerivative =
+            ballBranchDiffersFromPreparedDerivative || bodyBallDiffers || siteBallDiffers;
+    }
+    assert(freeBranchDiffersFromPreparedDerivative);
+    assert(ballBranchDiffersFromPreparedDerivative);
+}
+
 void TestPointJacobianDotMatchesFiniteDifferenceForMaterialSite()
 {
     dtDynSpec spec;
@@ -7897,6 +8213,7 @@ int main()
     TestForwardKinematicsAndPointJacobianForFixedChain();
     TestIndexedJacobiansOnlyRefreshRequestedIds();
     TestIndexedJacobiansRefreshFloatingBaseBodyAndTaskSite();
+    TestP52CachedPointJacobianDerivativeDispatchUsesBallAndFreeRotations();
     TestPointJacobianDotMatchesFiniteDifferenceForMaterialSite();
     TestPointJacobianTermsSelectsEachOutputFamily();
     TestPointJacobianTermsMatchesSeparateAPIs();
