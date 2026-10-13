@@ -371,6 +371,27 @@ void AssertInconsistentRootTableMetadata(const dtDynModel &model,
     assert(error.message == "compiled root table contains inconsistent metadata");
 }
 
+void AssertWorldRootMetadataDiagnostic(const dtDynModel &model)
+{
+    dtDynValidationError error;
+    assert(!ValidateModel(model, &error));
+    assert(error.code == dtDynValidationCode::InvalidReference);
+    assert(error.object == dtDynObjectType::Body);
+    assert(error.index == 0);
+    assert(error.message == "compiled world root metadata is invalid");
+}
+
+void AssertBodyRootPropagationDiagnostic(const dtDynModel &model,
+                                         const dtDynIndex expectedBody)
+{
+    dtDynValidationError error;
+    assert(!ValidateModel(model, &error));
+    assert(error.code == dtDynValidationCode::InvalidReference);
+    assert(error.object == dtDynObjectType::Body);
+    assert(error.index == expectedBody);
+    assert(error.message == "compiled body root ID/slot is inconsistent");
+}
+
 void TestCheckedCompileAcceptsValidSpec()
 {
     const dtDynSpec spec = MakeValidNormalSpec();
@@ -925,6 +946,56 @@ void TestModelValidationRejectsInconsistentRootTableMetadata()
     dtDynModel wrongRootIndex = valid;
     wrongRootIndex.body_rootidx[firstRoot] = 1;
     AssertInconsistentRootTableMetadata(wrongRootIndex, firstRoot);
+}
+
+void TestModelValidationPreservesWorldRootPropagation()
+{
+    dtDynSpec spec;
+    const dtDynIndex firstRoot = spec.AddBody("propagation_first_root", 0);
+    const dtDynIndex child = spec.AddBody("propagation_child", firstRoot);
+    const dtDynIndex secondRoot = spec.AddBody("propagation_second_root", 0);
+    const dtDynModel valid = CompileSpecChecked(spec);
+
+    assert(valid.nbody == 4);
+    assert(valid.nroot == 2);
+    assert(valid.body_parentid[firstRoot] == 0);
+    assert(valid.body_parentid[child] == firstRoot);
+    assert(valid.body_parentid[secondRoot] == 0);
+    assert(valid.body_rootid[firstRoot] == firstRoot);
+    assert(valid.body_rootid[child] == firstRoot);
+    assert(valid.body_rootid[secondRoot] == secondRoot);
+    assert(valid.body_rootidx[firstRoot] == 0);
+    assert(valid.body_rootidx[child] == 0);
+    assert(valid.body_rootidx[secondRoot] == 1);
+
+    dtDynValidationError validError;
+    assert(ValidateModel(valid, &validError));
+    assert(validError.code == dtDynValidationCode::None);
+
+    dtDynModel wrongWorldRootId = valid;
+    wrongWorldRootId.body_rootid[0] = firstRoot;
+    AssertWorldRootMetadataDiagnostic(wrongWorldRootId);
+
+    dtDynModel wrongWorldRootIndex = valid;
+    wrongWorldRootIndex.body_rootidx[0] = 0;
+    AssertWorldRootMetadataDiagnostic(wrongWorldRootIndex);
+
+    dtDynModel wrongChildRootId = valid;
+    wrongChildRootId.body_rootid[child] = secondRoot;
+    wrongChildRootId.body_rootidx[child] = wrongChildRootId.body_rootidx[secondRoot];
+    AssertBodyRootPropagationDiagnostic(wrongChildRootId, child);
+
+    dtDynModel negativeChildRootIndex = valid;
+    negativeChildRootIndex.body_rootidx[child] = DTDYN_INVALID_INDEX;
+    AssertBodyRootPropagationDiagnostic(negativeChildRootIndex, child);
+
+    dtDynModel onePastChildRootIndex = valid;
+    onePastChildRootIndex.body_rootidx[child] = onePastChildRootIndex.nroot;
+    AssertBodyRootPropagationDiagnostic(onePastChildRootIndex, child);
+
+    dtDynModel otherRootChildIndex = valid;
+    otherRootChildIndex.body_rootidx[child] = otherRootChildIndex.body_rootidx[secondRoot];
+    AssertBodyRootPropagationDiagnostic(otherRootChildIndex, child);
 }
 
 void TestModelValidationRejectsDuplicateNames()
@@ -8460,6 +8531,7 @@ int main()
     TestModelValidationRejectsInvalidJointSpecProvenance();
     TestModelValidationRejectsInvalidRootMetadata();
     TestModelValidationRejectsInconsistentRootTableMetadata();
+    TestModelValidationPreservesWorldRootPropagation();
     TestModelValidationRejectsDuplicateNames();
     TestModelValidationRejectsOverlappingJointSpans();
     TestModelValidationRejectsOrphanBodySegments();

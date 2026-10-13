@@ -980,7 +980,7 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
                         bodyId, "compiled body subtree mass is inconsistent");
         }
     }
-    if (model.body_rootid[0] != 0 || model.body_rootidx[0] != DTDYN_INVALID_INDEX)
+    if ((model.body_rootid[0] != 0) || (model.body_rootidx[0] != DTDYN_INVALID_INDEX))
     {
         return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body, 0,
                     "compiled world root metadata is invalid");
@@ -1031,9 +1031,9 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
         const dtDynIndex rootBody = model.body_rootid[index];
         const dtDynIndex rootIndex = model.body_rootidx[index];
         const dtDynIndex expectedRoot =
-            parent == 0 ? bodyId : model.body_rootid[static_cast<std::size_t>(parent)];
-        if (rootBody != expectedRoot || rootIndex < 0 || rootIndex >= model.nroot ||
-            model.root_bodyid[static_cast<std::size_t>(rootIndex)] != rootBody)
+            (parent == 0) ? bodyId : model.body_rootid[static_cast<std::size_t>(parent)];
+        if ((rootBody != expectedRoot) || (rootIndex < 0) || (rootIndex >= model.nroot) ||
+            (model.root_bodyid[static_cast<std::size_t>(rootIndex)] != rootBody))
         {
             return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body,
                         bodyId, "compiled body root ID/slot is inconsistent");
