@@ -1096,7 +1096,7 @@ dtDynSpec DecodeXmlImpl(const std::string &xml, const std::string &sourcePath)
     while (true)
     {
         const std::size_t begin = xml.find('<', cursor);
-        const std::size_t textEnd = begin == std::string::npos ? xml.size() : begin;
+        const std::size_t textEnd = (begin == std::string::npos) ? xml.size() : begin;
         const std::size_t unexpectedText = FindFirstNonWhitespace(xml, cursor, textEnd);
         if (unexpectedText != std::string::npos)
         {
@@ -1141,7 +1141,7 @@ dtDynSpec DecodeXmlImpl(const std::string &xml, const std::string &sourcePath)
         }
         if (tag[0] == '?')
         {
-            if (tag.back() != '?' || begin != 0 || sawMarkup || sawMujocoRoot)
+            if ((tag.back() != '?') || (begin != 0) || sawMarkup || sawMujocoRoot)
             {
                 throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath, begin,
                                     "malformed or misplaced XML declaration");
@@ -1434,7 +1434,8 @@ dtDynSpec DecodeXmlImpl(const std::string &xml, const std::string &sourcePath)
             const std::string jointName = AttributeOr(attrs, "name", "joint");
             RequireUniqueName(jointName, attrs, jointNames, begin, "joint", sourcePath);
             const auto typeAttribute = attrs.find("type");
-            const dtDynJointType jointType = typeAttribute == attrs.end() ? dtDynJointType::Hinge : JointTypeFromXml(typeAttribute->second, sourcePath);
+            const dtDynJointType jointType =
+                (typeAttribute == attrs.end()) ? dtDynJointType::Hinge : JointTypeFromXml(typeAttribute->second, sourcePath);
             const dtDynIndex jointId = spec.AddJoint(bodyId, jointName, jointType);
             jointOrigins.push_back(begin);
             spec.EditJoint(jointId, [&](dtDynJointSpec &draft)
@@ -1541,7 +1542,7 @@ dtDynSpec DecodeXmlImpl(const std::string &xml, const std::string &sourcePath)
             if (jointIt == jointNameToId.end())
             {
                 const auto jointAttribute = attrs.find("joint");
-                const std::size_t offset = jointAttribute == attrs.end() ? begin : jointAttribute->second.offset;
+                const std::size_t offset = (jointAttribute == attrs.end()) ? begin : jointAttribute->second.offset;
                 throw dtDynXmlError(dtDynXmlErrorCode::InvalidReference, sourcePath, offset,
                                     "actuator references unknown joint '" + jointName + "'");
             }

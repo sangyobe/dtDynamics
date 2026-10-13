@@ -2949,6 +2949,97 @@ static void ExpectMalformedXmlAttributeError(const std::string &xml,
     assert(rejected);
 }
 
+static void ExpectDecodeXmlError(const std::string &xml,
+                                 const dtDynXmlErrorCode expectedCode,
+                                 const std::size_t expectedOffset,
+                                 const std::string &expectedText)
+{
+    bool rejected = false;
+    try
+    {
+        (void)dtDynSpec::DecodeXml(xml);
+    }
+    catch (const dtDynXmlError &error)
+    {
+        assert(error.Code() == expectedCode);
+        assert(error.SourcePath().empty());
+        assert(error.Offset() == expectedOffset);
+        assert(std::string(error.what()) == expectedText);
+        rejected = true;
+    }
+    assert(rejected);
+}
+
+void TestSpecXmlDecodePreservesTerminalTextAndDeclarationDiagnostics()
+{
+    const dtDynSpec root = dtDynSpec::DecodeXml("<mujoco/>");
+    assert(root.Bodies().size() == 1);
+
+    const std::string trailingText = "<mujoco/>tail";
+    const std::size_t trailingOffset = trailingText.find("tail");
+    ExpectDecodeXmlError(
+        trailingText,
+        dtDynXmlErrorCode::MalformedSyntax,
+        trailingOffset,
+        std::string("dtDynSpec::DecodeXml at offset ") + std::to_string(trailingOffset) +
+            ": unexpected text outside an XML element");
+
+    const dtDynSpec declaration = dtDynSpec::DecodeXml("<?xml version=\"1.0\"?><mujoco/>");
+    assert(declaration.Bodies().size() == 1);
+
+    const std::string missingTerminalQuestion = "<?xml version=\"1.0\"><mujoco/>";
+    ExpectDecodeXmlError(
+        missingTerminalQuestion,
+        dtDynXmlErrorCode::MalformedSyntax,
+        0,
+        "dtDynSpec::DecodeXml at offset 0: malformed or misplaced XML declaration");
+
+    const std::string leadingWhitespaceDeclaration = "\n<?xml version=\"1.0\"?><mujoco/>";
+    const std::size_t declarationOffset = leadingWhitespaceDeclaration.find("<?xml");
+    ExpectDecodeXmlError(
+        leadingWhitespaceDeclaration,
+        dtDynXmlErrorCode::MalformedSyntax,
+        declarationOffset,
+        std::string("dtDynSpec::DecodeXml at offset ") + std::to_string(declarationOffset) +
+            ": malformed or misplaced XML declaration");
+}
+
+void TestSpecXmlDecodePreservesJointTypeFallbackAndExplicitSlide()
+{
+    const dtDynSpec decoded = dtDynSpec::DecodeXml(
+        "<mujoco><worldbody><body name=\"base\"><joint name=\"default\"/>"
+        "<joint name=\"sliding\" type=\"slide\"/></body></worldbody></mujoco>");
+    assert(decoded.Bodies().size() == 2);
+    assert(decoded.Joints().size() == 2);
+    assert(decoded.Joints()[0].type == dtDynJointType::Hinge);
+    assert(decoded.Joints()[1].type == dtDynJointType::Slide);
+}
+
+void TestSpecXmlDecodePreservesActuatorJointReferenceDiagnostics()
+{
+    const std::string missingJointAttribute =
+        "<mujoco><worldbody><body name=\"base\"/></worldbody><actuator>"
+        "<motor name=\"motor\"/></actuator></mujoco>";
+    const std::size_t missingAttributeOffset = missingJointAttribute.find("<motor");
+    ExpectDecodeXmlError(
+        missingJointAttribute,
+        dtDynXmlErrorCode::InvalidReference,
+        missingAttributeOffset,
+        std::string("dtDynSpec::DecodeXml at offset ") + std::to_string(missingAttributeOffset) +
+            ": actuator references unknown joint ''");
+
+    const std::string explicitUnknownJoint =
+        "<mujoco><worldbody><body name=\"base\"/></worldbody><actuator>"
+        "<motor name=\"motor\" joint=\"missing_joint\"/></actuator></mujoco>";
+    const std::size_t explicitAttributeOffset = explicitUnknownJoint.find("missing_joint");
+    ExpectDecodeXmlError(
+        explicitUnknownJoint,
+        dtDynXmlErrorCode::InvalidReference,
+        explicitAttributeOffset,
+        std::string("dtDynSpec::DecodeXml at offset ") + std::to_string(explicitAttributeOffset) +
+            ": actuator references unknown joint 'missing_joint'");
+}
+
 void TestSpecXmlPreservesAttributeWhitespaceAndFirstFailure()
 {
     const std::string valid =
@@ -6725,6 +6816,9 @@ int main()
     TestSpecXmlPreservesVectorWhitespaceAndArityOffset();
     TestSpecXmlRejectsMalformedAttributes();
     TestSpecXmlPreservesAttributeWhitespaceAndFirstFailure();
+    TestSpecXmlDecodePreservesTerminalTextAndDeclarationDiagnostics();
+    TestSpecXmlDecodePreservesJointTypeFallbackAndExplicitSlide();
+    TestSpecXmlDecodePreservesActuatorJointReferenceDiagnostics();
     TestSpecXmlRejectsMisnestedSupportedTags();
     TestSpecXmlPreservesClosingElementFailureOrder();
     TestSpecXmlRejectsDuplicateObjectNames();
