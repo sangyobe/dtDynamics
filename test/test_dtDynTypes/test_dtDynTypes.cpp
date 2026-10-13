@@ -5489,6 +5489,338 @@ void TestFreeJointCdoFDotPreservesSpatialCrossTerms()
     assert(std::fabs(data.cdof_dot[5](5)) < 1.0e-12);
 }
 
+void ConfigureHalfSymmetricMotionCrossColumn2Root(dtDynBodySpec &draft)
+{
+    draft.inertial.mass = 2.0;
+    draft.inertial.inertia(0) = 1.0;
+    draft.inertial.inertia(1) = 2.0;
+    draft.inertial.inertia(2) = 3.0;
+}
+
+void ConfigureHalfSymmetricMotionCrossColumn2Child(dtDynBodySpec &draft)
+{
+    draft.pos(0) = 2.0;
+    draft.pos(1) = 3.0;
+    draft.pos(2) = 5.0;
+    draft.inertial.mass = 3.0;
+    draft.inertial.inertia(0) = 4.0;
+    draft.inertial.inertia(1) = 5.0;
+    draft.inertial.inertia(2) = 6.0;
+}
+
+dt::Math::Vector6<dtDynReal> MultiplySpatialMatrixForHalfSymmetricMotionCrossColumn2(
+    const dt::Math::Matrix<6, 6, dtDynReal> &matrix,
+    const dt::Math::Vector6<dtDynReal> &vector)
+{
+    dt::Math::Vector6<dtDynReal> out;
+    for (dtDynIndex row = 0; row < 6; ++row)
+    {
+        out.At(row) = 0.0;
+        for (dtDynIndex col = 0; col < 6; ++col)
+        {
+            out.At(row) += (matrix.At(row, col) * vector.At(col));
+        }
+    }
+    return out;
+}
+
+dt::Math::Vector6<dtDynReal> MultiplySpatialMatrixTransposeForHalfSymmetricMotionCrossColumn2(
+    const dt::Math::Matrix<6, 6, dtDynReal> &matrix,
+    const dt::Math::Vector6<dtDynReal> &vector)
+{
+    dt::Math::Vector6<dtDynReal> out;
+    for (dtDynIndex row = 0; row < 6; ++row)
+    {
+        out.At(row) = 0.0;
+        for (dtDynIndex col = 0; col < 6; ++col)
+        {
+            out.At(row) += (matrix.At(col, row) * vector.At(col));
+        }
+    }
+    return out;
+}
+
+dtDynReal SpatialDotForHalfSymmetricMotionCrossColumn2(
+    const dt::Math::Vector6<dtDynReal> &left,
+    const dt::Math::Vector6<dtDynReal> &right)
+{
+    dtDynReal out = 0.0;
+    for (dtDynIndex row = 0; row < 6; ++row)
+    {
+        out += (left.At(row) * right.At(row));
+    }
+    return out;
+}
+
+dt::Math::Matrix<6, 6, dtDynReal> BuildExpectedBiasMatrixForHalfSymmetricMotionCrossColumn2(
+    const dt::Math::Matrix<6, 6, dtDynReal> &inertia,
+    const dt::Math::Vector6<dtDynReal> &velocity,
+    dt::Math::Matrix<6, 6, dtDynReal> &symmetricPart,
+    dt::Math::Matrix<6, 6, dtDynReal> &momentumPart)
+{
+    const dt::Math::Matrix<6, 6, dtDynReal> motionCross =
+        math::CrossSpatialMotionMatrix(velocity);
+    const dt::Math::Vector6<dtDynReal> momentum =
+        MultiplySpatialMatrixForHalfSymmetricMotionCrossColumn2(inertia, velocity);
+    const dt::Math::Matrix<6, 6, dtDynReal> momentumCross =
+        math::CrossSpatialMomentumMatrix(momentum);
+    dt::Math::Matrix<6, 6, dtDynReal> out;
+
+    for (dtDynIndex row = 0; row < 6; ++row)
+    {
+        for (dtDynIndex col = 0; col < 6; ++col)
+        {
+            dtDynReal transposeInertia = 0.0;
+            dtDynReal inertiaMotion = 0.0;
+            for (dtDynIndex component = 0; component < 6; ++component)
+            {
+                transposeInertia +=
+                    (motionCross.At(component, row) * inertia.At(component, col));
+                inertiaMotion +=
+                    (inertia.At(row, component) * motionCross.At(component, col));
+            }
+            symmetricPart.At(row, col) = -0.5 * (transposeInertia + inertiaMotion);
+            momentumPart.At(row, col) = 0.5 * momentumCross.At(row, col);
+            out.At(row, col) = symmetricPart.At(row, col) + momentumPart.At(row, col);
+        }
+    }
+    return out;
+}
+
+void AssertSpatialMatrixNearForHalfSymmetricMotionCrossColumn2(
+    const dt::Math::Matrix<6, 6, dtDynReal> &actual,
+    const dt::Math::Matrix<6, 6, dtDynReal> &expected)
+{
+    for (dtDynIndex row = 0; row < 6; ++row)
+    {
+        for (dtDynIndex col = 0; col < 6; ++col)
+        {
+            assert(IsDtMathNear(actual.At(row, col), expected.At(row, col), 1.0e-10));
+        }
+    }
+}
+
+void AssertSpatialMatrixIsSymmetricForHalfSymmetricMotionCrossColumn2(
+    const dt::Math::Matrix<6, 6, dtDynReal> &matrix)
+{
+    for (dtDynIndex row = 0; row < 6; ++row)
+    {
+        for (dtDynIndex col = 0; col < 6; ++col)
+        {
+            assert(IsDtMathNear(matrix.At(row, col), matrix.At(col, row), 1.0e-10));
+        }
+    }
+}
+
+void AssertCcrbaBiasOutputsForHalfSymmetricMotionCrossColumn2(
+    const dtDynModel &model,
+    const dtDynData &data,
+    const dt::Math::Matrix<6, 6, dtDynReal> &expectedCompositeBias)
+{
+    dt::Math::Vector6<dtDynReal> expectedF1[6];
+    dt::Math::Vector6<dtDynReal> expectedF2[6];
+    dt::Math::Vector6<dtDynReal> expectedF3[6];
+
+    for (dtDynIndex dofId = 0; dofId < model.nv; ++dofId)
+    {
+        const dtDynIndex bodyId = model.dof_bodyid[static_cast<std::size_t>(dofId)];
+        const dt::Math::Vector6<dtDynReal> inertiaMotionDot =
+            MultiplySpatialMatrixForHalfSymmetricMotionCrossColumn2(
+                data.crb[static_cast<std::size_t>(bodyId)],
+                data.cdof_dot[static_cast<std::size_t>(dofId)]);
+        const dt::Math::Vector6<dtDynReal> biasMotion =
+            MultiplySpatialMatrixForHalfSymmetricMotionCrossColumn2(
+                expectedCompositeBias,
+                data.cdof[static_cast<std::size_t>(dofId)]);
+        expectedF2[dofId] = MultiplySpatialMatrixForHalfSymmetricMotionCrossColumn2(
+            data.crb[static_cast<std::size_t>(bodyId)],
+            data.cdof[static_cast<std::size_t>(dofId)]);
+        expectedF3[dofId] = MultiplySpatialMatrixTransposeForHalfSymmetricMotionCrossColumn2(
+            expectedCompositeBias,
+            data.cdof[static_cast<std::size_t>(dofId)]);
+
+        for (dtDynIndex row = 0; row < 6; ++row)
+        {
+            expectedF1[dofId].At(row) = inertiaMotionDot.At(row) + biasMotion.At(row);
+            assert(IsDtMathNear(data.f1[static_cast<std::size_t>(dofId)].At(row),
+                                expectedF1[dofId].At(row),
+                                1.0e-10));
+            assert(IsDtMathNear(data.f2[static_cast<std::size_t>(dofId)].At(row),
+                                expectedF2[dofId].At(row),
+                                1.0e-10));
+            assert(IsDtMathNear(data.f3[static_cast<std::size_t>(dofId)].At(row),
+                                expectedF3[dofId].At(row),
+                                1.0e-10));
+        }
+    }
+
+    dt::Math::Matrix<6, 6, dtDynReal> expectedCmat;
+    expectedCmat.SetZero();
+    for (dtDynIndex dofId = model.nv - 1; dofId >= 0; --dofId)
+    {
+        expectedCmat.At(dofId, dofId) = SpatialDotForHalfSymmetricMotionCrossColumn2(
+            data.cdof[static_cast<std::size_t>(dofId)], expectedF1[dofId]);
+
+        dtDynIndex ancestorDofId = model.dof_parentid[static_cast<std::size_t>(dofId)];
+        while (ancestorDofId >= 0)
+        {
+            expectedCmat.At(ancestorDofId, dofId) = SpatialDotForHalfSymmetricMotionCrossColumn2(
+                data.cdof[static_cast<std::size_t>(ancestorDofId)], expectedF1[dofId]);
+            expectedCmat.At(dofId, ancestorDofId) =
+                SpatialDotForHalfSymmetricMotionCrossColumn2(
+                    data.cdof_dot[static_cast<std::size_t>(ancestorDofId)], expectedF2[dofId]) +
+                SpatialDotForHalfSymmetricMotionCrossColumn2(
+                    data.cdof[static_cast<std::size_t>(ancestorDofId)], expectedF3[dofId]);
+            ancestorDofId = model.dof_parentid[static_cast<std::size_t>(ancestorDofId)];
+        }
+    }
+
+    for (dtDynIndex row = 0; row < model.nv; ++row)
+    {
+        dtDynReal expectedCoriolis = 0.0;
+        for (dtDynIndex col = 0; col < model.nv; ++col)
+        {
+            assert(IsDtMathNear(data.Cmat.At(row, col), expectedCmat.At(row, col), 1.0e-10));
+            expectedCoriolis += (expectedCmat.At(row, col) * data.qvel.At(col));
+        }
+        assert(IsDtMathNear(data.coriolisTorq.At(row), expectedCoriolis, 1.0e-10));
+        assert(IsDtMathNear(data.nonlinTorq.At(row), expectedCoriolis, 1.0e-10));
+    }
+}
+
+void TestCcrbaHalfSymmetricMotionCrossColumn2UsesPhysicalNonzeroTerms()
+{
+    dtDynSpec spec;
+    const dtDynIndex root = spec.AddBody("half_symmetric_root", 0);
+    const dtDynIndex child = spec.AddBody("half_symmetric_child", root);
+    spec.EditBody(root, ConfigureHalfSymmetricMotionCrossColumn2Root);
+    spec.EditBody(child, ConfigureHalfSymmetricMotionCrossColumn2Child);
+    spec.AddJoint(root, "half_symmetric_free", dtDynJointType::Free);
+
+    const dtDynModel model = CompileSpecChecked(spec);
+    assert(model.nbody == 3);
+    assert(model.nroot == 1);
+    assert(model.root_bodyid[0] == root);
+    assert(model.nv == 6);
+    assert(IsDtMathNear(model.root_mass.At(0), 5.0));
+    for (dtDynIndex dofId = 0; dofId < model.nv; ++dofId)
+    {
+        assert(model.dof_bodyid[static_cast<std::size_t>(dofId)] == root);
+    }
+
+    dtDynData data;
+    data.Resize(model);
+    data.qpos.At(3) = 1.0;
+    data.qvel.At(0) = 4.0;
+    data.qvel.At(1) = 5.0;
+    data.qvel.At(2) = 6.0;
+    data.qvel.At(3) = 1.0;
+    data.qvel.At(4) = 2.0;
+    data.qvel.At(5) = 3.0;
+    dt::Math::Vector3<dtDynReal> gravity;
+    gravity.SetZero();
+    ComputeDynamicsCCRBA(model, data, gravity, DTDYN_CCRBA_TERM_ALL);
+
+    assert(data.BmatCompNonzero[static_cast<std::size_t>(root)] == 1);
+    assert(data.BmatCompNonzero[static_cast<std::size_t>(child)] == 1);
+    assert(IsDtMathNear(data.subtree_com[static_cast<std::size_t>(root)].At(0), 6.0 / 5.0));
+    assert(IsDtMathNear(data.subtree_com[static_cast<std::size_t>(root)].At(1), 9.0 / 5.0));
+    assert(IsDtMathNear(data.subtree_com[static_cast<std::size_t>(root)].At(2), 3.0));
+    assert(IsDtMathNear(data.xipos[static_cast<std::size_t>(child)].At(0), 2.0));
+    assert(IsDtMathNear(data.xipos[static_cast<std::size_t>(child)].At(1), 3.0));
+    assert(IsDtMathNear(data.xipos[static_cast<std::size_t>(child)].At(2), 5.0));
+
+    const dtDynReal expectedChildVelocity[6] = {1.0, 2.0, 3.0, 23.0 / 5.0, 28.0 / 5.0, 27.0 / 5.0};
+    for (dtDynIndex row = 0; row < 6; ++row)
+    {
+        assert(IsDtMathNear(data.cvel[static_cast<std::size_t>(child)].At(row),
+                            expectedChildVelocity[row]));
+        assert(std::fabs(data.cvel[static_cast<std::size_t>(child)].At(row)) > 1.0e-12);
+    }
+
+    const dt::Math::Matrix<6, 6, dtDynReal> &childInertia =
+        data.cinert[static_cast<std::size_t>(child)];
+    assert(IsDtMathNear(childInertia.At(4, 0), -6.0));
+    assert(IsDtMathNear(childInertia.At(5, 0), 18.0 / 5.0));
+    assert(IsDtMathNear(childInertia.At(3, 1), 6.0));
+    assert(IsDtMathNear(childInertia.At(5, 1), -12.0 / 5.0));
+    assert(IsDtMathNear(childInertia.At(3, 2), -18.0 / 5.0));
+    assert(IsDtMathNear(childInertia.At(4, 2), 12.0 / 5.0));
+
+    const dtDynReal column3FirstProduct =
+        data.cvel[static_cast<std::size_t>(child)].At(2) * childInertia.At(4, 0);
+    const dtDynReal column3SecondProduct =
+        -data.cvel[static_cast<std::size_t>(child)].At(1) * childInertia.At(5, 0);
+    const dtDynReal column4FirstProduct =
+        -data.cvel[static_cast<std::size_t>(child)].At(2) * childInertia.At(3, 1);
+    const dtDynReal column4SecondProduct =
+        data.cvel[static_cast<std::size_t>(child)].At(0) * childInertia.At(5, 1);
+    const dtDynReal column5FirstProduct =
+        data.cvel[static_cast<std::size_t>(child)].At(1) * childInertia.At(3, 2);
+    const dtDynReal column5SecondProduct =
+        -data.cvel[static_cast<std::size_t>(child)].At(0) * childInertia.At(4, 2);
+
+    assert(IsDtMathNear(column3FirstProduct, -18.0));
+    assert(IsDtMathNear(column3SecondProduct, -36.0 / 5.0));
+    assert(IsDtMathNear(column4FirstProduct, -18.0));
+    assert(IsDtMathNear(column4SecondProduct, -12.0 / 5.0));
+    assert(IsDtMathNear(column5FirstProduct, -36.0 / 5.0));
+    assert(IsDtMathNear(column5SecondProduct, -12.0 / 5.0));
+    assert(std::fabs(column3FirstProduct) > 1.0e-12);
+    assert(std::fabs(column3SecondProduct) > 1.0e-12);
+    assert(std::fabs(column4FirstProduct) > 1.0e-12);
+    assert(std::fabs(column4SecondProduct) > 1.0e-12);
+    assert(std::fabs(column5FirstProduct) > 1.0e-12);
+    assert(std::fabs(column5SecondProduct) > 1.0e-12);
+    assert(IsDtMathNear(-0.5 * (column3FirstProduct + column3SecondProduct), 63.0 / 5.0));
+    assert(IsDtMathNear(-0.5 * (column4FirstProduct + column4SecondProduct), 51.0 / 5.0));
+    assert(IsDtMathNear(-0.5 * (column5FirstProduct + column5SecondProduct), 24.0 / 5.0));
+
+    dt::Math::Matrix<6, 6, dtDynReal> expectedChildSymmetricPart;
+    dt::Math::Matrix<6, 6, dtDynReal> expectedChildMomentumPart;
+    const dt::Math::Matrix<6, 6, dtDynReal> expectedChildBias =
+        BuildExpectedBiasMatrixForHalfSymmetricMotionCrossColumn2(
+            childInertia,
+            data.cvel[static_cast<std::size_t>(child)],
+            expectedChildSymmetricPart,
+            expectedChildMomentumPart);
+    AssertSpatialMatrixNearForHalfSymmetricMotionCrossColumn2(
+        data.BmatComp[static_cast<std::size_t>(child)], expectedChildBias);
+    AssertSpatialMatrixIsSymmetricForHalfSymmetricMotionCrossColumn2(expectedChildSymmetricPart);
+
+    dt::Math::Matrix<6, 6, dtDynReal> observedChildSymmetricPart =
+        data.BmatComp[static_cast<std::size_t>(child)];
+    for (dtDynIndex row = 0; row < 6; ++row)
+    {
+        for (dtDynIndex col = 0; col < 6; ++col)
+        {
+            observedChildSymmetricPart.At(row, col) -= expectedChildMomentumPart.At(row, col);
+        }
+    }
+    AssertSpatialMatrixNearForHalfSymmetricMotionCrossColumn2(observedChildSymmetricPart,
+                                                              expectedChildSymmetricPart);
+    AssertSpatialMatrixIsSymmetricForHalfSymmetricMotionCrossColumn2(observedChildSymmetricPart);
+
+    dt::Math::Matrix<6, 6, dtDynReal> expectedRootSymmetricPart;
+    dt::Math::Matrix<6, 6, dtDynReal> expectedRootMomentumPart;
+    dt::Math::Matrix<6, 6, dtDynReal> expectedCompositeBias =
+        BuildExpectedBiasMatrixForHalfSymmetricMotionCrossColumn2(
+            data.cinert[static_cast<std::size_t>(root)],
+            data.cvel[static_cast<std::size_t>(root)],
+            expectedRootSymmetricPart,
+            expectedRootMomentumPart);
+    for (dtDynIndex row = 0; row < 6; ++row)
+    {
+        for (dtDynIndex col = 0; col < 6; ++col)
+        {
+            expectedCompositeBias.At(row, col) += expectedChildBias.At(row, col);
+        }
+    }
+    AssertSpatialMatrixNearForHalfSymmetricMotionCrossColumn2(
+        data.BmatComp[static_cast<std::size_t>(root)], expectedCompositeBias);
+    AssertCcrbaBiasOutputsForHalfSymmetricMotionCrossColumn2(model, data, expectedCompositeBias);
+}
+
 void ConfigureSpatialMulIntoAllComponentRoot(dtDynBodySpec &draft)
 {
     draft.inertial.mass = 2.0;
@@ -6891,6 +7223,7 @@ int main()
     TestEffectiveRootCountPreservesFallback();
     TestCcrbaPreservesRootMassGuardedComProducts();
     TestFreeJointCdoFDotPreservesSpatialCrossTerms();
+    TestCcrbaHalfSymmetricMotionCrossColumn2UsesPhysicalNonzeroTerms();
     TestCcrbaSpatialMulIntoZeroDofDotCoversAllComponents();
     TestAngularPointMotionSubspacePreservesCrossTerms();
     TestCompileSpecSupportsFloatingBaseQuadrupedTree();
