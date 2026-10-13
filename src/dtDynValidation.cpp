@@ -463,7 +463,7 @@ bool ValidateSpec(const dtDynSpec &spec, dtDynValidationError *error)
         std::size_t steps = 0;
         while (child != DTDYN_INVALID_INDEX)
         {
-            if (child <= 0 || static_cast<std::size_t>(child) >= bodies.size())
+            if ((child <= 0) || (static_cast<std::size_t>(child) >= bodies.size()))
             {
                 return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body,
                             parentId, "body[" + std::to_string(parentId) + "] child list contains invalid body " + std::to_string(child));

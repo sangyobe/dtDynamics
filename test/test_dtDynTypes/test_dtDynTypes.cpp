@@ -957,6 +957,51 @@ void TestSpecValidationPreservesSignedReferenceBounds()
     }
 }
 
+struct FirstChildEditor
+{
+    dtDynIndex child;
+
+    void operator()(dtDynBodySpec &draft) const
+    {
+        draft.firstChild = child;
+    }
+};
+
+void AssertChildListRangeFailure(dtDynSpec &spec,
+                                 const dtDynIndex parent,
+                                 const dtDynIndex child)
+{
+    assert(parent == 1);
+    assert(spec.Bodies().size() == 2);
+    assert(spec.Bodies()[0].firstChild == parent);
+    assert(spec.Bodies()[static_cast<std::size_t>(parent)].parent == 0);
+    assert(spec.Bodies()[static_cast<std::size_t>(parent)].firstChild == DTDYN_INVALID_INDEX);
+
+    spec.EditBody(parent, FirstChildEditor{child});
+    assert(spec.Bodies()[static_cast<std::size_t>(parent)].firstChild == child);
+
+    AssertSpecValidationFailure(
+        spec, dtDynValidationCode::InvalidReference, dtDynObjectType::Body, parent,
+        "body[" + std::to_string(parent) + "] child list contains invalid body " +
+            std::to_string(child));
+}
+
+void TestSpecValidationRejectsChildListRange()
+{
+    {
+        dtDynSpec spec = MakeValidNormalSpec();
+        const dtDynIndex parent = spec.BodyId("base");
+        AssertChildListRangeFailure(spec, parent, 0);
+    }
+    {
+        dtDynSpec spec = MakeValidNormalSpec();
+        const dtDynIndex parent = spec.BodyId("base");
+        const dtDynIndex onePastEnd = static_cast<dtDynIndex>(spec.Bodies().size());
+        assert(onePastEnd > 0);
+        AssertChildListRangeFailure(spec, parent, onePastEnd);
+    }
+}
+
 struct PhysicalInertiaEditor
 {
     dtDynReal first;
@@ -8132,6 +8177,7 @@ int main()
     TestSpecValidationRejectsInvalidActuatorReference();
     TestSpecValidationRejectsInvalidBodyJointReference();
     TestSpecValidationPreservesSignedReferenceBounds();
+    TestSpecValidationRejectsChildListRange();
     TestSpecValidationRejectsDuplicateNames();
     TestSpecValidationRejectsDuplicateEmptyNames();
     TestSpecValidationRejectsNonFiniteValues();
