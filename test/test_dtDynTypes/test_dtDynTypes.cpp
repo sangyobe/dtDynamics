@@ -1777,6 +1777,42 @@ void AssertModelValidationFailure(const dtDynModel &model,
     assert(error.message == message);
 }
 
+void AssertCompiledSiteBodyReferenceDiagnostic(const dtDynModel &model,
+                                               const dtDynIndex site)
+{
+    dtDynValidationError error;
+    assert(!ValidateModel(model, &error));
+    assert(error.code == dtDynValidationCode::InvalidReference);
+    assert(error.object == dtDynObjectType::Site);
+    assert(error.index == site);
+    assert(error.message == "compiled site references an invalid body");
+}
+
+void TestModelValidationRejectsCompiledSiteBodyBounds()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("site_body_bounds_body", 0);
+    const dtDynIndex site = spec.AddSite(body, "site_body_bounds_site");
+    const dtDynModel valid = CompileSpecChecked(spec);
+
+    assert(body == 1);
+    assert(site == 0);
+    assert(valid.nbody == 2);
+    assert(valid.nsite == 1);
+    assert(valid.site_bodyid[static_cast<std::size_t>(site)] == body);
+    dtDynValidationError validError;
+    assert(ValidateModel(valid, &validError));
+    assert(validError.code == dtDynValidationCode::None);
+
+    dtDynModel worldBody = valid;
+    worldBody.site_bodyid[static_cast<std::size_t>(site)] = 0;
+    AssertCompiledSiteBodyReferenceDiagnostic(worldBody, site);
+
+    dtDynModel onePastBody = valid;
+    onePastBody.site_bodyid[static_cast<std::size_t>(site)] = onePastBody.nbody;
+    AssertCompiledSiteBodyReferenceDiagnostic(onePastBody, site);
+}
+
 void TestModelValidationPreservesUniqueNameValidationOrder()
 {
     dtDynSpec spec;
@@ -8634,6 +8670,7 @@ int main()
     TestModelValidationRejectsInvalidFramePairs();
     TestModelValidationPreservesUniqueNameValidationOrder();
     TestModelValidationPreservesJointAndSiteValidationFailures();
+    TestModelValidationRejectsCompiledSiteBodyBounds();
     TestModelValidationPreservesEveryBodyNonFiniteFailure();
     TestModelValidationPreservesEveryBodyPhysicalOrFrameFailure();
     TestModelValidationPreservesBodyValidationPhasePrecedence();

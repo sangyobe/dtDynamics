@@ -1258,7 +1258,7 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
     for (dtDynIndex siteId = 0; siteId < model.nsite; ++siteId)
     {
         const dtDynIndex bodyId = model.site_bodyid[static_cast<std::size_t>(siteId)];
-        if (bodyId <= 0 || bodyId >= model.nbody)
+        if ((bodyId <= 0) || (bodyId >= model.nbody))
         {
             return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Site,
                         siteId, "compiled site references an invalid body");
