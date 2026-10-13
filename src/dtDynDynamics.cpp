@@ -326,7 +326,7 @@ void FillBodySpatialInertiaAtRootCom(const dtDynModel &model,
     // where c = body_com - root_com and cx is the skew matrix of c.
     const std::size_t bodyIdx = static_cast<std::size_t>(bodyId);
     const dtDynIndex rootBody = model.body_rootid[bodyIdx];
-    const std::size_t refIdx = static_cast<std::size_t>(rootBody > 0 ? rootBody : 0);
+    const std::size_t refIdx = static_cast<std::size_t>((rootBody > 0) ? rootBody : 0);
 
     const dtDynReal mass = model.body_mass.At(bodyId);
     const dt::Math::Matrix3<dtDynReal> &rot = data.ximat[bodyIdx];
@@ -337,15 +337,15 @@ void FillBodySpatialInertiaAtRootCom(const dtDynModel &model,
     const dtDynReal c1 = bodyCom.At(1) - reference.At(1);
     const dtDynReal c2 = bodyCom.At(2) - reference.At(2);
     const dtDynReal c[3] = {c0, c1, c2};
-    const dtDynReal c2sum = c0 * c0 + c1 * c1 + c2 * c2;
+    const dtDynReal c2sum = (c0 * c0) + (c1 * c1) + (c2 * c2);
 
     for (dtDynIndex row = 0; row < 3; ++row)
     {
         for (dtDynIndex col = 0; col < 3; ++col)
         {
-            const dtDynReal rotInertia = rot.At(row, 0) * diag.At(0) * rot.At(col, 0) +
-                                         rot.At(row, 1) * diag.At(1) * rot.At(col, 1) +
-                                         rot.At(row, 2) * diag.At(2) * rot.At(col, 2);
+            const dtDynReal rotInertia = (rot.At(row, 0) * diag.At(0)) * rot.At(col, 0) +
+                                         (rot.At(row, 1) * diag.At(1)) * rot.At(col, 1) +
+                                         (rot.At(row, 2) * diag.At(2)) * rot.At(col, 2);
 
             dtDynReal skew = 0.0;
             if ((row == 0) && (col == 1))
@@ -375,11 +375,11 @@ void FillBodySpatialInertiaAtRootCom(const dtDynModel &model,
 
             out.At(row, col) =
                 rotInertia +
-                (row == col ? mass * c2sum : 0.0) -
-                mass * c[row] * c[col];
+                ((row == col) ? (mass * c2sum) : 0.0) -
+                (mass * c[row]) * c[col];
             out.At(row, col + 3) = mass * skew;
             out.At(row + 3, col) = -mass * skew;
-            out.At(row + 3, col + 3) = row == col ? mass : 0.0;
+            out.At(row + 3, col + 3) = (row == col) ? mass : 0.0;
         }
     }
 }

@@ -7067,6 +7067,325 @@ void TestDynamicsCCRBAAllTermsIsRepeatable()
     assert(std::fabs(firstData.cmAmat(1, 0) - ccrbaData.cmAmat(1, 0)) < 1.0e-12);
 }
 
+using P50SpatialInertia = dt::Math::Matrix<6, 6, dtDynReal>;
+
+void ConfigureP50SpatialInertiaWorld(dtDynBodySpec &draft)
+{
+    draft.inertial.mass = 2.0;
+    draft.inertial.inertia.At(0) = 1.0;
+    draft.inertial.inertia.At(1) = 2.0;
+    draft.inertial.inertia.At(2) = 3.0;
+}
+
+void ConfigureP50SpatialInertiaRoot(dtDynBodySpec &draft)
+{
+    draft.pos.At(0) = 1.0;
+    draft.pos.At(1) = -2.0;
+    draft.pos.At(2) = 3.0;
+    draft.inertial.mass = 3.0;
+    draft.inertial.pos.At(0) = 0.5;
+    draft.inertial.pos.At(1) = -1.0;
+    draft.inertial.pos.At(2) = 0.75;
+    draft.inertial.inertia.At(0) = 2.0;
+    draft.inertial.inertia.At(1) = 3.0;
+    draft.inertial.inertia.At(2) = 4.0;
+}
+
+void ConfigureP50SpatialInertiaChild(dtDynBodySpec &draft)
+{
+    const dtDynReal inverseQuaternionNorm = 1.0 / std::sqrt(30.0);
+    draft.pos.At(0) = 4.0;
+    draft.pos.At(1) = 5.0;
+    draft.pos.At(2) = -6.0;
+    draft.inertial.mass = 5.0;
+    draft.inertial.pos.At(0) = 0.25;
+    draft.inertial.pos.At(1) = -0.5;
+    draft.inertial.pos.At(2) = 1.0;
+    draft.inertial.quat.At(0) = inverseQuaternionNorm;
+    draft.inertial.quat.At(1) = 2.0 * inverseQuaternionNorm;
+    draft.inertial.quat.At(2) = 3.0 * inverseQuaternionNorm;
+    draft.inertial.quat.At(3) = 4.0 * inverseQuaternionNorm;
+    draft.inertial.inertia.At(0) = 5.0;
+    draft.inertial.inertia.At(1) = 6.0;
+    draft.inertial.inertia.At(2) = 7.0;
+}
+
+void ConfigureP50SpatialInertiaRootHinge(dtDynJointSpec &draft)
+{
+    draft.axis.At(0) = 0.0;
+    draft.axis.At(1) = 0.0;
+    draft.axis.At(2) = 1.0;
+}
+
+dt::Math::Matrix3<dtDynReal> MakeP50Matrix3(const dtDynReal value00,
+                                            const dtDynReal value01,
+                                            const dtDynReal value02,
+                                            const dtDynReal value10,
+                                            const dtDynReal value11,
+                                            const dtDynReal value12,
+                                            const dtDynReal value20,
+                                            const dtDynReal value21,
+                                            const dtDynReal value22)
+{
+    dt::Math::Matrix3<dtDynReal> result;
+    result.At(0, 0) = value00;
+    result.At(0, 1) = value01;
+    result.At(0, 2) = value02;
+    result.At(1, 0) = value10;
+    result.At(1, 1) = value11;
+    result.At(1, 2) = value12;
+    result.At(2, 0) = value20;
+    result.At(2, 1) = value21;
+    result.At(2, 2) = value22;
+    return result;
+}
+
+P50SpatialInertia BuildP50SpatialInertia(const dt::Math::Matrix3<dtDynReal> &topLeft,
+                                         const dt::Math::Matrix3<dtDynReal> &topRight,
+                                         const dtDynReal mass)
+{
+    P50SpatialInertia expected;
+    expected.SetZero();
+    for (dtDynIndex row = 0; row < 3; ++row)
+    {
+        for (dtDynIndex column = 0; column < 3; ++column)
+        {
+            expected.At(row, column) = topLeft.At(row, column);
+            expected.At(row, column + 3) = topRight.At(row, column);
+            expected.At(row + 3, column) = -topRight.At(row, column);
+        }
+        expected.At(row + 3, row + 3) = mass;
+    }
+    return expected;
+}
+
+P50SpatialInertia MakeP50ExpectedWorldSpatialInertia()
+{
+    const dt::Math::Matrix3<dtDynReal> topLeft = MakeP50Matrix3(1021.0 / 800.0,
+                                                                -861.0 / 400.0,
+                                                                -123.0 / 160.0,
+                                                                -861.0 / 400.0,
+                                                                8377.0 / 400.0,
+                                                                -7.0 / 80.0,
+                                                                -123.0 / 160.0,
+                                                                -7.0 / 80.0,
+                                                                709.0 / 32.0);
+    const dt::Math::Matrix3<dtDynReal> topRight = MakeP50Matrix3(0.0,
+                                                                 1.0 / 4.0,
+                                                                 -7.0 / 10.0,
+                                                                 -1.0 / 4.0,
+                                                                 0.0,
+                                                                 123.0 / 20.0,
+                                                                 7.0 / 10.0,
+                                                                 -123.0 / 20.0,
+                                                                 0.0);
+    return BuildP50SpatialInertia(topLeft, topRight, 2.0);
+}
+
+P50SpatialInertia MakeP50ExpectedRootSpatialInertia()
+{
+    const dt::Math::Matrix3<dtDynReal> topLeft = MakeP50Matrix3(78023.0 / 1024.0,
+                                                                -12375.0 / 512.0,
+                                                                25875.0 / 1024.0,
+                                                                -12375.0 / 512.0,
+                                                                29811.0 / 512.0,
+                                                                18975.0 / 512.0,
+                                                                25875.0 / 1024.0,
+                                                                18975.0 / 512.0,
+                                                                57271.0 / 1024.0);
+    const dt::Math::Matrix3<dtDynReal> topRight = MakeP50Matrix3(0.0,
+                                                                 -345.0 / 32.0,
+                                                                 -165.0 / 16.0,
+                                                                 345.0 / 32.0,
+                                                                 0.0,
+                                                                 225.0 / 32.0,
+                                                                 165.0 / 16.0,
+                                                                 -225.0 / 32.0,
+                                                                 0.0);
+    return BuildP50SpatialInertia(topLeft, topRight, 3.0);
+}
+
+P50SpatialInertia MakeP50ExpectedChildSpatialInertia()
+{
+    const dt::Math::Matrix3<dtDynReal> topLeft = MakeP50Matrix3(3886843.0 / 76800.0,
+                                                                -104207.0 / 7680.0,
+                                                                396317.0 / 25600.0,
+                                                                -104207.0 / 7680.0,
+                                                                20037.0 / 512.0,
+                                                                169751.0 / 7680.0,
+                                                                396317.0 / 25600.0,
+                                                                169751.0 / 7680.0,
+                                                                2846507.0 / 76800.0);
+    const dt::Math::Matrix3<dtDynReal> topRight = MakeP50Matrix3(0.0,
+                                                                 345.0 / 32.0,
+                                                                 165.0 / 16.0,
+                                                                 -345.0 / 32.0,
+                                                                 0.0,
+                                                                 -225.0 / 32.0,
+                                                                 -165.0 / 16.0,
+                                                                 225.0 / 32.0,
+                                                                 0.0);
+    return BuildP50SpatialInertia(topLeft, topRight, 5.0);
+}
+
+void AssertP50SpatialInertiaMatches(const P50SpatialInertia &actual,
+                                    const P50SpatialInertia &expected)
+{
+    for (dtDynIndex row = 0; row < 6; ++row)
+    {
+        for (dtDynIndex column = 0; column < 6; ++column)
+        {
+            assert(IsDtMathNear(actual.At(row, column), expected.At(row, column), 1.0e-11));
+        }
+    }
+}
+
+void AssertP50ChildRotationAndParallelAxis(const dtDynModel &model,
+                                           const dtDynData &data,
+                                           const dtDynIndex root,
+                                           const dtDynIndex child)
+{
+    const dt::Math::Matrix3<dtDynReal> expectedRotation = MakeP50Matrix3(-2.0 / 3.0,
+                                                                         2.0 / 15.0,
+                                                                         11.0 / 15.0,
+                                                                         2.0 / 3.0,
+                                                                         -1.0 / 3.0,
+                                                                         2.0 / 3.0,
+                                                                         1.0 / 3.0,
+                                                                         14.0 / 15.0,
+                                                                         2.0 / 15.0);
+    const dt::Math::Matrix3<dtDynReal> expectedRotatedInertia = MakeP50Matrix3(
+        457.0 / 75.0,
+        14.0 / 15.0,
+        8.0 / 25.0,
+        14.0 / 15.0,
+        6.0,
+        -2.0 / 15.0,
+        8.0 / 25.0,
+        -2.0 / 15.0,
+        443.0 / 75.0);
+    const dt::Math::Matrix3<dtDynReal> expectedParallelAxis = MakeP50Matrix3(
+        45585.0 / 1024.0,
+        -7425.0 / 512.0,
+        15525.0 / 1024.0,
+        -7425.0 / 512.0,
+        16965.0 / 512.0,
+        11385.0 / 512.0,
+        15525.0 / 1024.0,
+        11385.0 / 512.0,
+        31905.0 / 1024.0);
+    dt::Math::Matrix3<dtDynReal> identity;
+    identity.SetIdentity();
+    const dt::Math::Matrix3<dtDynReal> &actualRotation =
+        data.ximat[static_cast<std::size_t>(child)];
+    const dt::Math::Vector4<dtDynReal> &childQuaternion =
+        model.body_iquat[static_cast<std::size_t>(child)];
+    const dtDynReal inverseQuaternionNorm = 1.0 / std::sqrt(30.0);
+    dtDynReal quaternionNormSquared = 0.0;
+
+    for (dtDynIndex component = 0; component < 4; ++component)
+    {
+        quaternionNormSquared += childQuaternion.At(component) * childQuaternion.At(component);
+    }
+    assert(IsDtMathNear(childQuaternion.At(0), inverseQuaternionNorm));
+    assert(IsDtMathNear(childQuaternion.At(1), 2.0 * inverseQuaternionNorm));
+    assert(IsDtMathNear(childQuaternion.At(2), 3.0 * inverseQuaternionNorm));
+    assert(IsDtMathNear(childQuaternion.At(3), 4.0 * inverseQuaternionNorm));
+    assert(IsDtMathNear(quaternionNormSquared, 1.0));
+
+    assert(IsDtMathNear(model.body_inertia[static_cast<std::size_t>(child)].At(0), 5.0));
+    assert(IsDtMathNear(model.body_inertia[static_cast<std::size_t>(child)].At(1), 6.0));
+    assert(IsDtMathNear(model.body_inertia[static_cast<std::size_t>(child)].At(2), 7.0));
+    assert(model.body_inertia[static_cast<std::size_t>(child)].At(0) > 0.0);
+    assert(model.body_inertia[static_cast<std::size_t>(child)].At(1) > 0.0);
+    assert(model.body_inertia[static_cast<std::size_t>(child)].At(2) > 0.0);
+    assert(model.body_inertia[static_cast<std::size_t>(child)].At(0) !=
+           model.body_inertia[static_cast<std::size_t>(child)].At(1));
+    assert(model.body_inertia[static_cast<std::size_t>(child)].At(0) !=
+           model.body_inertia[static_cast<std::size_t>(child)].At(2));
+    assert(model.body_inertia[static_cast<std::size_t>(child)].At(1) !=
+           model.body_inertia[static_cast<std::size_t>(child)].At(2));
+
+    for (dtDynIndex row = 0; row < 3; ++row)
+    {
+        for (dtDynIndex column = 0; column < 3; ++column)
+        {
+            dtDynReal columnDot = 0.0;
+            assert(IsDtMathNear(actualRotation.At(row, column),
+                                expectedRotation.At(row, column)));
+            assert(std::fabs(actualRotation.At(row, column)) > 1.0e-12);
+            for (dtDynIndex axis = 0; axis < 3; ++axis)
+            {
+                columnDot += actualRotation.At(axis, row) * actualRotation.At(axis, column);
+            }
+            assert(IsDtMathNear(columnDot, identity.At(row, column)));
+        }
+    }
+
+    dt::Math::Vector3<dtDynReal> rootToChildCom;
+    for (dtDynIndex axis = 0; axis < 3; ++axis)
+    {
+        rootToChildCom.At(axis) = data.xipos[static_cast<std::size_t>(child)].At(axis) -
+                                  data.subtree_com[static_cast<std::size_t>(root)].At(axis);
+        assert(std::fabs(rootToChildCom.At(axis)) > 1.0e-12);
+    }
+    assert(IsDtMathNear(rootToChildCom.At(0), 45.0 / 32.0));
+    assert(IsDtMathNear(rootToChildCom.At(1), 33.0 / 16.0));
+    assert(IsDtMathNear(rootToChildCom.At(2), -69.0 / 32.0));
+    assert(IsDtMathNear(rootToChildCom.Inner(rootToChildCom), 5571.0 / 512.0));
+
+    const P50SpatialInertia &actualInertia = data.cinert[static_cast<std::size_t>(child)];
+    for (dtDynIndex row = 0; row < 3; ++row)
+    {
+        for (dtDynIndex column = 0; column < 3; ++column)
+        {
+            const dtDynReal expected = expectedRotatedInertia.At(row, column) +
+                                       expectedParallelAxis.At(row, column);
+            assert(IsDtMathNear(actualInertia.At(row, column), expected));
+        }
+    }
+}
+
+void TestCcrbaFillBodySpatialInertiaAtRootComCoversAllP50Rows()
+{
+    dtDynSpec spec;
+    const dtDynIndex root = spec.AddBody("p50_spatial_root", 0);
+    const dtDynIndex child = spec.AddBody("p50_spatial_child", root);
+    spec.EditBody(0, ConfigureP50SpatialInertiaWorld);
+    spec.EditBody(root, ConfigureP50SpatialInertiaRoot);
+    spec.EditBody(child, ConfigureP50SpatialInertiaChild);
+    const dtDynIndex rootHinge = spec.AddJoint(root, "p50_spatial_root_hinge", dtDynJointType::Hinge);
+    spec.EditJoint(rootHinge, ConfigureP50SpatialInertiaRootHinge);
+
+    const dtDynModel model = CompileSpecChecked(spec);
+    assert(model.nbody == 3);
+    assert(model.nroot == 1);
+    assert(model.nv == 1);
+    assert(model.body_rootid[0] == 0);
+    assert(model.body_rootid[static_cast<std::size_t>(root)] == root);
+    assert(model.body_rootid[static_cast<std::size_t>(child)] == root);
+    assert(IsDtMathNear(model.body_mass.At(0), 2.0));
+    assert(IsDtMathNear(model.root_mass.At(0), 8.0));
+    assert(IsDtMathNear(model.body_subtreemass.At(0), 10.0));
+
+    dtDynData data;
+    data.Resize(model);
+    data.qpos.At(0) = 0.0;
+    data.qvel.At(0) = 0.0;
+    dt::Math::Vector3<dtDynReal> gravity;
+    gravity.SetZero();
+    ComputeDynamicsCCRBA(model, data, gravity, DTDYN_CCRBA_TERM_ALL);
+
+    // Body 0 selects the rootBody == 0 ternary arm; the physical root and child
+    // select the rootBody > 0 arm. Full blocks cover diagonal and off-diagonal arms.
+    AssertP50SpatialInertiaMatches(data.cinert[0], MakeP50ExpectedWorldSpatialInertia());
+    AssertP50SpatialInertiaMatches(data.cinert[static_cast<std::size_t>(root)],
+                                   MakeP50ExpectedRootSpatialInertia());
+    AssertP50SpatialInertiaMatches(data.cinert[static_cast<std::size_t>(child)],
+                                   MakeP50ExpectedChildSpatialInertia());
+    AssertP50ChildRotationAndParallelAxis(model, data, root, child);
+}
+
 } // namespace
 
 int main()
@@ -7224,6 +7543,7 @@ int main()
     TestCcrbaPreservesRootMassGuardedComProducts();
     TestFreeJointCdoFDotPreservesSpatialCrossTerms();
     TestCcrbaHalfSymmetricMotionCrossColumn2UsesPhysicalNonzeroTerms();
+    TestCcrbaFillBodySpatialInertiaAtRootComCoversAllP50Rows();
     TestCcrbaSpatialMulIntoZeroDofDotCoversAllComponents();
     TestAngularPointMotionSubspacePreservesCrossTerms();
     TestCompileSpecSupportsFloatingBaseQuadrupedTree();
