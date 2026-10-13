@@ -466,9 +466,9 @@ bool UpdateSpec(const dtDynSpec &spec, dtDynModel &model) noexcept
         const std::size_t bodyIndex = static_cast<std::size_t>(bodyId);
         const dtDynIndex parent = model.body_parentid[bodyIndex];
         const dtDynIndex expectedRoot =
-            parent == 0 ? bodyId : model.body_rootid[static_cast<std::size_t>(parent)];
+            (parent == 0) ? bodyId : model.body_rootid[static_cast<std::size_t>(parent)];
         const dtDynIndex expectedRootSlot =
-            parent == 0 ? expectedRootIndex : model.body_rootidx[static_cast<std::size_t>(parent)];
+            (parent == 0) ? expectedRootIndex : model.body_rootidx[static_cast<std::size_t>(parent)];
         const dtDynIndex expectedWeld = model.body_jntnum[bodyIndex] > 0
                                             ? bodyId
                                             : (parent > 0
