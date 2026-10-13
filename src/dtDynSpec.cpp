@@ -1403,7 +1403,7 @@ dtDynSpec DecodeXmlImpl(const std::string &xml, const std::string &sourcePath)
             continue;
         }
 
-        if (name == "inertial" && bodyStack.size() > 1)
+        if ((name == "inertial") && (bodyStack.size() > 1))
         {
             const dtDynIndex bodyId = bodyStack[bodyStack.size() - 1];
             spec.EditBody(bodyId, [&](dtDynBodySpec &body)
@@ -1425,7 +1425,7 @@ dtDynSpec DecodeXmlImpl(const std::string &xml, const std::string &sourcePath)
             continue;
         }
 
-        if (name == "joint" && bodyStack.size() > 1)
+        if ((name == "joint") && (bodyStack.size() > 1))
         {
             const dtDynIndex bodyId = bodyStack[bodyStack.size() - 1];
             const std::string jointName = AttributeOr(attrs, "name", "joint");
@@ -1500,7 +1500,7 @@ dtDynSpec DecodeXmlImpl(const std::string &xml, const std::string &sourcePath)
             continue;
         }
 
-        if (name == "freejoint" && bodyStack.size() > 1)
+        if ((name == "freejoint") && (bodyStack.size() > 1))
         {
             const dtDynIndex bodyId = bodyStack[bodyStack.size() - 1];
             const std::string jointName = AttributeOr(attrs, "name", "freejoint");
@@ -1511,7 +1511,7 @@ dtDynSpec DecodeXmlImpl(const std::string &xml, const std::string &sourcePath)
             continue;
         }
 
-        if (name == "site" && bodyStack.size() > 1)
+        if ((name == "site") && (bodyStack.size() > 1))
         {
             const dtDynIndex bodyId = bodyStack[bodyStack.size() - 1];
             const std::string siteName = AttributeOr(attrs, "name", "site");
