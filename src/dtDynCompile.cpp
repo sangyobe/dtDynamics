@@ -455,8 +455,9 @@ bool UpdateSpec(const dtDynSpec &spec, dtDynModel &model) noexcept
     }
 
     if (nextJointId != model.njnt || nextQposAdr != model.nq || nextDofAdr != model.nv ||
-        model.body_rootid[0] != 0 || model.body_rootidx[0] != DTDYN_INVALID_INDEX ||
-        model.body_weldid[0] != 0)
+        model.body_rootid[static_cast<std::size_t>(0)] != 0 ||
+        model.body_rootidx[static_cast<std::size_t>(0)] != DTDYN_INVALID_INDEX ||
+        model.body_weldid[static_cast<std::size_t>(0)] != 0)
     {
         return false;
     }
@@ -714,7 +715,7 @@ void CompileSpec(const dtDynSpec &spec, dtDynModel &model)
             model.body_dofadr[static_cast<std::size_t>(bodyId)] = nextDofAdr;
 
             dtDynIndex bodyDofNum = 0;
-            dtDynIndex parentDof = parent >= 0 ? bodyLastDof[static_cast<std::size_t>(parent)] : DTDYN_INVALID_INDEX;
+            dtDynIndex parentDof = (parent >= 0) ? bodyLastDof[static_cast<std::size_t>(parent)] : DTDYN_INVALID_INDEX;
             const dtDynIndex localJointCount = static_cast<dtDynIndex>(body.joints.size());
 
             for (dtDynIndex localJointId = 0; localJointId < localJointCount; ++localJointId)
@@ -754,6 +755,10 @@ void CompileSpec(const dtDynSpec &spec, dtDynModel &model)
         {
             bodyLastDof[static_cast<std::size_t>(bodyId)] = bodyLastDof[static_cast<std::size_t>(parent)];
         }
+        else
+        {
+            bodyLastDof[static_cast<std::size_t>(bodyId)] = DTDYN_INVALID_INDEX;
+        }
     }
 
     for (dtDynIndex siteId = 0; siteId < model.nsite; ++siteId)
@@ -767,7 +772,7 @@ void CompileSpec(const dtDynSpec &spec, dtDynModel &model)
     {
         const dtDynActuatorSpec &actuator = spec.Actuators()[static_cast<std::size_t>(actuatorId)];
         model.actuator_names[static_cast<std::size_t>(actuatorId)] = actuator.name;
-        if (actuator.joint >= 0 && actuator.joint < static_cast<dtDynIndex>(jointIdMap.size()))
+        if ((actuator.joint >= 0) && (actuator.joint < static_cast<dtDynIndex>(jointIdMap.size())))
         {
             model.actuator_jointid[static_cast<std::size_t>(actuatorId)] =
                 jointIdMap[static_cast<std::size_t>(actuator.joint)];
