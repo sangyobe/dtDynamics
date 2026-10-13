@@ -381,6 +381,19 @@ void AssertWorldRootMetadataDiagnostic(const dtDynModel &model)
     assert(error.message == "compiled world root metadata is invalid");
 }
 
+void AssertCompiledParentValidationDiagnostic(const dtDynModel &model,
+                                              const dtDynValidationCode expectedCode,
+                                              const dtDynIndex expectedBody,
+                                              const std::string &expectedMessage)
+{
+    dtDynValidationError error;
+    assert(!ValidateModel(model, &error));
+    assert(error.code == expectedCode);
+    assert(error.object == dtDynObjectType::Body);
+    assert(error.index == expectedBody);
+    assert(error.message == expectedMessage);
+}
+
 void AssertBodyRootPropagationDiagnostic(const dtDynModel &model,
                                          const dtDynIndex expectedBody)
 {
@@ -825,6 +838,48 @@ void TestModelValidationRejectsMissingWorld()
     dtDynValidationError error;
     assert(!ValidateModel(model, &error));
     assert(error.code == dtDynValidationCode::InvalidWorld);
+}
+
+void TestModelValidationRejectsCompiledWorldAndNonWorldParents()
+{
+    dtDynSpec spec;
+    const dtDynIndex root = spec.AddBody("compiled_parent_root", 0);
+    const dtDynIndex child = spec.AddBody("compiled_parent_child", root);
+    const dtDynModel valid = CompileSpecChecked(spec);
+
+    assert(valid.nbody == 3);
+    assert(valid.body_parentid[0] == 0);
+    assert(valid.body_parentid[static_cast<std::size_t>(root)] == 0);
+    assert(valid.body_parentid[static_cast<std::size_t>(child)] == root);
+    dtDynValidationError validError;
+    assert(ValidateModel(valid, &validError));
+    assert(validError.code == dtDynValidationCode::None);
+
+    dtDynModel nonzeroWorldParent = valid;
+    nonzeroWorldParent.body_parentid[0] = root;
+    AssertCompiledParentValidationDiagnostic(
+        nonzeroWorldParent, dtDynValidationCode::InvalidWorld, 0,
+        "compiled body[0] world parent must be 0");
+
+    dtDynModel selfParent = valid;
+    selfParent.body_parentid[static_cast<std::size_t>(child)] = child;
+    AssertCompiledParentValidationDiagnostic(
+        selfParent, dtDynValidationCode::InvalidParent, child,
+        "compiled body[" + std::to_string(child) + "] has invalid parent " +
+            std::to_string(child));
+
+    dtDynModel forwardParent = valid;
+    forwardParent.body_parentid[static_cast<std::size_t>(root)] = child;
+    AssertCompiledParentValidationDiagnostic(
+        forwardParent, dtDynValidationCode::InvalidParent, root,
+        "compiled body[" + std::to_string(root) + "] has invalid parent " +
+            std::to_string(child));
+
+    dtDynModel negativeParent = valid;
+    negativeParent.body_parentid[static_cast<std::size_t>(child)] = DTDYN_INVALID_INDEX;
+    AssertCompiledParentValidationDiagnostic(
+        negativeParent, dtDynValidationCode::InvalidParent, child,
+        "compiled body[" + std::to_string(child) + "] has invalid parent -1");
 }
 
 void TestModelValidationRejectsNonFiniteValues()
@@ -8811,6 +8866,7 @@ int main()
     TestSpecValidationPreservesRootStackedDimensionBoundary();
     TestModelValidationRejectsArrayShapeMismatch();
     TestModelValidationRejectsMissingWorld();
+    TestModelValidationRejectsCompiledWorldAndNonWorldParents();
     TestModelValidationRejectsNonFiniteValues();
     TestModelValidationRejectsInvalidDofReferences();
     TestModelValidationRejectsInvalidAddressSegments();

@@ -944,7 +944,7 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
         }
     }
 
-    if (model.nbody > 0 && model.body_parentid[0] != 0)
+    if ((model.nbody > 0) && (model.body_parentid[0] != 0))
     {
         return Fail(error, dtDynValidationCode::InvalidWorld, dtDynObjectType::Body, 0,
                     "compiled body[0] world parent must be 0");
@@ -952,7 +952,7 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
     for (dtDynIndex bodyId = 1; bodyId < model.nbody; ++bodyId)
     {
         const dtDynIndex parent = model.body_parentid[static_cast<std::size_t>(bodyId)];
-        if (parent < 0 || parent >= bodyId)
+        if ((parent < 0) || (parent >= bodyId))
         {
             return Fail(error, dtDynValidationCode::InvalidParent, dtDynObjectType::Body, bodyId,
                         "compiled body[" + std::to_string(bodyId) + "] has invalid parent " +
