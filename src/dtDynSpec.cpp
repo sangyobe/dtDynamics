@@ -946,7 +946,7 @@ dtDynIndex dtDynSpec::AddBody(const std::string &name, const dtDynIndex parent)
     const dtDynIndex id = static_cast<dtDynIndex>(m_storage.m_bodies.size());
     m_storage.m_bodies.push_back(std::move(body));
 
-    if (parent >= 0 && parent < id)
+    if ((parent >= 0) && (parent < id))
     {
         m_storage.m_bodies[id].nextSibling = m_storage.m_bodies[parent].firstChild;
         m_storage.m_bodies[parent].firstChild = id;
@@ -969,7 +969,7 @@ dtDynIndex dtDynSpec::AddJoint(const dtDynIndex body, const std::string &name, c
     const dtDynIndex id = static_cast<dtDynIndex>(m_storage.m_joints.size());
     m_storage.m_joints.push_back(std::move(joint));
 
-    if (body >= 0 && body < static_cast<dtDynIndex>(m_storage.m_bodies.size()))
+    if ((body >= 0) && (body < static_cast<dtDynIndex>(m_storage.m_bodies.size())))
     {
         m_storage.m_bodies[body].joints.push_back(id);
     }
@@ -988,7 +988,7 @@ dtDynIndex dtDynSpec::AddSite(const dtDynIndex body, const std::string &name)
     const dtDynIndex id = static_cast<dtDynIndex>(m_storage.m_sites.size());
     m_storage.m_sites.push_back(std::move(site));
 
-    if (body >= 0 && body < static_cast<dtDynIndex>(m_storage.m_bodies.size()))
+    if ((body >= 0) && (body < static_cast<dtDynIndex>(m_storage.m_bodies.size())))
     {
         m_storage.m_bodies[body].sites.push_back(id);
     }

@@ -347,6 +347,21 @@ void TestCheckedCompileRejectsInvalidParent()
     assert(rejected);
 }
 
+void TestSpecValidationRejectsDetachedBody()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("detached", 99);
+    assert(spec.Bodies().size() == 2);
+    assert(spec.Bodies()[0].firstChild == DTDYN_INVALID_INDEX);
+    assert(spec.Bodies()[body].parent == 99);
+
+    dtDynValidationError error;
+    assert(!ValidateSpec(spec, &error));
+    assert(error.code == dtDynValidationCode::InvalidParent);
+    assert(error.object == dtDynObjectType::Body);
+    assert(error.index == body);
+}
+
 void TestSpecValidationRejectsDetachedJoint()
 {
     dtDynSpec spec;
@@ -5950,6 +5965,7 @@ int main()
 {
     TestCheckedCompileAcceptsValidSpec();
     TestCheckedCompileRejectsInvalidParent();
+    TestSpecValidationRejectsDetachedBody();
     TestSpecValidationRejectsDetachedJoint();
     TestSpecValidationRejectsSiblingCycle();
     TestSpecValidationRejectsDetachedSite();
