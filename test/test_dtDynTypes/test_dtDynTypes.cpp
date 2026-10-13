@@ -1813,6 +1813,44 @@ void TestModelValidationRejectsCompiledSiteBodyBounds()
     AssertCompiledSiteBodyReferenceDiagnostic(onePastBody, site);
 }
 
+void AssertCompiledActuatorJointReferenceDiagnostic(const dtDynModel &model,
+                                                    const dtDynIndex actuator)
+{
+    dtDynValidationError error;
+    assert(!ValidateModel(model, &error));
+    assert(error.code == dtDynValidationCode::InvalidReference);
+    assert(error.object == dtDynObjectType::Actuator);
+    assert(error.index == actuator);
+    assert(error.message == "compiled actuator references an invalid joint");
+}
+
+void TestModelValidationRejectsCompiledActuatorJointBounds()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("actuator_joint_bounds_body", 0);
+    const dtDynIndex joint = spec.AddJoint(body, "actuator_joint_bounds_joint", dtDynJointType::Hinge);
+    const dtDynIndex actuator = spec.AddActuator(joint, "actuator_joint_bounds_actuator");
+    const dtDynModel valid = CompileSpecChecked(spec);
+
+    assert(body == 1);
+    assert(joint == 0);
+    assert(actuator == 0);
+    assert(valid.njnt == 1);
+    assert(valid.nu == 1);
+    assert(valid.actuator_jointid[static_cast<std::size_t>(actuator)] == joint);
+    dtDynValidationError validError;
+    assert(ValidateModel(valid, &validError));
+    assert(validError.code == dtDynValidationCode::None);
+
+    dtDynModel negativeJoint = valid;
+    negativeJoint.actuator_jointid[static_cast<std::size_t>(actuator)] = DTDYN_INVALID_INDEX;
+    AssertCompiledActuatorJointReferenceDiagnostic(negativeJoint, actuator);
+
+    dtDynModel onePastJoint = valid;
+    onePastJoint.actuator_jointid[static_cast<std::size_t>(actuator)] = onePastJoint.njnt;
+    AssertCompiledActuatorJointReferenceDiagnostic(onePastJoint, actuator);
+}
+
 void TestModelValidationPreservesUniqueNameValidationOrder()
 {
     dtDynSpec spec;
@@ -8671,6 +8709,7 @@ int main()
     TestModelValidationPreservesUniqueNameValidationOrder();
     TestModelValidationPreservesJointAndSiteValidationFailures();
     TestModelValidationRejectsCompiledSiteBodyBounds();
+    TestModelValidationRejectsCompiledActuatorJointBounds();
     TestModelValidationPreservesEveryBodyNonFiniteFailure();
     TestModelValidationPreservesEveryBodyPhysicalOrFrameFailure();
     TestModelValidationPreservesBodyValidationPhasePrecedence();

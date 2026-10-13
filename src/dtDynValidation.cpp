@@ -1267,7 +1267,7 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
     for (dtDynIndex actuatorId = 0; actuatorId < model.nu; ++actuatorId)
     {
         const dtDynIndex jointId = model.actuator_jointid[static_cast<std::size_t>(actuatorId)];
-        if (jointId < 0 || jointId >= model.njnt)
+        if ((jointId < 0) || (jointId >= model.njnt))
         {
             return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Actuator,
                         actuatorId, "compiled actuator references an invalid joint");
