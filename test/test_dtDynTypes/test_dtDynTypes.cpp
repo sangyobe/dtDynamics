@@ -402,6 +402,17 @@ void AssertWeldPropagationDiagnostic(const dtDynModel &model, const dtDynIndex e
     assert(error.message == "compiled body weld ID is inconsistent");
 }
 
+void AssertCompiledUnsupportedJointTypeDiagnostic(const dtDynModel &model,
+                                                  const dtDynIndex expectedJoint)
+{
+    dtDynValidationError error;
+    assert(!ValidateModel(model, &error));
+    assert(error.code == dtDynValidationCode::UnsupportedJoint);
+    assert(error.object == dtDynObjectType::Joint);
+    assert(error.index == expectedJoint);
+    assert(error.message == "compiled joint has an unsupported type");
+}
+
 void TestCheckedCompileAcceptsValidSpec()
 {
     const dtDynSpec spec = MakeValidNormalSpec();
@@ -881,6 +892,32 @@ void TestModelValidationRejectsInvalidAddressSegments()
     dtDynModel badType = valid;
     badType.jnt_type[0] = 99;
     assert(!ValidateModel(badType, &error));
+}
+
+void TestModelValidationRejectsCompiledJointTypesOutsideRange()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("compiled_joint_type_body", 0);
+    const dtDynIndex joint =
+        spec.AddJoint(body, "compiled_joint_type", dtDynJointType::Hinge);
+    const dtDynModel valid = CompileSpecChecked(spec);
+
+    assert(body == 1);
+    assert(joint == 0);
+    assert(valid.njnt == 1);
+    dtDynValidationError validError;
+    assert(ValidateModel(valid, &validError));
+    assert(validError.code == dtDynValidationCode::None);
+
+    dtDynModel belowFree = valid;
+    belowFree.jnt_type[static_cast<std::size_t>(joint)] =
+        static_cast<dtDynIndex>(dtDynJointType::Free) - 1;
+    AssertCompiledUnsupportedJointTypeDiagnostic(belowFree, joint);
+
+    dtDynModel aboveHinge = valid;
+    aboveHinge.jnt_type[static_cast<std::size_t>(joint)] =
+        static_cast<dtDynIndex>(dtDynJointType::Hinge) + 1;
+    AssertCompiledUnsupportedJointTypeDiagnostic(aboveHinge, joint);
 }
 
 void TestModelValidationRejectsInvalidJointSpecProvenance()
@@ -8577,6 +8614,7 @@ int main()
     TestModelValidationRejectsNonFiniteValues();
     TestModelValidationRejectsInvalidDofReferences();
     TestModelValidationRejectsInvalidAddressSegments();
+    TestModelValidationRejectsCompiledJointTypesOutsideRange();
     TestModelValidationRejectsInvalidJointSpecProvenance();
     TestModelValidationRejectsInvalidRootMetadata();
     TestModelValidationRejectsInconsistentRootTableMetadata();

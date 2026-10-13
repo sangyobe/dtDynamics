@@ -1134,8 +1134,8 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
     {
         const std::size_t index = static_cast<std::size_t>(jointId);
         const dtDynIndex typeValue = model.jnt_type[index];
-        if (typeValue < static_cast<dtDynIndex>(dtDynJointType::Free) ||
-            typeValue > static_cast<dtDynIndex>(dtDynJointType::Hinge))
+        if ((typeValue < static_cast<dtDynIndex>(dtDynJointType::Free)) ||
+            (typeValue > static_cast<dtDynIndex>(dtDynJointType::Hinge)))
         {
             return Fail(error, dtDynValidationCode::UnsupportedJoint, dtDynObjectType::Joint,
                         jointId, "compiled joint has an unsupported type");
