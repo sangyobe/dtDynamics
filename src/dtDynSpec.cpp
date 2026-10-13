@@ -1037,7 +1037,8 @@ std::string dtDynSpec::EncodeXml() const
         for (const dtDynActuatorSpec &actuator : m_storage.m_actuators)
         {
             out << "    <motor name=\"" << actuator.name << "\"";
-            if (actuator.joint >= 0 && actuator.joint < static_cast<dtDynIndex>(m_storage.m_joints.size()))
+            if ((actuator.joint >= 0) &&
+                (actuator.joint < static_cast<dtDynIndex>(m_storage.m_joints.size())))
             {
                 out << " joint=\"" << m_storage.m_joints[static_cast<std::size_t>(actuator.joint)].name << "\"";
             }

@@ -3647,6 +3647,38 @@ void TestSpecXmlDecodeEncodeRoundTrip()
     assert(reparsed.Actuators()[0].name == "hinge_motor");
 }
 
+void TestSpecXmlEncodeOmitsInvalidActuatorJointReferences()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("body", 0);
+    const dtDynIndex joint = spec.AddJoint(body, "valid_joint", dtDynJointType::Hinge);
+    const dtDynIndex validMotor = spec.AddActuator(joint, "valid_motor");
+    const dtDynIndex invalidMotor = spec.AddActuator(DTDYN_INVALID_INDEX, "invalid_motor");
+    const dtDynIndex onePastEndJoint = static_cast<dtDynIndex>(spec.Joints().size());
+    const dtDynIndex onePastEndMotor = spec.AddActuator(onePastEndJoint, "one_past_end_motor");
+
+    assert(spec.Actuators().size() == 3);
+    assert(spec.Actuators()[validMotor].joint == joint);
+    assert(spec.Actuators()[invalidMotor].joint == DTDYN_INVALID_INDEX);
+    assert(spec.Actuators()[onePastEndMotor].joint == onePastEndJoint);
+
+    const std::string encoded = spec.EncodeXml();
+    const std::string validMotorElement =
+        "    <motor name=\"valid_motor\" joint=\"valid_joint\" gear=\"1\"/>\n";
+    const std::string invalidMotorElement =
+        "    <motor name=\"invalid_motor\" gear=\"1\"/>\n";
+    const std::string onePastEndMotorElement =
+        "    <motor name=\"one_past_end_motor\" gear=\"1\"/>\n";
+
+    assert(encoded.find(validMotorElement) != std::string::npos);
+    assert(encoded.find(invalidMotorElement) != std::string::npos);
+    assert(encoded.find(onePastEndMotorElement) != std::string::npos);
+
+    const std::size_t firstJointAttribute = encoded.find(" joint=\"");
+    assert(firstJointAttribute != std::string::npos);
+    assert(encoded.find(" joint=\"", firstJointAttribute + 1) == std::string::npos);
+}
+
 void TestSpecXmlLoadsFromFile()
 {
     const std::string xml =
@@ -6363,6 +6395,7 @@ int main()
     TestSpecXmlPreservesDeclarationVersionAndAttributeGrammar();
     TestSpecXmlRejectsDeclarationAfterLeadingWhitespace();
     TestSpecXmlDecodeEncodeRoundTrip();
+    TestSpecXmlEncodeOmitsInvalidActuatorJointReferences();
     TestSpecXmlLoadsFromFile();
     TestSpecXmlLoadsAcrossBufferBoundaries();
     TestSpecXmlLoadReportsTypedErrorPath();
