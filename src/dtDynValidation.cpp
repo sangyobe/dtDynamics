@@ -1233,7 +1233,7 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
     {
         const std::size_t bodyIndex = static_cast<std::size_t>(bodyId);
         const dtDynIndex parentBody = model.body_parentid[bodyIndex];
-        dtDynIndex expectedParent = parentBody > 0
+        dtDynIndex expectedParent = (parentBody > 0)
                                         ? bodyLastDof[static_cast<std::size_t>(parentBody)]
                                         : DTDYN_INVALID_INDEX;
         const dtDynIndex jointAddress = model.body_jntadr[bodyIndex];

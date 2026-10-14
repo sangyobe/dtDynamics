@@ -28,7 +28,7 @@ std::size_t ToArraySize(const Size value)
 {
     if constexpr (std::is_signed<Size>::value)
     {
-        return value > 0 ? static_cast<std::size_t>(value) : static_cast<std::size_t>(0);
+        return (value > 0) ? static_cast<std::size_t>(value) : static_cast<std::size_t>(0);
     }
     else
     {

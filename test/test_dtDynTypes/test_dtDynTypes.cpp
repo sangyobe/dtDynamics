@@ -1355,23 +1355,51 @@ void TestModelValidationRejectsIncorrectDofParentTopology()
     const dtDynIndex rootA = multiRoot.AddBody("root_a", 0);
     multiRoot.AddJoint(rootA, "joint_a", dtDynJointType::Hinge);
     const dtDynIndex rootB = multiRoot.AddBody("root_b", 0);
-    multiRoot.AddJoint(rootB, "joint_b", dtDynJointType::Hinge);
-    dtDynModel crossRoot = CompileSpec(multiRoot);
-    crossRoot.dof_parentid[1] = 0;
+    const dtDynIndex rootBJoint =
+        multiRoot.AddJoint(rootB, "joint_b", dtDynJointType::Hinge);
+    const dtDynModel validMultiRoot = CompileSpecChecked(multiRoot);
+    const dtDynIndex rootBDof =
+        validMultiRoot.jnt_dofadr[static_cast<std::size_t>(rootBJoint)];
     dtDynValidationError error;
+
+    assert(validMultiRoot.nroot == 2);
+    assert(validMultiRoot.dof_parentid[static_cast<std::size_t>(rootBDof)] ==
+           DTDYN_INVALID_INDEX);
+    assert(ValidateModel(validMultiRoot, &error));
+    assert(error.code == dtDynValidationCode::None);
+
+    dtDynModel crossRoot = validMultiRoot;
+    crossRoot.dof_parentid[static_cast<std::size_t>(rootBDof)] = 0;
     assert(!ValidateModel(crossRoot, &error));
     assert(error.code == dtDynValidationCode::InvalidReference);
+    assert(error.object == dtDynObjectType::Joint);
+    assert(error.index == rootBJoint);
+    assert(error.message == "compiled DOF parent does not match the exact ancestor chain");
 
     dtDynSpec chain;
     const dtDynIndex parent = chain.AddBody("parent", 0);
-    chain.AddJoint(parent, "parent_joint", dtDynJointType::Hinge);
+    const dtDynIndex parentJoint =
+        chain.AddJoint(parent, "parent_joint", dtDynJointType::Hinge);
     const dtDynIndex child = chain.AddBody("child", parent);
-    chain.AddJoint(child, "child_joint", dtDynJointType::Hinge);
-    dtDynModel severed = CompileSpec(chain);
-    assert(severed.dof_parentid[1] == 0);
-    severed.dof_parentid[1] = DTDYN_INVALID_INDEX;
+    const dtDynIndex childJoint =
+        chain.AddJoint(child, "child_joint", dtDynJointType::Hinge);
+    const dtDynModel validChain = CompileSpecChecked(chain);
+    const dtDynIndex parentDof =
+        validChain.jnt_dofadr[static_cast<std::size_t>(parentJoint)];
+    const dtDynIndex childDof =
+        validChain.jnt_dofadr[static_cast<std::size_t>(childJoint)];
+
+    assert(validChain.dof_parentid[static_cast<std::size_t>(childDof)] == parentDof);
+    assert(ValidateModel(validChain, &error));
+    assert(error.code == dtDynValidationCode::None);
+
+    dtDynModel severed = validChain;
+    severed.dof_parentid[static_cast<std::size_t>(childDof)] = DTDYN_INVALID_INDEX;
     assert(!ValidateModel(severed, &error));
     assert(error.code == dtDynValidationCode::InvalidReference);
+    assert(error.object == dtDynObjectType::Joint);
+    assert(error.index == childJoint);
+    assert(error.message == "compiled DOF parent does not match the exact ancestor chain");
 }
 
 void TestModelValidationRejectsInconsistentDerivedMasses()
@@ -2484,6 +2512,13 @@ void TestDtArrayDirectHeader()
 
     assert(values[1] == 2);
     assert(copied[1] == 20);
+
+    values.resize(static_cast<dtDynIndex>(3));
+    assert(values.size() == 3);
+    values.assign(static_cast<dtDynIndex>(0), 0);
+    assert(values.size() == 0);
+    values.assign(static_cast<dtDynIndex>(-1), 0);
+    assert(values.size() == 0);
 }
 
 void TestDtArrayCopyConstructorReleasesFailedPartialCopy()
