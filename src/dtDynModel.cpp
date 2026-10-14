@@ -147,22 +147,26 @@ void dtDynModel::RebuildNameMaps()
     m_siteNameToId.clear();
     m_actuatorNameToId.clear();
 
-    for (dtDynIndex i = 0; i < static_cast<dtDynIndex>(body_names.size()); ++i)
+    const dtDynIndex bodyNameCount = static_cast<dtDynIndex>(body_names.size());
+    for (dtDynIndex i = 0; i < bodyNameCount; ++i)
     {
         m_bodyNameToId[body_names[static_cast<std::size_t>(i)]] = i;
     }
 
-    for (dtDynIndex i = 0; i < static_cast<dtDynIndex>(joint_names.size()); ++i)
+    const dtDynIndex jointNameCount = static_cast<dtDynIndex>(joint_names.size());
+    for (dtDynIndex i = 0; i < jointNameCount; ++i)
     {
         m_jointNameToId[joint_names[static_cast<std::size_t>(i)]] = i;
     }
 
-    for (dtDynIndex i = 0; i < static_cast<dtDynIndex>(site_names.size()); ++i)
+    const dtDynIndex siteNameCount = static_cast<dtDynIndex>(site_names.size());
+    for (dtDynIndex i = 0; i < siteNameCount; ++i)
     {
         m_siteNameToId[site_names[static_cast<std::size_t>(i)]] = i;
     }
 
-    for (dtDynIndex i = 0; i < static_cast<dtDynIndex>(actuator_names.size()); ++i)
+    const dtDynIndex actuatorNameCount = static_cast<dtDynIndex>(actuator_names.size());
+    for (dtDynIndex i = 0; i < actuatorNameCount; ++i)
     {
         m_actuatorNameToId[actuator_names[static_cast<std::size_t>(i)]] = i;
     }

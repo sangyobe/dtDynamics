@@ -30,7 +30,8 @@ namespace
 template <typename Item>
 dtDynIndex FindNamedObject(const dtArray<Item> &items, const std::string &name)
 {
-    for (dtDynIndex index = 0; index < static_cast<dtDynIndex>(items.size()); ++index)
+    const dtDynIndex itemCount = static_cast<dtDynIndex>(items.size());
+    for (dtDynIndex index = 0; index < itemCount; ++index)
     {
         if (items[static_cast<std::size_t>(index)].name == name)
         {
