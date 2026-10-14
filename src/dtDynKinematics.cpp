@@ -595,7 +595,8 @@ void ComputeIndexedBodyJacobians(const dtDynModel &model,
                                  const dtDynArray<dtDynIndex> &bodyIds)
 {
     // Controller path: compute only named task bodies cached by the caller.
-    for (std::size_t idx = 0; idx < bodyIds.size(); ++idx)
+    const std::size_t bodyCount = bodyIds.size();
+    for (std::size_t idx = 0; idx < bodyCount; ++idx)
     {
         const dtDynIndex bodyId = bodyIds[idx];
         assert((bodyId >= 0) && (bodyId < model.nbody));
@@ -608,7 +609,8 @@ void ComputeIndexedSiteJacobians(const dtDynModel &model,
                                  const dtDynArray<dtDynIndex> &siteIds)
 {
     // Controller path: compute only named task sites cached by the caller.
-    for (std::size_t idx = 0; idx < siteIds.size(); ++idx)
+    const std::size_t siteCount = siteIds.size();
+    for (std::size_t idx = 0; idx < siteCount; ++idx)
     {
         const dtDynIndex siteId = siteIds[idx];
         assert((siteId >= 0) && (siteId < model.nsite));

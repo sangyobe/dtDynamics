@@ -178,7 +178,8 @@ bool ValidateUniqueNames(const dtArray<Object> &objects,
 {
     std::unordered_map<std::string, dtDynIndex> seen;
     seen.reserve(objects.size());
-    for (std::size_t index = 0; index < objects.size(); ++index)
+    const std::size_t objectCount = objects.size();
+    for (std::size_t index = 0; index < objectCount; ++index)
     {
         const dtDynIndex objectIndex = static_cast<dtDynIndex>(index);
         const auto inserted = seen.emplace(objects[index].name, objectIndex);
@@ -199,7 +200,8 @@ bool ValidateUniqueNames(const dtArray<std::string> &names,
 {
     std::unordered_map<std::string, dtDynIndex> seen;
     seen.reserve(names.size());
-    for (std::size_t index = 0; index < names.size(); ++index)
+    const std::size_t nameCount = names.size();
+    for (std::size_t index = 0; index < nameCount; ++index)
     {
         const dtDynIndex objectIndex = static_cast<dtDynIndex>(index);
         if (!seen.emplace(names[index], objectIndex).second)
