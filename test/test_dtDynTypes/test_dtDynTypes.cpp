@@ -4760,6 +4760,13 @@ void AssertXmlElementOccursExactlyOnce(const std::string &xml, const std::string
     assert(xml.find(element, first + element.size()) == std::string::npos);
 }
 
+void AssertDecodedXmlBodyPresent(const dtDynSpec &spec, const std::string &name)
+{
+    const dtDynIndex body = spec.BodyId(name);
+    assert(body != DTDYN_INVALID_INDEX);
+    assert(spec.Bodies()[static_cast<std::size_t>(body)].name == name);
+}
+
 void TestSpecXmlEncodeBodyQuaternionAttributes()
 {
     dtDynSpec spec;
@@ -4828,6 +4835,52 @@ void TestSpecXmlDecodeEncodeRoundTrip()
     assert(reparsed.Joints()[0].name == "hinge_z");
     assert(reparsed.Sites()[0].name == "tool");
     assert(reparsed.Actuators()[0].name == "hinge_motor");
+}
+
+void TestSpecXmlEncodePreservesTerminalAndSiblingBodyTraversal()
+{
+    const std::string nestedXml =
+        "<mujoco><worldbody><body name=\"nested_parent\">"
+        "<body name=\"nested_first\"/><body name=\"nested_second\"/>"
+        "</body></worldbody></mujoco>";
+    const dtDynSpec nested = dtDynSpec::DecodeXml(nestedXml);
+    assert(nested.Bodies().size() == 4);
+    AssertDecodedXmlBodyPresent(nested, "nested_parent");
+    AssertDecodedXmlBodyPresent(nested, "nested_first");
+    AssertDecodedXmlBodyPresent(nested, "nested_second");
+
+    const std::string nestedEncoded = nested.EncodeXml();
+    AssertXmlElementOccursExactlyOnce(
+        nestedEncoded, "    <body name=\"nested_parent\" pos=\"0 0 0\" quat=\"1 0 0 0\">\n");
+    AssertXmlElementOccursExactlyOnce(
+        nestedEncoded, "      <body name=\"nested_first\" pos=\"0 0 0\" quat=\"1 0 0 0\">\n      </body>\n");
+    AssertXmlElementOccursExactlyOnce(
+        nestedEncoded, "      <body name=\"nested_second\" pos=\"0 0 0\" quat=\"1 0 0 0\">\n      </body>\n");
+
+    const dtDynSpec nestedReparsed = dtDynSpec::DecodeXml(nestedEncoded);
+    assert(nestedReparsed.Bodies().size() == 4);
+    AssertDecodedXmlBodyPresent(nestedReparsed, "nested_parent");
+    AssertDecodedXmlBodyPresent(nestedReparsed, "nested_first");
+    AssertDecodedXmlBodyPresent(nestedReparsed, "nested_second");
+
+    const std::string worldSiblingsXml =
+        "<mujoco><worldbody><body name=\"world_first\"/><body name=\"world_second\"/>"
+        "</worldbody></mujoco>";
+    const dtDynSpec worldSiblings = dtDynSpec::DecodeXml(worldSiblingsXml);
+    assert(worldSiblings.Bodies().size() == 3);
+    AssertDecodedXmlBodyPresent(worldSiblings, "world_first");
+    AssertDecodedXmlBodyPresent(worldSiblings, "world_second");
+
+    const std::string worldSiblingsEncoded = worldSiblings.EncodeXml();
+    AssertXmlElementOccursExactlyOnce(
+        worldSiblingsEncoded, "    <body name=\"world_first\" pos=\"0 0 0\" quat=\"1 0 0 0\">\n    </body>\n");
+    AssertXmlElementOccursExactlyOnce(
+        worldSiblingsEncoded, "    <body name=\"world_second\" pos=\"0 0 0\" quat=\"1 0 0 0\">\n    </body>\n");
+
+    const dtDynSpec worldSiblingsReparsed = dtDynSpec::DecodeXml(worldSiblingsEncoded);
+    assert(worldSiblingsReparsed.Bodies().size() == 3);
+    AssertDecodedXmlBodyPresent(worldSiblingsReparsed, "world_first");
+    AssertDecodedXmlBodyPresent(worldSiblingsReparsed, "world_second");
 }
 
 void TestSpecXmlEncodeOmitsInvalidActuatorJointReferences()
@@ -10269,6 +10322,7 @@ int main()
     TestSpecXmlRejectsDeclarationAfterLeadingWhitespace();
     TestSpecXmlEncodeBodyQuaternionAttributes();
     TestSpecXmlDecodeEncodeRoundTrip();
+    TestSpecXmlEncodePreservesTerminalAndSiblingBodyTraversal();
     TestSpecXmlEncodeOmitsInvalidActuatorJointReferences();
     TestSpecXmlLoadsFromFile();
     TestSpecXmlLoadsAcrossBufferBoundaries();

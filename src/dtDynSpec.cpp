@@ -238,7 +238,8 @@ std::size_t FindTagEnd(const std::string &xml,
                        const std::string &sourcePath)
 {
     char quote = '\0';
-    for (std::size_t offset = begin + 1; offset < xml.size(); ++offset)
+    const std::size_t xmlSize = xml.size();
+    for (std::size_t offset = begin + 1; offset < xmlSize; ++offset)
     {
         const char character = xml[offset];
         if (quote != '\0')
@@ -807,9 +808,11 @@ void EncodeBody(const dtDynSpec &spec,
         out << "/>\n";
     }
 
-    for (dtDynIndex child = body.firstChild; child >= 0; child = spec.Bodies()[static_cast<std::size_t>(child)].nextSibling)
+    dtDynIndex child = body.firstChild;
+    while (child >= 0)
     {
         EncodeBody(spec, child, depth + 1, out);
+        child = spec.Bodies()[static_cast<std::size_t>(child)].nextSibling;
     }
 
     out << indent << "</body>\n";
@@ -1027,11 +1030,11 @@ std::string dtDynSpec::EncodeXml() const
     out << "<mujoco>\n";
     out << "  <compiler angle=\"radian\"/>\n";
     out << "  <worldbody>\n";
-    for (dtDynIndex child = m_storage.m_bodies[0].firstChild;
-         child >= 0;
-         child = m_storage.m_bodies[static_cast<std::size_t>(child)].nextSibling)
+    dtDynIndex child = m_storage.m_bodies[0].firstChild;
+    while (child >= 0)
     {
         EncodeBody(*this, child, 2, out);
+        child = m_storage.m_bodies[static_cast<std::size_t>(child)].nextSibling;
     }
     out << "  </worldbody>\n";
     if (!m_storage.m_actuators.empty())
