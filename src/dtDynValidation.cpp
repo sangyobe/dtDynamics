@@ -363,7 +363,8 @@ bool ValidateSpec(const dtDynSpec &spec, dtDynValidationError *error)
         return Fail(error, dtDynValidationCode::InvalidWorld, dtDynObjectType::Body, 0,
                     "body[0] world must have an invalid parent");
     }
-    for (std::size_t bodyIndex = 1; bodyIndex < bodies.size(); ++bodyIndex)
+    const std::size_t parentBodyCount = bodies.size();
+    for (std::size_t bodyIndex = 1; bodyIndex < parentBodyCount; ++bodyIndex)
     {
         const dtDynIndex bodyId = static_cast<dtDynIndex>(bodyIndex);
         const dtDynIndex parent = bodies[bodyIndex].parent;
@@ -374,7 +375,8 @@ bool ValidateSpec(const dtDynSpec &spec, dtDynValidationError *error)
                             "' has invalid parent " + std::to_string(parent));
         }
     }
-    for (std::size_t bodyIndex = 0; bodyIndex < bodies.size(); ++bodyIndex)
+    const std::size_t finiteBodyCount = bodies.size();
+    for (std::size_t bodyIndex = 0; bodyIndex < finiteBodyCount; ++bodyIndex)
     {
         const dtDynBodySpec &body = bodies[bodyIndex];
         const dtDynIndex bodyId = static_cast<dtDynIndex>(bodyIndex);
@@ -431,7 +433,8 @@ bool ValidateSpec(const dtDynSpec &spec, dtDynValidationError *error)
     }
     long long nq = 0;
     long long nv = 0;
-    for (std::size_t jointIndex = 0; jointIndex < spec.Joints().size(); ++jointIndex)
+    const std::size_t dofJointCount = spec.Joints().size();
+    for (std::size_t jointIndex = 0; jointIndex < dofJointCount; ++jointIndex)
     {
         const dtDynJointDofSize size = GetJointDofSize(spec.Joints()[jointIndex].type);
         nq += size.qposSize;
@@ -443,7 +446,8 @@ bool ValidateSpec(const dtDynSpec &spec, dtDynValidationError *error)
         }
     }
     long long nroot = 0;
-    for (std::size_t bodyIndex = 1; bodyIndex < bodies.size(); ++bodyIndex)
+    const std::size_t rootBodyCount = bodies.size();
+    for (std::size_t bodyIndex = 1; bodyIndex < rootBodyCount; ++bodyIndex)
     {
         if (bodies[bodyIndex].parent == 0)
         {
@@ -458,7 +462,8 @@ bool ValidateSpec(const dtDynSpec &spec, dtDynValidationError *error)
 
     dtArray<dtDynIndex> childSeen;
     childSeen.assign(bodies.size(), 0);
-    for (std::size_t parentIndex = 0; parentIndex < bodies.size(); ++parentIndex)
+    const std::size_t childListBodyCount = bodies.size();
+    for (std::size_t parentIndex = 0; parentIndex < childListBodyCount; ++parentIndex)
     {
         const dtDynIndex parentId = static_cast<dtDynIndex>(parentIndex);
         dtDynIndex child = bodies[parentIndex].firstChild;
@@ -485,7 +490,8 @@ bool ValidateSpec(const dtDynSpec &spec, dtDynValidationError *error)
             child = bodies[static_cast<std::size_t>(child)].nextSibling;
         }
     }
-    for (std::size_t bodyIndex = 1; bodyIndex < bodies.size(); ++bodyIndex)
+    const std::size_t childSeenBodyCount = bodies.size();
+    for (std::size_t bodyIndex = 1; bodyIndex < childSeenBodyCount; ++bodyIndex)
     {
         if (childSeen[bodyIndex] != 1)
         {
@@ -500,11 +506,13 @@ bool ValidateSpec(const dtDynSpec &spec, dtDynValidationError *error)
     dtArray<dtDynIndex> siteBacklinks;
     jointBacklinks.assign(joints.size(), 0);
     siteBacklinks.assign(sites.size(), 0);
-    for (std::size_t bodyIndex = 0; bodyIndex < bodies.size(); ++bodyIndex)
+    const std::size_t backlinkBodyCount = bodies.size();
+    for (std::size_t bodyIndex = 0; bodyIndex < backlinkBodyCount; ++bodyIndex)
     {
         const dtDynIndex bodyId = static_cast<dtDynIndex>(bodyIndex);
         const dtDynBodySpec &body = bodies[bodyIndex];
-        for (std::size_t localIndex = 0; localIndex < body.joints.size(); ++localIndex)
+        const std::size_t bodyJointListCount = body.joints.size();
+        for (std::size_t localIndex = 0; localIndex < bodyJointListCount; ++localIndex)
         {
             const dtDynIndex jointId = body.joints[localIndex];
             if ((jointId < 0) || (static_cast<std::size_t>(jointId) >= joints.size()))
@@ -519,7 +527,8 @@ bool ValidateSpec(const dtDynSpec &spec, dtDynValidationError *error)
             }
             ++jointBacklinks[static_cast<std::size_t>(jointId)];
         }
-        for (std::size_t localIndex = 0; localIndex < body.sites.size(); ++localIndex)
+        const std::size_t bodySiteListCount = body.sites.size();
+        for (std::size_t localIndex = 0; localIndex < bodySiteListCount; ++localIndex)
         {
             const dtDynIndex siteId = body.sites[localIndex];
             if ((siteId < 0) || (static_cast<std::size_t>(siteId) >= sites.size()))
@@ -536,7 +545,8 @@ bool ValidateSpec(const dtDynSpec &spec, dtDynValidationError *error)
         }
     }
 
-    for (std::size_t jointIndex = 0; jointIndex < joints.size(); ++jointIndex)
+    const std::size_t specJointCount = joints.size();
+    for (std::size_t jointIndex = 0; jointIndex < specJointCount; ++jointIndex)
     {
         const dtDynIndex jointId = static_cast<dtDynIndex>(jointIndex);
         const dtDynJointSpec &joint = joints[jointIndex];
@@ -610,7 +620,8 @@ bool ValidateSpec(const dtDynSpec &spec, dtDynValidationError *error)
         }
     }
 
-    for (std::size_t siteIndex = 0; siteIndex < sites.size(); ++siteIndex)
+    const std::size_t specSiteCount = sites.size();
+    for (std::size_t siteIndex = 0; siteIndex < specSiteCount; ++siteIndex)
     {
         const dtDynIndex siteId = static_cast<dtDynIndex>(siteIndex);
         const dtDynSiteSpec &site = sites[siteIndex];
@@ -642,7 +653,8 @@ bool ValidateSpec(const dtDynSpec &spec, dtDynValidationError *error)
     }
 
     const dtArray<dtDynActuatorSpec> &actuators = spec.Actuators();
-    for (std::size_t actuatorIndex = 0; actuatorIndex < actuators.size(); ++actuatorIndex)
+    const std::size_t specActuatorCount = actuators.size();
+    for (std::size_t actuatorIndex = 0; actuatorIndex < specActuatorCount; ++actuatorIndex)
     {
         const dtDynIndex actuatorId = static_cast<dtDynIndex>(actuatorIndex);
         const dtDynActuatorSpec &actuator = actuators[actuatorIndex];

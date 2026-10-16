@@ -1490,6 +1490,44 @@ void AssertSpecValidationFailure(const dtDynSpec &spec,
     assert(error.message == message);
 }
 
+void AddTerminalDofOverflowJoints(dtDynSpec &spec, const dtDynIndex body, const std::size_t count)
+{
+    for (std::size_t index = 0U; index < count; ++index)
+    {
+        const dtDynIndex joint =
+            spec.AddJoint(body, "terminal_dof_joint_" + std::to_string(index), dtDynJointType::Free);
+        assert(joint == static_cast<dtDynIndex>(index));
+    }
+    assert(spec.Joints().size() == count);
+}
+
+void TestSpecValidationRejectsTerminalJointDofOverflow()
+{
+    constexpr std::size_t freeQposSize = 7U;
+    constexpr std::size_t maximum = static_cast<std::size_t>(std::numeric_limits<uint16_t>::max());
+    constexpr std::size_t lastAcceptedCount = maximum / freeQposSize;
+    constexpr std::size_t terminalOverflowCount = lastAcceptedCount + 1U;
+    assert(lastAcceptedCount == 9362U);
+    assert((lastAcceptedCount * freeQposSize) <= maximum);
+    assert((terminalOverflowCount * freeQposSize) > maximum);
+
+    {
+        dtDynSpec spec;
+        const dtDynIndex body = spec.AddBody("terminal_dof_body", 0);
+        AddTerminalDofOverflowJoints(spec, body, lastAcceptedCount);
+        AssertP75ObjectCountBaseline(spec);
+    }
+    {
+        dtDynSpec spec;
+        const dtDynIndex body = spec.AddBody("terminal_dof_body", 0);
+        AddTerminalDofOverflowJoints(spec, body, terminalOverflowCount);
+        AssertSpecValidationFailure(spec, dtDynValidationCode::DimensionOverflow,
+                                    dtDynObjectType::Joint, static_cast<dtDynIndex>(lastAcceptedCount),
+                                    "joint[" + std::to_string(lastAcceptedCount) +
+                                        "] makes nq/nv exceed UINT16_MAX");
+    }
+}
+
 struct BodyJointReferenceEditor
 {
     dtDynIndex reference;
@@ -1626,6 +1664,25 @@ void TestSpecValidationRejectsChildListRange()
         assert(onePastEnd > 0);
         AssertChildListRangeFailure(spec, parent, onePastEnd);
     }
+}
+
+void TestSpecValidationRejectsTerminalBodyAbsentFromChildList()
+{
+    dtDynSpec spec;
+    const dtDynIndex first = spec.AddBody("child_seen_first", 0);
+    const dtDynIndex terminal = spec.AddBody("child_seen_terminal", first);
+    assert(first == 1);
+    assert(terminal == 2);
+    assert(spec.Bodies()[static_cast<std::size_t>(first)].firstChild == terminal);
+    assert(spec.Bodies()[static_cast<std::size_t>(terminal)].parent == first);
+    AssertP75ObjectCountBaseline(spec);
+
+    spec.EditBody(first, FirstChildEditor{DTDYN_INVALID_INDEX});
+    assert(spec.Bodies()[static_cast<std::size_t>(first)].firstChild == DTDYN_INVALID_INDEX);
+    assert(spec.Bodies()[static_cast<std::size_t>(terminal)].parent == first);
+
+    AssertSpecValidationFailure(spec, dtDynValidationCode::InvalidOwner, dtDynObjectType::Body,
+                                terminal, "body[2] is absent from its parent's child list");
 }
 
 struct PhysicalInertiaEditor
@@ -10208,12 +10265,14 @@ int main()
     TestSpecValidationRejectsInvalidBodyJointReference();
     TestSpecValidationPreservesSignedReferenceBounds();
     TestSpecValidationRejectsChildListRange();
+    TestSpecValidationRejectsTerminalBodyAbsentFromChildList();
     TestSpecValidationRejectsDuplicateNames();
     TestSpecValidationRejectsDuplicateEmptyNames();
     TestSpecValidationRejectsNonFiniteValues();
     TestModelValidationRejectsNegativeDimension();
     TestModelValidationRejectsDimensionOverflow();
     TestSpecValidationRejectsDimensionOverflowBeforeCompile();
+    TestSpecValidationRejectsTerminalJointDofOverflow();
     TestSpecValidationPreservesPublicObjectCountBoundaries();
     TestSpecValidationPreservesRootStackedDimensionBoundary();
     TestModelValidationRejectsArrayShapeMismatch();
