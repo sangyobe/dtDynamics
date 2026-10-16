@@ -439,7 +439,7 @@ bool ValidateSpec(const dtDynSpec &spec, dtDynValidationError *error)
         const dtDynJointDofSize size = GetJointDofSize(spec.Joints()[jointIndex].type);
         nq += size.qposSize;
         nv += size.qvelSize;
-        if (nq > maximum || nv > maximum)
+        if ((nq > maximum) || nv > maximum)
         {
             return Fail(error, dtDynValidationCode::DimensionOverflow, dtDynObjectType::Joint,
                         static_cast<dtDynIndex>(jointIndex), "joint[" + std::to_string(jointIndex) + "] makes nq/nv exceed UINT16_MAX");
@@ -475,7 +475,7 @@ bool ValidateSpec(const dtDynSpec &spec, dtDynValidationError *error)
                 return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body,
                             parentId, "body[" + std::to_string(parentId) + "] child list contains invalid body " + std::to_string(child));
             }
-            if (++steps > bodies.size() || childSeen[static_cast<std::size_t>(child)] != 0)
+            if (++steps > bodies.size() || (childSeen[static_cast<std::size_t>(child)] != 0))
             {
                 return Fail(error, dtDynValidationCode::TopologyCycle, dtDynObjectType::Body, child,
                             "body[" + std::to_string(child) + "] appears repeatedly in child lists");
@@ -1169,7 +1169,7 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
                         jointId, "compiled joint qpos/DOF span is invalid");
         }
         const dtDynIndex bodyId = model.jnt_bodyid[index];
-        if (bodyId <= 0 || bodyId >= model.nbody)
+        if ((bodyId <= 0) || bodyId >= model.nbody)
         {
             return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Joint,
                         jointId, "compiled joint references an invalid body");

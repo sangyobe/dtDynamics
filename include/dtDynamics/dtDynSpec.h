@@ -313,7 +313,7 @@ private:
                   const char *const itemType)
     {
         EnsureNotEditing();
-        if (itemId < 0 || static_cast<std::size_t>(itemId) >= items.size())
+        if ((itemId < 0) || (static_cast<std::size_t>(itemId) >= items.size()))
         {
             throw std::out_of_range(std::string("dtDynSpec: invalid ") + itemType + " index");
         }

@@ -2162,6 +2162,77 @@ void TestModelValidationRejectsCompiledJointQposDofSpanBounds()
     AssertCompiledJointQposDofSpanDiagnostic(onePastDof, joint);
 }
 
+void AssertCompiledJointInvalidBodyDiagnostic(const dtDynModel &model, const dtDynIndex joint)
+{
+    AssertModelValidationFailure(model, dtDynValidationCode::InvalidReference,
+                                 dtDynObjectType::Joint, joint,
+                                 "compiled joint references an invalid body");
+}
+
+void AssertCompiledBodyJointSegmentOwnerDiagnostic(const dtDynModel &model, const dtDynIndex body)
+{
+    AssertModelValidationFailure(
+        model, dtDynValidationCode::InvalidReference, dtDynObjectType::Body, body,
+        "compiled body joint segments overlap or contain another body's joint");
+}
+
+void TestModelValidationRejectsCompiledJointReferencingInvalidBody()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("joint_owner_body", 0);
+    const dtDynIndex joint = spec.AddJoint(body, "joint_owner_joint", dtDynJointType::Hinge);
+    const dtDynModel valid = CompileSpecChecked(spec);
+
+    assert(body == 1);
+    assert(joint == 0);
+    assert(valid.nbody == 2);
+    assert(valid.njnt == 1);
+    assert(valid.nv == 1);
+    assert(valid.jnt_bodyid[static_cast<std::size_t>(joint)] == body);
+    assert(valid.body_jntnum[0] == 0);
+    assert(valid.body_jntadr[0] == DTDYN_INVALID_INDEX);
+    assert(valid.body_jntnum[static_cast<std::size_t>(body)] == 1);
+    assert(valid.body_jntadr[static_cast<std::size_t>(body)] == joint);
+    assert(valid.body_dofnum[0] == 0);
+    assert(valid.body_dofadr[0] == DTDYN_INVALID_INDEX);
+    assert(valid.body_dofnum[static_cast<std::size_t>(body)] == 1);
+    assert(valid.body_dofadr[static_cast<std::size_t>(body)] == 0);
+    assert(valid.dof_bodyid[0] == body);
+    dtDynValidationError validError;
+    assert(ValidateModel(valid, &validError));
+    assert(validError.code == dtDynValidationCode::None);
+
+    // The body-ownership phase runs first, so a single out-of-range or world owner
+    // is rejected there; the joint-owner guard cannot be the first failure.
+    dtDynModel onePastBody = valid;
+    onePastBody.jnt_bodyid[static_cast<std::size_t>(joint)] = onePastBody.nbody;
+    AssertCompiledBodyJointSegmentOwnerDiagnostic(onePastBody, body);
+
+    dtDynModel negativeBody = valid;
+    negativeBody.jnt_bodyid[static_cast<std::size_t>(joint)] = DTDYN_INVALID_INDEX;
+    AssertCompiledBodyJointSegmentOwnerDiagnostic(negativeBody, body);
+
+    dtDynModel worldBodyOnly = valid;
+    worldBodyOnly.jnt_bodyid[static_cast<std::size_t>(joint)] = 0;
+    AssertCompiledBodyJointSegmentOwnerDiagnostic(worldBodyOnly, body);
+
+    // Move the joint and its DOF into the world body's ownership segments so every
+    // earlier ownership and weld phase is consistent with a world-owned joint.
+    dtDynModel worldOwned = valid;
+    worldOwned.jnt_bodyid[static_cast<std::size_t>(joint)] = 0;
+    worldOwned.body_jntnum[0] = 1;
+    worldOwned.body_jntadr[0] = joint;
+    worldOwned.body_jntnum[static_cast<std::size_t>(body)] = 0;
+    worldOwned.body_jntadr[static_cast<std::size_t>(body)] = DTDYN_INVALID_INDEX;
+    worldOwned.body_weldid[static_cast<std::size_t>(body)] = 0;
+    worldOwned.body_dofnum[0] = 1;
+    worldOwned.body_dofadr[0] = 0;
+    worldOwned.body_dofnum[static_cast<std::size_t>(body)] = 0;
+    worldOwned.body_dofadr[static_cast<std::size_t>(body)] = DTDYN_INVALID_INDEX;
+    worldOwned.dof_bodyid[0] = 0;
+    AssertCompiledJointInvalidBodyDiagnostic(worldOwned, joint);
+}
+
 void AssertCompiledBodySegmentDiagnostic(const dtDynModel &model,
                                          const dtDynIndex body,
                                          const std::string &expectedMessage)
@@ -2792,6 +2863,197 @@ void TestDtArrayReserveSupportsMoveOnlyElements()
     assert(values.size() == 2);
     assert(values[0] != nullptr);
     assert(*values[0] == 7);
+}
+
+void TestDtArrayEndPointerContract()
+{
+    dtArray<int> unallocated;
+    const dtArray<int> &constUnallocated = unallocated;
+    assert(unallocated.data() == nullptr);
+    assert(unallocated.end() == nullptr);
+    assert(constUnallocated.end() == nullptr);
+    assert(unallocated.begin() == unallocated.end());
+    assert(constUnallocated.begin() == constUnallocated.end());
+
+    dtArray<int> allocated;
+    const dtArray<int> &constAllocated = allocated;
+    allocated.resize(4);
+    allocated.resize(0);
+    assert(allocated.data() != nullptr);
+    assert(allocated.size() == 0);
+    assert(allocated.end() == allocated.begin());
+    assert(constAllocated.end() == constAllocated.begin());
+    assert(allocated.end() != nullptr);
+    assert(constAllocated.end() != nullptr);
+
+    allocated.push_back(5);
+    allocated.push_back(6);
+    allocated.push_back(7);
+    assert(allocated.size() == 3);
+    assert(allocated.end() == allocated.begin() + 3);
+    assert(constAllocated.end() == constAllocated.begin() + 3);
+    assert(allocated.end() == allocated.data() + allocated.size());
+    assert(static_cast<std::size_t>(allocated.end() - allocated.begin()) == allocated.size());
+
+    allocated.clear();
+    assert(allocated.end() == nullptr);
+    assert(constAllocated.end() == nullptr);
+    assert(allocated.begin() == allocated.end());
+}
+
+void TestDtArrayAppendGrowthSequence()
+{
+    const std::size_t baseline = g_totalTestAllocations;
+    dtArray<int> values;
+    assert(g_totalTestAllocations == baseline);
+    assert(values.data() == nullptr);
+
+    static const std::size_t kExpectedAllocations[9] = {1, 2, 3, 3, 4, 4, 4, 4, 5};
+    const int *previousData = nullptr;
+    for (std::size_t i = 0; i < 9; ++i)
+    {
+        values.push_back(static_cast<int>(10 + i));
+        assert(values.size() == i + 1);
+        assert(g_totalTestAllocations - baseline == kExpectedAllocations[i]);
+        assert(values.data() != nullptr);
+        if (i == 3 || (i >= 5 && i <= 7))
+        {
+            assert(values.data() == previousData);
+        }
+        previousData = values.data();
+        for (std::size_t j = 0; j <= i; ++j)
+        {
+            assert(values[j] == static_cast<int>(10 + j));
+        }
+    }
+
+    // Capacity after nine pushes is 16; resizing inside it must not allocate, beyond it must.
+    const std::size_t afterAppend = g_totalTestAllocations;
+    values.resize(16);
+    assert(g_totalTestAllocations == afterAppend);
+    values.resize(17);
+    assert(g_totalTestAllocations == afterAppend + 1);
+
+    dtArray<int> fourCapacity;
+    fourCapacity.push_back(1);
+    fourCapacity.push_back(2);
+    fourCapacity.push_back(3);
+    const std::size_t afterThree = g_totalTestAllocations;
+    fourCapacity.resize(4);
+    assert(g_totalTestAllocations == afterThree);
+    fourCapacity.resize(5);
+    assert(g_totalTestAllocations == afterThree + 1);
+}
+
+template <typename Item>
+struct RenameItemEditor
+{
+    int *calls;
+
+    void operator()(Item &draft) const
+    {
+        ++*calls;
+        draft.name = "p108_edited";
+    }
+};
+
+void AssertEditItemIndexRejected(const dtDynIndex index, const char *const expectedMessage, dtDynSpec &spec, const int family)
+{
+    int calls = 0;
+    bool rejected = false;
+    try
+    {
+        if (family == 0)
+        {
+            spec.EditBody(index, RenameItemEditor<dtDynBodySpec>{&calls});
+        }
+        else if (family == 1)
+        {
+            spec.EditJoint(index, RenameItemEditor<dtDynJointSpec>{&calls});
+        }
+        else if (family == 2)
+        {
+            spec.EditSite(index, RenameItemEditor<dtDynSiteSpec>{&calls});
+        }
+        else
+        {
+            spec.EditActuator(index, RenameItemEditor<dtDynActuatorSpec>{&calls});
+        }
+    }
+    catch (const std::out_of_range &error)
+    {
+        rejected = true;
+        assert(std::string(error.what()) == expectedMessage);
+    }
+    assert(rejected);
+    assert(calls == 0);
+}
+
+void TestSpecEditItemRejectsSignedIndexBounds()
+{
+    // Three entries per family leave spare dtArray capacity, so a one-past-end
+    // mutant fails the assertion instead of reading beyond the allocation.
+    dtDynSpec spec;
+    const dtDynIndex bodyA = spec.AddBody("body_a", 0);
+    const dtDynIndex bodyB = spec.AddBody("body_b", bodyA);
+    const dtDynIndex jointA = spec.AddJoint(bodyA, "joint_a", dtDynJointType::Hinge);
+    const dtDynIndex jointB = spec.AddJoint(bodyB, "joint_b", dtDynJointType::Hinge);
+    const dtDynIndex jointC = spec.AddJoint(bodyB, "joint_c", dtDynJointType::Hinge);
+    const dtDynIndex siteA = spec.AddSite(bodyA, "site_a");
+    const dtDynIndex siteB = spec.AddSite(bodyA, "site_b");
+    const dtDynIndex siteC = spec.AddSite(bodyB, "site_c");
+    const dtDynIndex actuatorA = spec.AddActuator(jointA, "actuator_a");
+    const dtDynIndex actuatorB = spec.AddActuator(jointB, "actuator_b");
+    const dtDynIndex actuatorC = spec.AddActuator(jointC, "actuator_c");
+    assert(spec.Bodies().size() == 3);
+    assert(spec.Joints().size() == 3);
+    assert(spec.Sites().size() == 3);
+    assert(spec.Actuators().size() == 3);
+    assert(siteA == 0 && siteB == 1 && siteC == 2);
+    assert(actuatorA == 0 && actuatorB == 1 && actuatorC == 2);
+
+    AssertEditItemIndexRejected(-1, "dtDynSpec: invalid body index", spec, 0);
+    AssertEditItemIndexRejected(3, "dtDynSpec: invalid body index", spec, 0);
+    AssertEditItemIndexRejected(-1, "dtDynSpec: invalid joint index", spec, 1);
+    AssertEditItemIndexRejected(3, "dtDynSpec: invalid joint index", spec, 1);
+    AssertEditItemIndexRejected(-1, "dtDynSpec: invalid site index", spec, 2);
+    AssertEditItemIndexRejected(3, "dtDynSpec: invalid site index", spec, 2);
+    AssertEditItemIndexRejected(-1, "dtDynSpec: invalid actuator index", spec, 3);
+    AssertEditItemIndexRejected(3, "dtDynSpec: invalid actuator index", spec, 3);
+    AssertEditItemIndexRejected(std::numeric_limits<dtDynIndex>::min(), "dtDynSpec: invalid body index", spec, 0);
+    AssertEditItemIndexRejected(std::numeric_limits<dtDynIndex>::max(), "dtDynSpec: invalid body index", spec, 0);
+
+    // Rejected edits leave every entry untouched.
+    assert(spec.Bodies()[0].name == "world");
+    assert(spec.Bodies()[bodyA].name == "body_a");
+    assert(spec.Bodies()[bodyB].name == "body_b");
+    assert(spec.Joints()[jointC].name == "joint_c");
+    assert(spec.Sites()[siteC].name == "site_c");
+    assert(spec.Actuators()[actuatorC].name == "actuator_c");
+
+    // First and last valid ids succeed for every family.
+    int calls = 0;
+    spec.EditBody(0, RenameItemEditor<dtDynBodySpec>{&calls});
+    spec.EditBody(bodyB, RenameItemEditor<dtDynBodySpec>{&calls});
+    spec.EditJoint(0, RenameItemEditor<dtDynJointSpec>{&calls});
+    spec.EditJoint(jointC, RenameItemEditor<dtDynJointSpec>{&calls});
+    spec.EditSite(0, RenameItemEditor<dtDynSiteSpec>{&calls});
+    spec.EditSite(siteC, RenameItemEditor<dtDynSiteSpec>{&calls});
+    spec.EditActuator(0, RenameItemEditor<dtDynActuatorSpec>{&calls});
+    spec.EditActuator(actuatorC, RenameItemEditor<dtDynActuatorSpec>{&calls});
+    assert(calls == 8);
+    assert(spec.Bodies()[0].name == "p108_edited");
+    assert(spec.Bodies()[bodyA].name == "body_a");
+    assert(spec.Bodies()[bodyB].name == "p108_edited");
+    assert(spec.Joints()[0].name == "p108_edited");
+    assert(spec.Joints()[jointB].name == "joint_b");
+    assert(spec.Joints()[jointC].name == "p108_edited");
+    assert(spec.Sites()[0].name == "p108_edited");
+    assert(spec.Sites()[siteB].name == "site_b");
+    assert(spec.Sites()[siteC].name == "p108_edited");
+    assert(spec.Actuators()[0].name == "p108_edited");
+    assert(spec.Actuators()[actuatorB].name == "actuator_b");
+    assert(spec.Actuators()[actuatorC].name == "p108_edited");
 }
 
 void TestSpecWorldAndFixedBody()
@@ -5644,6 +5906,57 @@ void TestUpdateSpecPreservesWorldSiblingCompatibility()
     AssertP81DenseVectorUnchanged(rejectedModel.root_mass, expectedModel.root_mass);
     assert(ValidateModel(rejectedModel, &error));
     assert(error.code == dtDynValidationCode::None);
+}
+
+dtDynSpec MakeTwoRootChildListSpec(dtDynIndex &firstRoot, dtDynIndex &secondRoot)
+{
+    dtDynSpec spec;
+    firstRoot = spec.AddBody("child_list_first_root", 0);
+    secondRoot = spec.AddBody("child_list_second_root", 0);
+    assert(firstRoot == 1);
+    assert(secondRoot == 2);
+    assert(spec.Bodies()[0].firstChild == secondRoot);
+    assert(spec.Bodies()[static_cast<std::size_t>(secondRoot)].nextSibling == firstRoot);
+    assert(spec.Bodies()[static_cast<std::size_t>(firstRoot)].nextSibling == DTDYN_INVALID_INDEX);
+    assert(spec.Bodies()[static_cast<std::size_t>(firstRoot)].firstChild == DTDYN_INVALID_INDEX);
+    AssertP75ObjectCountBaseline(spec);
+    return spec;
+}
+
+void AssertRepeatedChildListEntry(const dtDynSpec &spec, const dtDynIndex repeated)
+{
+    AssertSpecValidationFailure(spec, dtDynValidationCode::TopologyCycle, dtDynObjectType::Body,
+                                repeated,
+                                "body[" + std::to_string(repeated) +
+                                    "] appears repeatedly in child lists");
+}
+
+void TestSpecValidationRejectsRepeatedChildListEntries()
+{
+    {
+        dtDynIndex firstRoot = DTDYN_INVALID_INDEX;
+        dtDynIndex secondRoot = DTDYN_INVALID_INDEX;
+        dtDynSpec spec = MakeTwoRootChildListSpec(firstRoot, secondRoot);
+        spec.EditBody(secondRoot, P81NextSiblingEditor{secondRoot});
+        assert(spec.Bodies()[static_cast<std::size_t>(secondRoot)].nextSibling == secondRoot);
+        AssertRepeatedChildListEntry(spec, secondRoot);
+    }
+    {
+        dtDynIndex firstRoot = DTDYN_INVALID_INDEX;
+        dtDynIndex secondRoot = DTDYN_INVALID_INDEX;
+        dtDynSpec spec = MakeTwoRootChildListSpec(firstRoot, secondRoot);
+        spec.EditBody(firstRoot, P81NextSiblingEditor{secondRoot});
+        assert(spec.Bodies()[static_cast<std::size_t>(firstRoot)].nextSibling == secondRoot);
+        AssertRepeatedChildListEntry(spec, secondRoot);
+    }
+    {
+        dtDynIndex firstRoot = DTDYN_INVALID_INDEX;
+        dtDynIndex secondRoot = DTDYN_INVALID_INDEX;
+        dtDynSpec spec = MakeTwoRootChildListSpec(firstRoot, secondRoot);
+        spec.EditBody(firstRoot, FirstChildEditor{secondRoot});
+        assert(spec.Bodies()[static_cast<std::size_t>(firstRoot)].firstChild == secondRoot);
+        AssertRepeatedChildListEntry(spec, secondRoot);
+    }
 }
 
 void TestUpdateSpecRejectsSameDofJointTypeChangeWithoutWriting()
@@ -10304,6 +10617,7 @@ int main()
     TestModelValidationRejectsCompiledSiteBodyBounds();
     TestModelValidationRejectsCompiledActuatorJointBounds();
     TestModelValidationRejectsCompiledJointQposDofSpanBounds();
+    TestModelValidationRejectsCompiledJointReferencingInvalidBody();
     TestModelValidationRejectsCompiledBodySegmentBounds();
     TestModelValidationPreservesEveryBodyNonFiniteFailure();
     TestModelValidationPreservesEveryBodyPhysicalOrFrameFailure();
@@ -10324,6 +10638,9 @@ int main()
     TestDtArrayPushBackPreservesAliasedLvalueOnGrowth();
     TestDtArrayPushBackPreservesCopyOnlyAliasedLvalueOnGrowth();
     TestDtArrayReserveSupportsMoveOnlyElements();
+    TestDtArrayEndPointerContract();
+    TestDtArrayAppendGrowthSequence();
+    TestSpecEditItemRejectsSignedIndexBounds();
     TestSpecWorldAndFixedBody();
     TestSpecEditorsCommitScopedCopies();
     TestSpecEditorsDiscardFailedDrafts();
@@ -10399,6 +10716,7 @@ int main()
     TestCompiledModelCopiesZeroSizedOptionalDenseFields();
     TestCompileSpecCanFillExistingModel();
     TestUpdateSpecPreservesWorldSiblingCompatibility();
+    TestSpecValidationRejectsRepeatedChildListEntries();
     TestUpdateSpecRejectsSameDofJointTypeChangeWithoutWriting();
     TestUpdateSpecRejectsWorldParentMutationWithoutWriting();
     TestUpdateSpecRejectsChildListMutationWithoutWriting();
