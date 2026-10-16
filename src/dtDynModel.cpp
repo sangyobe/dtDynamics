@@ -27,7 +27,7 @@ void AssignDenseVector(dtDynDenseVector &dst, const dtDynDenseVector &src)
     dst = src;
 }
 
-} // namespace
+} // end of anonymous namespace
 
 dtDynModel::dtDynModel(const dtDynModel &) = default;
 
@@ -172,4 +172,4 @@ void dtDynModel::RebuildNameMaps()
     }
 }
 
-} // namespace dt::Dynamics
+} // end of namespace dt::Dynamics

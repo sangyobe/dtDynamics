@@ -49,7 +49,7 @@ std::string FormatXmlErrorMessage(const std::string &sourcePath,
     return source + " at offset " + std::to_string(offset) + ": " + message;
 }
 
-} // namespace
+} // end of anonymous namespace
 
 dtDynXmlError::dtDynXmlError(const dtDynXmlErrorCode code,
                              std::string sourcePath,
@@ -258,6 +258,10 @@ std::size_t FindTagEnd(const std::string &xml,
         {
             return offset;
         }
+        else
+        {
+            // Ordinary tag character: keep scanning.
+        }
     }
     throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath, begin,
                         "unterminated XML tag");
@@ -347,6 +351,10 @@ std::size_t ValidationOrigin(const dtDynValidationError &error,
     else if (error.object == dtDynObjectType::Actuator)
     {
         origins = &actuatorOrigins;
+    }
+    else
+    {
+        origins = &bodyOrigins;
     }
     if ((error.index >= 0) && (static_cast<std::size_t>(error.index) < origins->size()))
     {
@@ -818,7 +826,7 @@ void EncodeBody(const dtDynSpec &spec,
     out << indent << "</body>\n";
 }
 
-} // namespace
+} // end of anonymous namespace
 
 dtDynSpec::dtDynSpec()
 {
@@ -1307,6 +1315,10 @@ dtDynSpec DecodeXmlImpl(const std::string &xml, const std::string &sourcePath)
                                     "supported element <" + name + "> is not valid inside <" +
                                         elementStack[elementStack.size() - 1].name + ">");
             }
+            else
+            {
+                // Supported parent: continue with section tracking.
+            }
 
             bool *sectionSeen = nullptr;
             if (name == "compiler")
@@ -1320,6 +1332,10 @@ dtDynSpec DecodeXmlImpl(const std::string &xml, const std::string &sourcePath)
             else if (name == "actuator")
             {
                 sectionSeen = &sawActuator;
+            }
+            else
+            {
+                sectionSeen = nullptr;
             }
             if (sectionSeen != nullptr)
             {
@@ -1666,4 +1682,4 @@ const dtArray<dtDynActuatorSpec> &dtDynSpec::Actuators() const
     return m_storage.m_actuators;
 }
 
-} // namespace dt::Dynamics
+} // end of namespace dt::Dynamics

@@ -84,4 +84,4 @@ dtDynJointDofSize GetJointDofSize(const dtDynJointType type)
     return {static_cast<dtDynIndex>(0), static_cast<dtDynIndex>(0)};
 }
 
-} // namespace dt::Dynamics
+} // end of namespace dt::Dynamics

@@ -4468,6 +4468,33 @@ void TestSpecXmlPreservesBodyAndActuatorValidationOrigins()
     assert(actuatorRejected);
 }
 
+void TestSpecXmlPreservesJointAndSiteValidationOrigins()
+{
+    const std::string invalidJoint =
+        "<mujoco><worldbody><body name=\"base\"><joint name=\"j0\"/>"
+        "<joint name=\"j1\" axis=\"2 0 0\"/><site name=\"s0\"/></body>"
+        "</worldbody></mujoco>";
+    const std::size_t jointOffset = invalidJoint.find("<joint name=\"j1\"");
+    ExpectDecodeXmlError(
+        invalidJoint,
+        dtDynXmlErrorCode::InvalidReference,
+        jointOffset,
+        std::string("dtDynSpec::DecodeXml at offset ") + std::to_string(jointOffset) +
+            ": joint axis must be unit length for slide/hinge joints");
+
+    const std::string invalidSite =
+        "<mujoco><worldbody><body name=\"base\"><joint name=\"j0\"/>"
+        "<site name=\"s0\"/><site name=\"s1\" quat=\"2 0 0 0\"/></body>"
+        "</worldbody></mujoco>";
+    const std::size_t siteOffset = invalidSite.find("<site name=\"s1\"");
+    ExpectDecodeXmlError(
+        invalidSite,
+        dtDynXmlErrorCode::InvalidReference,
+        siteOffset,
+        std::string("dtDynSpec::DecodeXml at offset ") + std::to_string(siteOffset) +
+            ": site quaternion must be unit length");
+}
+
 void TestSpecXmlRejectsInvalidJointRange()
 {
     const std::string xml =
@@ -4715,6 +4742,34 @@ void TestSpecXmlRequiresSingleRootElement()
     expectMalformed(multipleRoots, multipleRoots.rfind("<mujoco"));
     const std::string duplicateWorldbody = "<mujoco><worldbody/><worldbody/></mujoco>";
     expectMalformed(duplicateWorldbody, duplicateWorldbody.rfind("<worldbody"));
+}
+
+void TestSpecXmlRejectsDuplicateCompilerAndActuatorSections()
+{
+    const dtDynSpec distinctSections =
+        dtDynSpec::DecodeXml("<mujoco><compiler/><option/><worldbody><body name=\"base\"/>"
+                             "</worldbody><actuator/></mujoco>");
+    assert(distinctSections.Bodies().size() == 2);
+    assert(distinctSections.BodyId("base") >= 0);
+    assert(distinctSections.Actuators().empty());
+
+    const std::string duplicateCompiler = "<mujoco><compiler/><compiler/></mujoco>";
+    const std::size_t compilerOffset = duplicateCompiler.rfind("<compiler");
+    ExpectDecodeXmlError(
+        duplicateCompiler,
+        dtDynXmlErrorCode::MalformedSyntax,
+        compilerOffset,
+        std::string("dtDynSpec::DecodeXml at offset ") + std::to_string(compilerOffset) +
+            ": duplicate <compiler> section");
+
+    const std::string duplicateActuator = "<mujoco><actuator/><actuator/></mujoco>";
+    const std::size_t actuatorOffset = duplicateActuator.rfind("<actuator");
+    ExpectDecodeXmlError(
+        duplicateActuator,
+        dtDynXmlErrorCode::MalformedSyntax,
+        actuatorOffset,
+        std::string("dtDynSpec::DecodeXml at offset ") + std::to_string(actuatorOffset) +
+            ": duplicate <actuator> section");
 }
 
 void TestSpecXmlRejectsSupportedElementInWrongContext()
@@ -9219,6 +9274,252 @@ void TestP52CachedPointJacobianDerivativeDispatchUsesBallAndFreeRotations()
     assert(ballBranchDiffersFromPreparedDerivative);
 }
 
+dt::Math::Vector3<dtDynReal> MakeP111Vector3(const dtDynReal x,
+                                             const dtDynReal y,
+                                             const dtDynReal z)
+{
+    dt::Math::Vector3<dtDynReal> vector;
+    vector.At(0) = x;
+    vector.At(1) = y;
+    vector.At(2) = z;
+    return vector;
+}
+
+void FillP111RotationFromQuaternion(const dt::Math::Vector4<dtDynReal> &quaternion,
+                                    dtDynReal rotation[3][3])
+{
+    const dtDynReal w = quaternion.At(0);
+    const dtDynReal x = quaternion.At(1);
+    const dtDynReal y = quaternion.At(2);
+    const dtDynReal z = quaternion.At(3);
+    rotation[0][0] = 1.0 - (2.0 * ((y * y) + (z * z)));
+    rotation[0][1] = 2.0 * ((x * y) - (w * z));
+    rotation[0][2] = 2.0 * ((x * z) + (w * y));
+    rotation[1][0] = 2.0 * ((x * y) + (w * z));
+    rotation[1][1] = 1.0 - (2.0 * ((x * x) + (z * z)));
+    rotation[1][2] = 2.0 * ((y * z) - (w * x));
+    rotation[2][0] = 2.0 * ((x * z) - (w * y));
+    rotation[2][1] = 2.0 * ((y * z) + (w * x));
+    rotation[2][2] = 1.0 - (2.0 * ((x * x) + (y * y)));
+}
+
+void MultiplyP111Rotations(const dtDynReal left[3][3],
+                           const dtDynReal right[3][3],
+                           dtDynReal product[3][3])
+{
+    for (dtDynIndex row = 0; row < 3; ++row)
+    {
+        for (dtDynIndex column = 0; column < 3; ++column)
+        {
+            product[row][column] = (left[row][0] * right[0][column]) +
+                                   (left[row][1] * right[1][column]) +
+                                   (left[row][2] * right[2][column]);
+        }
+    }
+}
+
+void RotateP111Vector(const dtDynReal rotation[3][3],
+                      const dt::Math::Vector3<dtDynReal> &vector,
+                      dtDynReal rotated[3])
+{
+    for (dtDynIndex row = 0; row < 3; ++row)
+    {
+        rotated[row] = (rotation[row][0] * vector.At(0)) +
+                       (rotation[row][1] * vector.At(1)) +
+                       (rotation[row][2] * vector.At(2));
+    }
+}
+
+void FillP111ExpectedColumn(const dtDynReal axis[3],
+                            const dtDynReal point[3],
+                            const dtDynReal pivot[3],
+                            dtDynReal expected[6])
+{
+    const dtDynReal dx = point[0] - pivot[0];
+    const dtDynReal dy = point[1] - pivot[1];
+    const dtDynReal dz = point[2] - pivot[2];
+    expected[0] = axis[0];
+    expected[1] = axis[1];
+    expected[2] = axis[2];
+    expected[3] = (axis[1] * dz) - (axis[2] * dy);
+    expected[4] = (axis[2] * dx) - (axis[0] * dz);
+    expected[5] = (axis[0] * dy) - (axis[1] * dx);
+}
+
+void AssertP111ColumnMatches(const dt::Math::Vector6<dtDynReal> &actual,
+                             const dtDynReal expected[6])
+{
+    for (dtDynIndex component = 0; component < 6; ++component)
+    {
+        assert(std::fabs(actual.At(component) - expected[component]) < kP52JacobianTolerance);
+    }
+}
+
+void AssertP111ColumnDiffersFromPivot(const dtDynReal axis[3],
+                                      const dtDynReal point[3],
+                                      const dtDynReal pivot[3],
+                                      const dtDynReal wrongPivot[3])
+{
+    dtDynReal expected[6];
+    dtDynReal wrong[6];
+    FillP111ExpectedColumn(axis, point, pivot, expected);
+    FillP111ExpectedColumn(axis, point, wrongPivot, wrong);
+    dtDynReal largestDifference = 0.0;
+    for (dtDynIndex component = 3; component < 6; ++component)
+    {
+        const dtDynReal difference = std::fabs(expected[component] - wrong[component]);
+        if (difference > largestDifference)
+        {
+            largestDifference = difference;
+        }
+    }
+    assert(largestDifference > 1.0e-3);
+}
+
+void TestMotionSubspaceAtPointMatchesIndependentFreeAndBallColumns()
+{
+    dtDynSpec spec;
+    const dtDynIndex freeRoot = spec.AddBody("p111_free_root", 0);
+    const dtDynIndex ballBody = spec.AddBody("p111_ball_body", freeRoot);
+    const dtDynIndex freeJoint = spec.AddJoint(freeRoot, "p111_free", dtDynJointType::Free);
+    const dtDynIndex ballJoint = spec.AddJoint(ballBody, "p111_ball", dtDynJointType::Ball);
+    const dtDynIndex taskSite = spec.AddSite(ballBody, "p111_task_site");
+    spec.EditBody(freeRoot, ConfigureP52FreeRootBody);
+    spec.EditBody(ballBody, ConfigureP52BallBody);
+    spec.EditJoint(ballJoint, ConfigureP52BallJoint);
+    spec.EditSite(taskSite, ConfigureP52TaskSite);
+
+    const dtDynModel model = CompileSpecChecked(spec);
+    assert(model.nq == 11);
+    assert(model.nv == 9);
+    const std::size_t rootIndex = static_cast<std::size_t>(freeRoot);
+    const std::size_t ballBodyIndex = static_cast<std::size_t>(ballBody);
+    const std::size_t freeJointIndex = static_cast<std::size_t>(freeJoint);
+    const std::size_t ballJointIndex = static_cast<std::size_t>(ballJoint);
+    const dtDynIndex freeDofAddress = model.jnt_dofadr[freeJointIndex];
+    const dtDynIndex ballDofAddress = model.jnt_dofadr[ballJointIndex];
+    assert(freeDofAddress == 0);
+    assert(ballDofAddress == 6);
+    assert(model.jnt_type[freeJointIndex] == static_cast<dtDynIndex>(dtDynJointType::Free));
+    assert(model.jnt_type[ballJointIndex] == static_cast<dtDynIndex>(dtDynJointType::Ball));
+    assert(model.body_rootid[ballBodyIndex] == freeRoot);
+    assert(IsDtMathNear(model.body_quat[ballBodyIndex].At(0), 1.0));
+
+    dtDynData data;
+    data.Resize(model);
+    data.qpos.At(0) = 0.20;
+    data.qpos.At(1) = -0.30;
+    data.qpos.At(2) = 0.40;
+    SetP52NormalizedQuaternion(data, 3, 1.0, -2.0, 3.0, -4.0);
+    SetP52NormalizedQuaternion(data, 7, 2.0, 3.0, -4.0, 5.0);
+    assert(std::fabs(data.qpos.At(3) - 1.0) > 1.0e-3);
+    assert(std::fabs(data.qpos.At(7) - 1.0) > 1.0e-3);
+
+    ForwardKinematics(model, data);
+    dt::Math::Vector3<dtDynReal> gravity;
+    gravity.SetZero();
+    ComputeDynamicsCCRBA(model, data, gravity, DTDYN_CCRBA_TERM_ALL);
+
+    // Independent oracle: rebuild the world frames from qpos and the compiled
+    // offsets with plain rotation matrices instead of data.xmat/xanchor/xpos.
+    dtDynReal rootRotation[3][3];
+    dtDynReal ballLocalRotation[3][3];
+    dtDynReal childRotation[3][3];
+    FillP111RotationFromQuaternion(ReadP52QposQuaternion(data, 3), rootRotation);
+    FillP111RotationFromQuaternion(ReadP52QposQuaternion(data, 7), ballLocalRotation);
+    MultiplyP111Rotations(rootRotation, ballLocalRotation, childRotation);
+
+    dtDynReal rootPosition[3];
+    dtDynReal bodyOffset[3];
+    dtDynReal jointOffset[3];
+    dtDynReal rootInertialOffset[3];
+    dtDynReal childInertialOffset[3];
+    RotateP111Vector(rootRotation, model.body_pos[ballBodyIndex], bodyOffset);
+    RotateP111Vector(rootRotation, model.jnt_pos[ballJointIndex], jointOffset);
+    RotateP111Vector(rootRotation, model.body_ipos[rootIndex], rootInertialOffset);
+    dtDynReal childJointOffset[3];
+    RotateP111Vector(childRotation, model.jnt_pos[ballJointIndex], childJointOffset);
+    RotateP111Vector(childRotation, model.body_ipos[ballBodyIndex], childInertialOffset);
+
+    dtDynReal ballAnchor[3];
+    dtDynReal childPosition[3];
+    dtDynReal rootCom[3];
+    const dtDynReal rootMass = model.body_mass.At(freeRoot);
+    const dtDynReal childMass = model.body_mass.At(ballBody);
+    for (dtDynIndex axis = 0; axis < 3; ++axis)
+    {
+        rootPosition[axis] = data.qpos.At(axis);
+        ballAnchor[axis] = rootPosition[axis] + bodyOffset[axis] + jointOffset[axis];
+        childPosition[axis] = ballAnchor[axis] - childJointOffset[axis];
+        const dtDynReal rootInertialPosition = rootPosition[axis] + rootInertialOffset[axis];
+        const dtDynReal childInertialPosition = childPosition[axis] + childInertialOffset[axis];
+        rootCom[axis] = ((rootMass * rootInertialPosition) + (childMass * childInertialPosition)) /
+                        (rootMass + childMass);
+    }
+    assert(rootMass > 0.0);
+    assert(childMass > 0.0);
+    AssertP52Vector3Matches(data.subtree_com[rootIndex],
+                            MakeP111Vector3(rootCom[0], rootCom[1], rootCom[2]));
+
+    const dtDynReal probePoint[3] = {0.70, -0.20, 0.90};
+    const dt::Math::Vector3<dtDynReal> probeVector =
+        MakeP111Vector3(probePoint[0], probePoint[1], probePoint[2]);
+    const dt::Math::Vector3<dtDynReal> rootComVector =
+        MakeP111Vector3(rootCom[0], rootCom[1], rootCom[2]);
+
+    for (dtDynIndex dofId = 0; dofId < model.nv; ++dofId)
+    {
+        dtDynReal atRootCom[6];
+        dtDynReal atProbe[6];
+        const dtDynReal *pivot = ballAnchor;
+        dtDynReal axis[3] = {0.0, 0.0, 0.0};
+        bool linearOnly = false;
+        if (dofId < 3)
+        {
+            linearOnly = true;
+        }
+        else if (dofId < 6)
+        {
+            pivot = rootPosition;
+            for (dtDynIndex row = 0; row < 3; ++row)
+            {
+                axis[row] = rootRotation[row][dofId - 3];
+            }
+        }
+        else
+        {
+            for (dtDynIndex row = 0; row < 3; ++row)
+            {
+                axis[row] = childRotation[row][dofId - 6];
+            }
+            AssertP111ColumnDiffersFromPivot(axis, rootCom, ballAnchor, childPosition);
+            AssertP111ColumnDiffersFromPivot(axis, probePoint, ballAnchor, childPosition);
+        }
+
+        if (linearOnly)
+        {
+            for (dtDynIndex component = 0; component < 6; ++component)
+            {
+                atRootCom[component] = 0.0;
+                atProbe[component] = 0.0;
+            }
+            atRootCom[3 + dofId] = 1.0;
+            atProbe[3 + dofId] = 1.0;
+        }
+        else
+        {
+            FillP111ExpectedColumn(axis, rootCom, pivot, atRootCom);
+            FillP111ExpectedColumn(axis, probePoint, pivot, atProbe);
+        }
+
+        AssertP111ColumnMatches(data.cdof[static_cast<std::size_t>(dofId)], atRootCom);
+        AssertP111ColumnMatches(utils::MotionSubspaceAtPoint(model, data, dofId, rootComVector),
+                                atRootCom);
+        AssertP111ColumnMatches(utils::MotionSubspaceAtPoint(model, data, dofId, probeVector),
+                                atProbe);
+    }
+}
+
 void TestPointJacobianDotMatchesFiniteDifferenceForMaterialSite()
 {
     dtDynSpec spec;
@@ -10672,6 +10973,7 @@ int main()
     TestSpecXmlRejectsDuplicateObjectNames();
     TestSpecXmlRejectsUnknownReferencesWithTypedError();
     TestSpecXmlPreservesBodyAndActuatorValidationOrigins();
+    TestSpecXmlPreservesJointAndSiteValidationOrigins();
     TestSpecXmlRejectsInvalidJointRange();
     TestSpecXmlRejectsUnsupportedSemanticValues();
     TestSpecXmlRejectsInvalidBooleanValue();
@@ -10682,6 +10984,7 @@ int main()
     TestSpecXmlPreservesDuplicateNameOffsets();
     TestSpecXmlPreservesTagWhitespaceAndClosingSuffixOffset();
     TestSpecXmlRequiresSingleRootElement();
+    TestSpecXmlRejectsDuplicateCompilerAndActuatorSections();
     TestSpecXmlRejectsSupportedElementInWrongContext();
     TestSpecXmlAcceptsEverySupportedElementInItsDocumentedParent();
     TestSpecXmlPreservesWhitespaceAndTagNameGrammar();
@@ -10758,6 +11061,7 @@ int main()
     TestIndexedJacobiansOnlyRefreshRequestedIds();
     TestIndexedJacobiansRefreshFloatingBaseBodyAndTaskSite();
     TestP52CachedPointJacobianDerivativeDispatchUsesBallAndFreeRotations();
+    TestMotionSubspaceAtPointMatchesIndependentFreeAndBallColumns();
     TestPointJacobianDotMatchesFiniteDifferenceForMaterialSite();
     TestPointJacobianTermsSelectsEachOutputFamily();
     TestPointJacobianTermsMatchesSeparateAPIs();

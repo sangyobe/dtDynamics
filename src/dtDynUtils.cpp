@@ -85,9 +85,14 @@ dt::Math::Vector6<dtDynReal> MotionSubspaceAtPoint(const dtDynModel &model,
         angular = math::MatrixColumn(data.xmat[static_cast<std::size_t>(jointBody)], dofOffset);
         linear = angular & (point - data.xanchor[static_cast<std::size_t>(jointId)]);
     }
+    else
+    {
+        angular.SetZero();
+        linear.SetZero();
+    }
 
     return math::SpatialMotionVector(angular, linear);
 }
 
-} // namespace utils
+} // end of namespace utils
 } // namespace dt::Dynamics

@@ -87,7 +87,7 @@ bool HasDenseSize(const dtDynDenseVector &value, const dtDynIndex expected) noex
     return (expected >= 0) && (static_cast<dtDynIndex>(value.GetDim()) == expected);
 }
 
-} // namespace
+} // end of anonymous namespace
 
 bool UpdateSpec(const dtDynSpec &spec, dtDynModel &model) noexcept
 {
@@ -838,4 +838,4 @@ dtDynModel CompileSpecChecked(const dtDynSpec &spec)
     return model;
 }
 
-} // namespace dt::Dynamics
+} // end of namespace dt::Dynamics

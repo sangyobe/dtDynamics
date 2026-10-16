@@ -27,8 +27,8 @@ void AddScaledSpatialInPlace(dt::Math::Vector6<dtDynReal> &dst,
                              const dt::Math::Vector6<dtDynReal> &src,
                              const dtDynReal scale)
 {
-    // In-place form of dst += scale * src used in recursive spatial velocity
-    // and acceleration accumulation.
+    // In-place scaled accumulation of the source vector into the destination,
+    // used in recursive spatial velocity and acceleration accumulation.
     if (scale == 0.0)
     {
         return;
@@ -94,7 +94,7 @@ void SetMotionSubspaceAtPoint(const dtDynModel &model,
                               dt::Math::Vector6<dtDynReal> &out)
 {
     // Writes the MuJoCo-order motion subspace column cdof for one scalar qvel.
-    // Rotational columns are shifted to the supplied point; translational
+    // Rotational columns are shifted to the supplied point, while translational
     // free-joint columns remain pure linear motion.
     const dtDynIndex jointId = model.dof_jntid[static_cast<std::size_t>(dofId)];
     const dtDynIndex dofOffset = dofId - model.jnt_dofadr[static_cast<std::size_t>(jointId)];
@@ -150,6 +150,10 @@ void SetMotionSubspaceAtPoint(const dtDynModel &model,
                                       point,
                                       data.xanchor[static_cast<std::size_t>(jointId)],
                                       out);
+    }
+    else
+    {
+        out.SetZero();
     }
 }
 
@@ -320,10 +324,10 @@ void FillBodySpatialInertiaAtRootCom(const dtDynModel &model,
                                      const dtDynIndex bodyId,
                                      dt::Math::Matrix<6, 6, dtDynReal> &out)
 {
-    // Spatial inertia about the root CoM reference:
-    //   I = [ R Ic R^T + m(||c||^2 E - c c^T),  m cx
-    //       -m cx,                               m E  ]
-    // where c = body_com - root_com and cx is the skew matrix of c.
+    // Spatial inertia about the root CoM reference. The upper left block is the rotated
+    // body inertia plus the parallel-axis term of the CoM offset, the off-diagonal blocks
+    // are the mass times the skew matrix of that offset and its negative, and the lower
+    // right block is the mass times identity. The offset is body CoM minus root CoM.
     const std::size_t bodyIdx = static_cast<std::size_t>(bodyId);
     const dtDynIndex rootBody = model.body_rootid[bodyIdx];
     const std::size_t refIdx = static_cast<std::size_t>((rootBody > 0) ? rootBody : 0);
@@ -371,6 +375,10 @@ void FillBodySpatialInertiaAtRootCom(const dtDynModel &model,
             else if ((row == 2) && (col == 1))
             {
                 skew = c0;
+            }
+            else
+            {
+                skew = 0.0;
             }
 
             out.At(row, col) =
@@ -428,9 +436,9 @@ bool IsZeroSpatial(const dt::Math::Vector6<dtDynReal> &value)
 }
 
 // Fixed-size CCRBA spatial kernels. These helpers avoid dynamic local
-// temporaries; end-to-end allocation behavior still depends on caller-owned
+// temporaries, but end-to-end allocation behavior still depends on caller-owned
 // storage and is reported only within the documented benchmark-counter scope.
-// The comments show the equivalent dtMath-level expressions.
+// The comments describe the equivalent dtMath-level expressions in words.
 
 void SpatialMulPair(const dt::Math::Matrix<6, 6, dtDynReal> &matrix,
                     const dt::Math::Vector6<dtDynReal> &leftVector,
@@ -492,10 +500,10 @@ void AddSpatialMulAndTransposeMul(const dt::Math::Matrix<6, 6, dtDynReal> &matri
                                   dt::Math::Vector6<dtDynReal> &forwardOut,
                                   dt::Math::Vector6<dtDynReal> &transposeOut)
 {
-    // Fused form of:
-    //   forwardOut += matrix * vector
-    //   transposeOut = matrix.Transpose() * vector
-    // The fused scan avoids materializing the transpose in the realtime path.
+    // Fused form of two products. The forward output accumulates the matrix times the
+    // vector, and the transpose output receives the transposed matrix times the
+    // vector. The fused scan avoids materializing the transpose in the realtime
+    // path.
     const dtDynReal v0 = vector.At(0);
     const dtDynReal v1 = vector.At(1);
     const dtDynReal v2 = vector.At(2);
@@ -696,8 +704,8 @@ void ComputeLocalBiasMatrices(const dtDynModel &model, dtDynData &data)
 
 void AccumulateCompositeBiasMatrices(const dtDynModel &model, dtDynData &data)
 {
-    // Upward composite-bias pass: Bcomp_parent += Bcomp_child. The first
-    // nonzero child can be copied directly into a zero parent block.
+    // Upward composite-bias pass that adds each child block into its parent block. The
+    // first nonzero child can be copied directly into a zero parent block.
     for (dtDynIndex bodyId = model.nbody - 1; bodyId > 0; --bodyId)
     {
         const dtDynIndex parent = model.body_parentid[static_cast<std::size_t>(bodyId)];
@@ -777,9 +785,9 @@ void ComputeCompositeInertiaAndBias(const dtDynModel &model, dtDynData &data)
 
 void ComputeMassMatrixFromCompositeInertias(const dtDynModel &model, dtDynData &data)
 {
-    // Standard CRBA projection:
-    //   M_ij = cdof_i^T * crb_body(j) * cdof_j
-    // written only along ancestor chains; non-ancestor entries stay zero.
+    // Standard CRBA projection: each entry couples the motion subspaces of two DOFs through
+    // the composite body inertia, written only along ancestor chains. Non-ancestor entries
+    // stay zero.
     data.Mmat.SetZero();
 
     for (dtDynIndex dofId = model.nv - 1; dofId >= 0; --dofId)
@@ -1367,7 +1375,7 @@ void ComputeRequestedCCRBADynamicsTerms(const dtDynModel &model,
     }
 }
 
-} // namespace detail
+} // end of namespace detail
 
 void ComputeDynamicsRNEA(const dtDynModel &model,
                          dtDynData &data,
@@ -1402,4 +1410,4 @@ void ComputeDynamicsCCRBA(const dtDynModel &model,
     detail::ComputeCCRBABiasForcesFromReadyCoriolisTorque(model, data, gravity);
 }
 
-} // namespace dt::Dynamics
+} // end of namespace dt::Dynamics

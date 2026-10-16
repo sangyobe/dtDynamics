@@ -104,6 +104,10 @@ void ForwardKinematics(const dtDynModel &model, dtDynData &data)
                     xpos = xanchor -
                            math::Rotate(xquat, model.jnt_pos[static_cast<std::size_t>(jointId)]);
                 }
+                else
+                {
+                    // Free joint in a multi-joint body: xpos and xquat keep the accumulated pose.
+                }
 
                 data.xanchor[static_cast<std::size_t>(jointId)] = xanchor;
                 data.xaxis[static_cast<std::size_t>(jointId)] = xaxis;
@@ -312,7 +316,7 @@ void ComputePointJacobianTermsImpl(const dtDynModel &model,
     }
 }
 
-} // namespace
+} // end of anonymous namespace
 
 void ComputeBodyJacobian(const dtDynModel &model,
                          const dtDynData &data,
@@ -618,7 +622,7 @@ void ComputeIndexedSiteJacobians(const dtDynModel &model,
     }
 }
 
-} // namespace
+} // end of anonymous namespace
 
 void ComputeBodyJacobians(const dtDynModel &model, dtDynData &data)
 {
@@ -665,4 +669,4 @@ void ComputeJacobians(const dtDynModel &model,
     ComputeIndexedSiteJacobians(model, data, siteIds);
 }
 
-} // namespace dt::Dynamics
+} // end of namespace dt::Dynamics

@@ -459,5 +459,5 @@ dtDynReal QuadraticInertia(const dt::Math::Vector3<dtDynReal> &left,
     return value;
 }
 
-} // namespace math
+} // end of namespace math
 } // namespace dt::Dynamics

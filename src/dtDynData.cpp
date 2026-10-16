@@ -63,7 +63,7 @@ bool DenseMatrixArrayHasSize(const dtArray<dtDynDenseMatrix> &array,
     return true;
 }
 
-} // namespace
+} // end of anonymous namespace
 
 void dtDynData::Resize(const dtDynModel &model)
 {
@@ -342,4 +342,4 @@ bool dtDynData::IsCompatible(const dtDynModel &model) const
     return DenseVectorHasSize(comVel, 3 * rootCount);
 }
 
-} // namespace dt::Dynamics
+} // end of namespace dt::Dynamics

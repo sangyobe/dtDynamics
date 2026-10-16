@@ -347,7 +347,7 @@ bool MatrixMatchesQuaternion(const dt::Math::Matrix3<dtDynReal> &matrix,
     return true;
 }
 
-} // namespace
+} // end of anonymous namespace
 
 bool ValidateSpec(const dtDynSpec &spec, dtDynValidationError *error)
 {
@@ -1294,4 +1294,4 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
     return true;
 }
 
-} // namespace dt::Dynamics
+} // end of namespace dt::Dynamics
