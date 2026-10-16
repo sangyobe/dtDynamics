@@ -10,6 +10,7 @@
 #include "dtDynamics/dtDynMath.h"
 
 #include <cmath>
+#include <cstdint>
 #include <limits>
 
 namespace dt::Dynamics
@@ -137,25 +138,25 @@ dt::Math::Vector3<dtDynReal> UnitAxis(const dtDynIndex axis)
 {
     dt::Math::Vector3<dtDynReal> out;
     out.SetZero();
-    out.At(axis) = 1.0;
+    out.At(static_cast<std::uint16_t>(axis)) = 1.0;
     return out;
 }
 
 dt::Math::Vector3<dtDynReal> MatrixColumn(const dt::Math::Matrix3<dtDynReal> &m, const dtDynIndex col)
 {
     dt::Math::Vector3<dtDynReal> out;
-    out.At(0) = m.At(0, col);
-    out.At(1) = m.At(1, col);
-    out.At(2) = m.At(2, col);
+    out.At(0) = m.At(0, static_cast<std::uint16_t>(col));
+    out.At(1) = m.At(1, static_cast<std::uint16_t>(col));
+    out.At(2) = m.At(2, static_cast<std::uint16_t>(col));
     return out;
 }
 
 dt::Math::Vector3<dtDynReal> DenseMatrixColumn3(const dtDynDenseMatrix &matrix, const dtDynIndex col)
 {
     dt::Math::Vector3<dtDynReal> out;
-    out.At(0) = matrix.At(0, col);
-    out.At(1) = matrix.At(1, col);
-    out.At(2) = matrix.At(2, col);
+    out.At(0) = matrix.At(0, static_cast<std::uint16_t>(col));
+    out.At(1) = matrix.At(1, static_cast<std::uint16_t>(col));
+    out.At(2) = matrix.At(2, static_cast<std::uint16_t>(col));
     return out;
 }
 
@@ -169,7 +170,7 @@ dt::Math::Matrix3<dtDynReal> DenseMatrixBlock3(const dtDynDenseMatrix &matrix,
     {
         for (dtDynIndex col = 0; col < 3; ++col)
         {
-            out.At(row, col) = matrix.At(rowOffset + row, colOffset + col);
+            out.At(static_cast<std::uint16_t>(row), static_cast<std::uint16_t>(col)) = matrix.At(static_cast<std::uint16_t>(rowOffset + row), static_cast<std::uint16_t>(colOffset + col));
         }
     }
     return out;
@@ -193,7 +194,7 @@ dtDynReal SpatialDot(const dt::Math::Vector6<dtDynReal> &a, const dt::Math::Vect
     dtDynReal value = 0.0;
     for (dtDynIndex row = 0; row < 6; ++row)
     {
-        value += a.At(row) * b.At(row);
+        value += a.At(static_cast<std::uint16_t>(row)) * b.At(static_cast<std::uint16_t>(row));
     }
     return value;
 }
@@ -205,7 +206,7 @@ dtDynReal SpatialDot3(const dt::Math::Vector6<dtDynReal> &left,
     dtDynReal value = 0.0;
     for (dtDynIndex row = 0; row < 6; ++row)
     {
-        value += left.At(row) * (a.At(row) + b.At(row));
+        value += left.At(static_cast<std::uint16_t>(row)) * (a.At(static_cast<std::uint16_t>(row)) + b.At(static_cast<std::uint16_t>(row)));
     }
     return value;
 }
@@ -216,10 +217,10 @@ dt::Math::Vector6<dtDynReal> SpatialMul(const dt::Math::Matrix<6, 6, dtDynReal> 
     dt::Math::Vector6<dtDynReal> out;
     for (dtDynIndex row = 0; row < 6; ++row)
     {
-        out.At(row) = 0.0;
+        out.At(static_cast<std::uint16_t>(row)) = 0.0;
         for (dtDynIndex col = 0; col < 6; ++col)
         {
-            out.At(row) += matrix.At(row, col) * vector.At(col);
+            out.At(static_cast<std::uint16_t>(row)) += matrix.At(static_cast<std::uint16_t>(row), static_cast<std::uint16_t>(col)) * vector.At(static_cast<std::uint16_t>(col));
         }
     }
     return out;
@@ -231,10 +232,10 @@ dt::Math::Vector6<dtDynReal> SpatialMulTranspose(const dt::Math::Matrix<6, 6, dt
     dt::Math::Vector6<dtDynReal> out;
     for (dtDynIndex row = 0; row < 6; ++row)
     {
-        out.At(row) = 0.0;
+        out.At(static_cast<std::uint16_t>(row)) = 0.0;
         for (dtDynIndex col = 0; col < 6; ++col)
         {
-            out.At(row) += matrix.At(col, row) * vector.At(col);
+            out.At(static_cast<std::uint16_t>(row)) += matrix.At(static_cast<std::uint16_t>(col), static_cast<std::uint16_t>(row)) * vector.At(static_cast<std::uint16_t>(col));
         }
     }
     return out;
@@ -246,7 +247,7 @@ dt::Math::Vector6<dtDynReal> ScaleSpatial(const dt::Math::Vector6<dtDynReal> &sr
     dt::Math::Vector6<dtDynReal> out;
     for (dtDynIndex row = 0; row < 6; ++row)
     {
-        out.At(row) = scalar * src.At(row);
+        out.At(static_cast<std::uint16_t>(row)) = scalar * src.At(static_cast<std::uint16_t>(row));
     }
     return out;
 }
@@ -256,7 +257,7 @@ void AddSpatialInPlace(dt::Math::Vector6<dtDynReal> &dst,
 {
     for (dtDynIndex row = 0; row < 6; ++row)
     {
-        dst.At(row) += src.At(row);
+        dst.At(static_cast<std::uint16_t>(row)) += src.At(static_cast<std::uint16_t>(row));
     }
 }
 
@@ -270,10 +271,10 @@ dt::Math::Vector6<dtDynReal> CrossSpatialMotion(const dt::Math::Vector6<dtDynRea
 
     for (dtDynIndex row = 0; row < 3; ++row)
     {
-        omega.At(row) = velocity.At(row);
-        linear.At(row) = velocity.At(row + 3);
-        motionOmega.At(row) = motion.At(row);
-        motionLinear.At(row) = motion.At(row + 3);
+        omega.At(static_cast<std::uint16_t>(row)) = velocity.At(static_cast<std::uint16_t>(row));
+        linear.At(static_cast<std::uint16_t>(row)) = velocity.At(static_cast<std::uint16_t>(row + 3));
+        motionOmega.At(static_cast<std::uint16_t>(row)) = motion.At(static_cast<std::uint16_t>(row));
+        motionLinear.At(static_cast<std::uint16_t>(row)) = motion.At(static_cast<std::uint16_t>(row + 3));
     }
 
     const dt::Math::Vector3<dtDynReal> angularPart = omega & motionOmega;
@@ -384,9 +385,9 @@ dt::Math::Matrix3<dtDynReal> BodyInertiaInWorld(const dtDynModel &model,
     {
         for (dtDynIndex col = 0; col < 3; ++col)
         {
-            out.At(row, col) = (((rot.At(row, 0) * diag.At(0)) * rot.At(col, 0)) +
-                                ((rot.At(row, 1) * diag.At(1)) * rot.At(col, 1))) +
-                               ((rot.At(row, 2) * diag.At(2)) * rot.At(col, 2));
+            out.At(static_cast<std::uint16_t>(row), static_cast<std::uint16_t>(col)) = (((rot.At(static_cast<std::uint16_t>(row), 0) * diag.At(0)) * rot.At(static_cast<std::uint16_t>(col), 0)) +
+                                                                                        ((rot.At(static_cast<std::uint16_t>(row), 1) * diag.At(1)) * rot.At(static_cast<std::uint16_t>(col), 1))) +
+                                                                                       ((rot.At(static_cast<std::uint16_t>(row), 2) * diag.At(2)) * rot.At(static_cast<std::uint16_t>(col), 2));
         }
     }
 
@@ -409,13 +410,13 @@ dt::Math::Matrix<6, 6, dtDynReal> SpatialInertiaAtWorldOrigin(const dtDynReal ma
     {
         for (dtDynIndex col = 0; col < 3; ++col)
         {
-            out.At(row, col) = rotInertia.At(row, col);
+            out.At(static_cast<std::uint16_t>(row), static_cast<std::uint16_t>(col)) = rotInertia.At(static_cast<std::uint16_t>(row), static_cast<std::uint16_t>(col));
             if (row == col)
             {
-                out.At(row, col) += mass * c2sum;
+                out.At(static_cast<std::uint16_t>(row), static_cast<std::uint16_t>(col)) += mass * c2sum;
             }
-            out.At(row, col) -= ((mass * com.At(row)) * com.At(col));
-            out.At(row + 3, col + 3) = ((row == col) ? mass : 0.0);
+            out.At(static_cast<std::uint16_t>(row), static_cast<std::uint16_t>(col)) -= ((mass * com.At(static_cast<std::uint16_t>(row))) * com.At(static_cast<std::uint16_t>(col)));
+            out.At(static_cast<std::uint16_t>(row + 3), static_cast<std::uint16_t>(col + 3)) = ((row == col) ? mass : 0.0);
         }
     }
 
@@ -453,7 +454,7 @@ dtDynReal QuadraticInertia(const dt::Math::Vector3<dtDynReal> &left,
     {
         for (dtDynIndex col = 0; col < 3; ++col)
         {
-            value += left.At(row) * inertia.At(row, col) * right.At(col);
+            value += left.At(static_cast<std::uint16_t>(row)) * inertia.At(static_cast<std::uint16_t>(row), static_cast<std::uint16_t>(col)) * right.At(static_cast<std::uint16_t>(col));
         }
     }
     return value;

@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <limits>
 #include <unordered_map>
 
@@ -193,22 +194,22 @@ bool ValidateUniqueNames(const dtArray<Object> &objects,
     return true;
 }
 
-bool ValidateUniqueNames(const dtArray<std::string> &names,
+bool ValidateUniqueNames(const dtArray<std::string> &objects,
                          const dtDynObjectType objectType,
                          const char *label,
                          dtDynValidationError *error)
 {
     std::unordered_map<std::string, dtDynIndex> seen;
-    seen.reserve(names.size());
-    const std::size_t nameCount = names.size();
+    seen.reserve(objects.size());
+    const std::size_t nameCount = objects.size();
     for (std::size_t index = 0; index < nameCount; ++index)
     {
         const dtDynIndex objectIndex = static_cast<dtDynIndex>(index);
-        if (!seen.emplace(names[index], objectIndex).second)
+        if (!seen.emplace(objects[index], objectIndex).second)
         {
             return Fail(error, dtDynValidationCode::DuplicateName, objectType, objectIndex,
                         std::string(label) + "[" + std::to_string(index) +
-                            "] duplicates name '" + names[index] + "'");
+                            "] duplicates name '" + objects[index] + "'");
         }
     }
     return true;
@@ -231,7 +232,7 @@ bool IsFinite(const dt::Math::Matrix3<dtDynReal> &value)
     {
         for (dtDynIndex column = 0; column < 3; ++column)
         {
-            if (!std::isfinite(value.At(row, column)))
+            if (!std::isfinite(value.At(static_cast<std::uint16_t>(row), static_cast<std::uint16_t>(column))))
             {
                 return false;
             }
@@ -310,7 +311,7 @@ bool IsProperRotation(const dt::Math::Matrix3<dtDynReal> &value)
             dtDynReal dot = 0.0;
             for (dtDynIndex index = 0; index < 3; ++index)
             {
-                dot += value.At(index, row) * value.At(index, column);
+                dot += value.At(static_cast<std::uint16_t>(index), static_cast<std::uint16_t>(row)) * value.At(static_cast<std::uint16_t>(index), static_cast<std::uint16_t>(column));
             }
             const dtDynReal expected = (row == column) ? 1.0 : 0.0;
             if (!NearlyEqualInput(dot, expected))
@@ -338,7 +339,7 @@ bool MatrixMatchesQuaternion(const dt::Math::Matrix3<dtDynReal> &matrix,
     {
         for (dtDynIndex column = 0; column < 3; ++column)
         {
-            if (!NearlyEqualInput(matrix.At(row, column), expected.At(row, column)))
+            if (!NearlyEqualInput(matrix.At(static_cast<std::uint16_t>(row), static_cast<std::uint16_t>(column)), expected.At(static_cast<std::uint16_t>(row), static_cast<std::uint16_t>(column))))
             {
                 return false;
             }
@@ -437,8 +438,8 @@ bool ValidateSpec(const dtDynSpec &spec, dtDynValidationError *error)
     for (std::size_t jointIndex = 0; jointIndex < dofJointCount; ++jointIndex)
     {
         const dtDynJointDofSize size = GetJointDofSize(spec.Joints()[jointIndex].type);
-        nq += size.qposSize;
-        nv += size.qvelSize;
+        nq += static_cast<long long>(size.qposSize);
+        nv += static_cast<long long>(size.qvelSize);
         if ((nq > maximum) || nv > maximum)
         {
             return Fail(error, dtDynValidationCode::DimensionOverflow, dtDynObjectType::Joint,
@@ -710,61 +711,67 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
                     DTDYN_INVALID_INDEX, "compiled model has no world body[0]");
     }
 
-#define DTDYN_REQUIRE_ARRAY(member, count)                                \
-    if (!RequireModelArraySize(#member, model.member.size(), model.count, \
-                               error))                                    \
-    return false
-#define DTDYN_REQUIRE_DENSE(member, count)                                 \
-    if (!RequireModelDenseSize(#member, model.member, model.count, error)) \
-    return false
+#define DTDYN_REQUIRE_ARRAY(label, member, count)                       \
+    if (!RequireModelArraySize(label, model.member.size(), model.count, \
+                               error))                                  \
+    {                                                                   \
+        return false;                                                   \
+    }                                                                   \
+    static_assert(true, "")
+#define DTDYN_REQUIRE_DENSE(label, member, count)                        \
+    if (!RequireModelDenseSize(label, model.member, model.count, error)) \
+    {                                                                    \
+        return false;                                                    \
+    }                                                                    \
+    static_assert(true, "")
 
-    DTDYN_REQUIRE_ARRAY(body_names, nbody);
-    DTDYN_REQUIRE_ARRAY(body_parentid, nbody);
-    DTDYN_REQUIRE_ARRAY(body_rootid, nbody);
-    DTDYN_REQUIRE_ARRAY(body_rootidx, nbody);
-    DTDYN_REQUIRE_ARRAY(body_jntnum, nbody);
-    DTDYN_REQUIRE_ARRAY(body_jntadr, nbody);
-    DTDYN_REQUIRE_ARRAY(body_dofnum, nbody);
-    DTDYN_REQUIRE_ARRAY(body_dofadr, nbody);
-    DTDYN_REQUIRE_ARRAY(body_weldid, nbody);
-    DTDYN_REQUIRE_DENSE(body_mass, nbody);
-    DTDYN_REQUIRE_DENSE(body_subtreemass, nbody);
-    DTDYN_REQUIRE_ARRAY(body_pos, nbody);
-    DTDYN_REQUIRE_ARRAY(body_quat, nbody);
-    DTDYN_REQUIRE_ARRAY(body_mat, nbody);
-    DTDYN_REQUIRE_ARRAY(body_ipos, nbody);
-    DTDYN_REQUIRE_ARRAY(body_iquat, nbody);
-    DTDYN_REQUIRE_ARRAY(body_imat, nbody);
-    DTDYN_REQUIRE_ARRAY(body_inertia, nbody);
+    DTDYN_REQUIRE_ARRAY("body_names", body_names, nbody);
+    DTDYN_REQUIRE_ARRAY("body_parentid", body_parentid, nbody);
+    DTDYN_REQUIRE_ARRAY("body_rootid", body_rootid, nbody);
+    DTDYN_REQUIRE_ARRAY("body_rootidx", body_rootidx, nbody);
+    DTDYN_REQUIRE_ARRAY("body_jntnum", body_jntnum, nbody);
+    DTDYN_REQUIRE_ARRAY("body_jntadr", body_jntadr, nbody);
+    DTDYN_REQUIRE_ARRAY("body_dofnum", body_dofnum, nbody);
+    DTDYN_REQUIRE_ARRAY("body_dofadr", body_dofadr, nbody);
+    DTDYN_REQUIRE_ARRAY("body_weldid", body_weldid, nbody);
+    DTDYN_REQUIRE_DENSE("body_mass", body_mass, nbody);
+    DTDYN_REQUIRE_DENSE("body_subtreemass", body_subtreemass, nbody);
+    DTDYN_REQUIRE_ARRAY("body_pos", body_pos, nbody);
+    DTDYN_REQUIRE_ARRAY("body_quat", body_quat, nbody);
+    DTDYN_REQUIRE_ARRAY("body_mat", body_mat, nbody);
+    DTDYN_REQUIRE_ARRAY("body_ipos", body_ipos, nbody);
+    DTDYN_REQUIRE_ARRAY("body_iquat", body_iquat, nbody);
+    DTDYN_REQUIRE_ARRAY("body_imat", body_imat, nbody);
+    DTDYN_REQUIRE_ARRAY("body_inertia", body_inertia, nbody);
 
-    DTDYN_REQUIRE_ARRAY(joint_names, njnt);
-    DTDYN_REQUIRE_ARRAY(jnt_type, njnt);
-    DTDYN_REQUIRE_ARRAY(jnt_bodyid, njnt);
-    DTDYN_REQUIRE_ARRAY(jnt_specid, njnt);
-    DTDYN_REQUIRE_ARRAY(jnt_qposadr, njnt);
-    DTDYN_REQUIRE_ARRAY(jnt_dofadr, njnt);
-    DTDYN_REQUIRE_ARRAY(jnt_limited, njnt);
-    DTDYN_REQUIRE_DENSE(jnt_range_min, njnt);
-    DTDYN_REQUIRE_DENSE(jnt_range_max, njnt);
-    DTDYN_REQUIRE_ARRAY(jnt_pos, njnt);
-    DTDYN_REQUIRE_ARRAY(jnt_axis, njnt);
+    DTDYN_REQUIRE_ARRAY("joint_names", joint_names, njnt);
+    DTDYN_REQUIRE_ARRAY("jnt_type", jnt_type, njnt);
+    DTDYN_REQUIRE_ARRAY("jnt_bodyid", jnt_bodyid, njnt);
+    DTDYN_REQUIRE_ARRAY("jnt_specid", jnt_specid, njnt);
+    DTDYN_REQUIRE_ARRAY("jnt_qposadr", jnt_qposadr, njnt);
+    DTDYN_REQUIRE_ARRAY("jnt_dofadr", jnt_dofadr, njnt);
+    DTDYN_REQUIRE_ARRAY("jnt_limited", jnt_limited, njnt);
+    DTDYN_REQUIRE_DENSE("jnt_range_min", jnt_range_min, njnt);
+    DTDYN_REQUIRE_DENSE("jnt_range_max", jnt_range_max, njnt);
+    DTDYN_REQUIRE_ARRAY("jnt_pos", jnt_pos, njnt);
+    DTDYN_REQUIRE_ARRAY("jnt_axis", jnt_axis, njnt);
 
-    DTDYN_REQUIRE_ARRAY(dof_bodyid, nv);
-    DTDYN_REQUIRE_ARRAY(dof_parentid, nv);
-    DTDYN_REQUIRE_ARRAY(dof_jntid, nv);
-    DTDYN_REQUIRE_DENSE(dof_armature, nv);
+    DTDYN_REQUIRE_ARRAY("dof_bodyid", dof_bodyid, nv);
+    DTDYN_REQUIRE_ARRAY("dof_parentid", dof_parentid, nv);
+    DTDYN_REQUIRE_ARRAY("dof_jntid", dof_jntid, nv);
+    DTDYN_REQUIRE_DENSE("dof_armature", dof_armature, nv);
 
-    DTDYN_REQUIRE_ARRAY(site_names, nsite);
-    DTDYN_REQUIRE_ARRAY(site_bodyid, nsite);
-    DTDYN_REQUIRE_ARRAY(site_pos, nsite);
-    DTDYN_REQUIRE_ARRAY(site_quat, nsite);
-    DTDYN_REQUIRE_ARRAY(site_mat, nsite);
+    DTDYN_REQUIRE_ARRAY("site_names", site_names, nsite);
+    DTDYN_REQUIRE_ARRAY("site_bodyid", site_bodyid, nsite);
+    DTDYN_REQUIRE_ARRAY("site_pos", site_pos, nsite);
+    DTDYN_REQUIRE_ARRAY("site_quat", site_quat, nsite);
+    DTDYN_REQUIRE_ARRAY("site_mat", site_mat, nsite);
 
-    DTDYN_REQUIRE_ARRAY(actuator_names, nu);
-    DTDYN_REQUIRE_ARRAY(actuator_jointid, nu);
-    DTDYN_REQUIRE_DENSE(actuator_gear, nu);
-    DTDYN_REQUIRE_ARRAY(root_bodyid, nroot);
-    DTDYN_REQUIRE_DENSE(root_mass, nroot);
+    DTDYN_REQUIRE_ARRAY("actuator_names", actuator_names, nu);
+    DTDYN_REQUIRE_ARRAY("actuator_jointid", actuator_jointid, nu);
+    DTDYN_REQUIRE_DENSE("actuator_gear", actuator_gear, nu);
+    DTDYN_REQUIRE_ARRAY("root_bodyid", root_bodyid, nroot);
+    DTDYN_REQUIRE_DENSE("root_mass", root_mass, nroot);
 
 #undef DTDYN_REQUIRE_DENSE
 #undef DTDYN_REQUIRE_ARRAY
@@ -789,11 +796,11 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
     for (dtDynIndex bodyId = 0; bodyId < model.nbody; ++bodyId)
     {
         const std::size_t index = static_cast<std::size_t>(bodyId);
-        if (!std::isfinite(model.body_mass.At(bodyId)))
+        if (!std::isfinite(model.body_mass.At(static_cast<std::uint16_t>(bodyId))))
         {
             return FailNonFiniteBody(error, bodyId);
         }
-        if (!std::isfinite(model.body_subtreemass.At(bodyId)))
+        if (!std::isfinite(model.body_subtreemass.At(static_cast<std::uint16_t>(bodyId))))
         {
             return FailNonFiniteBody(error, bodyId);
         }
@@ -825,7 +832,7 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
         {
             return FailNonFiniteBody(error, bodyId);
         }
-        if (model.body_mass.At(bodyId) < 0.0)
+        if (model.body_mass.At(static_cast<std::uint16_t>(bodyId)) < 0.0)
         {
             return FailInvalidBodyPhysicalOrFrame(error, bodyId);
         }
@@ -868,11 +875,11 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
         {
             return FailInvalidJointSpecProvenance(error, jointId);
         }
-        if (!std::isfinite(model.jnt_range_min.At(jointId)))
+        if (!std::isfinite(model.jnt_range_min.At(static_cast<std::uint16_t>(jointId))))
         {
             return FailNonFiniteJoint(error, jointId);
         }
-        if (!std::isfinite(model.jnt_range_max.At(jointId)))
+        if (!std::isfinite(model.jnt_range_max.At(static_cast<std::uint16_t>(jointId))))
         {
             return FailNonFiniteJoint(error, jointId);
         }
@@ -903,13 +910,13 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
     }
     for (dtDynIndex dofId = 0; dofId < model.nv; ++dofId)
     {
-        if (!std::isfinite(model.dof_armature.At(dofId)))
+        if (!std::isfinite(model.dof_armature.At(static_cast<std::uint16_t>(dofId))))
         {
             return Fail(error, dtDynValidationCode::NonFiniteValue, dtDynObjectType::Joint,
                         model.dof_jntid[static_cast<std::size_t>(dofId)],
                         "compiled DOF armature is non-finite");
         }
-        if (model.dof_armature.At(dofId) < 0.0)
+        if (model.dof_armature.At(static_cast<std::uint16_t>(dofId)) < 0.0)
         {
             return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Joint,
                         model.dof_jntid[static_cast<std::size_t>(dofId)],
@@ -942,7 +949,7 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
     }
     for (dtDynIndex actuatorId = 0; actuatorId < model.nu; ++actuatorId)
     {
-        if (!std::isfinite(model.actuator_gear.At(actuatorId)))
+        if (!std::isfinite(model.actuator_gear.At(static_cast<std::uint16_t>(actuatorId))))
         {
             return Fail(error, dtDynValidationCode::NonFiniteValue, dtDynObjectType::Actuator,
                         actuatorId, "compiled actuator gear is non-finite");
@@ -950,7 +957,7 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
     }
     for (dtDynIndex rootIndex = 0; rootIndex < model.nroot; ++rootIndex)
     {
-        if (!std::isfinite(model.root_mass.At(rootIndex)))
+        if (!std::isfinite(model.root_mass.At(static_cast<std::uint16_t>(rootIndex))))
         {
             return Fail(error, dtDynValidationCode::NonFiniteValue, dtDynObjectType::Body,
                         model.root_bodyid[static_cast<std::size_t>(rootIndex)],
@@ -958,7 +965,7 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
         }
     }
 
-    if ((model.nbody > 0) && (model.body_parentid[0] != 0))
+    if ((model.nbody > 0) && (model.body_parentid[static_cast<std::size_t>(0)] != 0))
     {
         return Fail(error, dtDynValidationCode::InvalidWorld, dtDynObjectType::Body, 0,
                     "compiled body[0] world parent must be 0");
@@ -977,7 +984,7 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
     expectedSubtreeMass.resize(model.nbody);
     for (dtDynIndex bodyId = 0; bodyId < model.nbody; ++bodyId)
     {
-        expectedSubtreeMass[static_cast<std::size_t>(bodyId)] = model.body_mass.At(bodyId);
+        expectedSubtreeMass[static_cast<std::size_t>(bodyId)] = model.body_mass.At(static_cast<std::uint16_t>(bodyId));
     }
     for (dtDynIndex bodyId = model.nbody - 1; bodyId > 0; --bodyId)
     {
@@ -987,14 +994,14 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
     }
     for (dtDynIndex bodyId = 0; bodyId < model.nbody; ++bodyId)
     {
-        if (!NearlyEqual(model.body_subtreemass.At(bodyId),
+        if (!NearlyEqual(model.body_subtreemass.At(static_cast<std::uint16_t>(bodyId)),
                          expectedSubtreeMass[static_cast<std::size_t>(bodyId)]))
         {
             return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body,
                         bodyId, "compiled body subtree mass is inconsistent");
         }
     }
-    if ((model.body_rootid[0] != 0) || (model.body_rootidx[0] != DTDYN_INVALID_INDEX))
+    if ((model.body_rootid[static_cast<std::size_t>(0)] != 0) || (model.body_rootidx[static_cast<std::size_t>(0)] != DTDYN_INVALID_INDEX))
     {
         return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body, 0,
                     "compiled world root metadata is invalid");
@@ -1031,7 +1038,7 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
                         rootBody, "compiled root body appears more than once");
         }
         rootSeen[static_cast<std::size_t>(rootBody)] = 1;
-        if (!NearlyEqual(model.root_mass.At(rootIndex),
+        if (!NearlyEqual(model.root_mass.At(static_cast<std::uint16_t>(rootIndex)),
                          expectedSubtreeMass[static_cast<std::size_t>(rootBody)]))
         {
             return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body,
@@ -1053,7 +1060,7 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
                         bodyId, "compiled body root ID/slot is inconsistent");
         }
     }
-    if (model.body_weldid[0] != 0)
+    if (model.body_weldid[static_cast<std::size_t>(0)] != 0)
     {
         return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body, 0,
                     "compiled world weld ID must be 0");

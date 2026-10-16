@@ -2042,6 +2042,77 @@ void AssertModelValidationFailure(const dtDynModel &model,
     assert(error.message == message);
 }
 
+void TestValidationErrorResetsAfterSuccessfulCalls()
+{
+    dtDynSpec spec;
+    const dtDynIndex base = spec.AddBody("base", 0);
+    spec.AddJoint(base, "hinge", dtDynJointType::Hinge);
+    const dtDynModel model = CompileSpecChecked(spec);
+
+    dtDynSpec duplicateSpec;
+    duplicateSpec.AddBody("duplicate", 0);
+    const dtDynIndex duplicate = duplicateSpec.AddBody("duplicate", 0);
+
+    dtDynValidationError error;
+    assert(!ValidateSpec(duplicateSpec, &error));
+    assert(error.code == dtDynValidationCode::DuplicateName);
+    assert(error.index == duplicate);
+    assert(!error.message.empty());
+    assert(ValidateSpec(spec, &error));
+    assert(error.code == dtDynValidationCode::None);
+    assert(error.object == dtDynObjectType::Body);
+    assert(error.index == DTDYN_INVALID_INDEX);
+    assert(error.message.empty());
+
+    dtDynModel duplicateModel = model;
+    duplicateModel.body_names[1] = duplicateModel.body_names[0];
+    error.code = dtDynValidationCode::None;
+    assert(!ValidateModel(duplicateModel, &error));
+    assert(error.code == dtDynValidationCode::DuplicateName);
+    assert(error.object == dtDynObjectType::Body);
+    assert(error.index == 1);
+    assert(!error.message.empty());
+    assert(ValidateModel(model, &error));
+    assert(error.code == dtDynValidationCode::None);
+    assert(error.object == dtDynObjectType::Body);
+    assert(error.index == DTDYN_INVALID_INDEX);
+    assert(error.message.empty());
+}
+
+void TestModelValidationLabelsMismatchedArrayAndDenseSizes()
+{
+    dtDynSpec spec;
+    const dtDynIndex base = spec.AddBody("base", 0);
+    spec.AddJoint(base, "hinge", dtDynJointType::Hinge);
+    const dtDynModel model = CompileSpecChecked(spec);
+    dtDynValidationError error;
+    assert(ValidateModel(model, &error));
+
+    dtDynModel shortArray = model;
+    shortArray.body_names.resize(1);
+    AssertModelValidationFailure(shortArray, dtDynValidationCode::InvalidReference,
+                                 dtDynObjectType::Body, DTDYN_INVALID_INDEX,
+                                 "model array body_names has size 1, expected 2");
+
+    dtDynModel shortRootArray = model;
+    shortRootArray.root_bodyid.resize(0);
+    AssertModelValidationFailure(shortRootArray, dtDynValidationCode::InvalidReference,
+                                 dtDynObjectType::Body, DTDYN_INVALID_INDEX,
+                                 "model array root_bodyid has size 0, expected 1");
+
+    dtDynModel shortDense = model;
+    shortDense.dof_armature.ReSize(0);
+    AssertModelValidationFailure(shortDense, dtDynValidationCode::InvalidReference,
+                                 dtDynObjectType::Body, DTDYN_INVALID_INDEX,
+                                 "model array dof_armature has size 0, expected 1");
+
+    dtDynModel shortMass = model;
+    shortMass.body_mass.ReSize(1);
+    AssertModelValidationFailure(shortMass, dtDynValidationCode::InvalidReference,
+                                 dtDynObjectType::Body, DTDYN_INVALID_INDEX,
+                                 "model array body_mass has size 1, expected 2");
+}
+
 void AssertCompiledSiteBodyReferenceDiagnostic(const dtDynModel &model,
                                                const dtDynIndex site)
 {
@@ -10901,6 +10972,8 @@ int main()
     TestModelValidationRejectsInconsistentRootTableMetadata();
     TestModelValidationPreservesWorldRootPropagation();
     TestModelValidationRejectsDuplicateNames();
+    TestValidationErrorResetsAfterSuccessfulCalls();
+    TestModelValidationLabelsMismatchedArrayAndDenseSizes();
     TestModelValidationRejectsOverlappingJointSpans();
     TestModelValidationRejectsOrphanBodySegments();
     TestModelValidationRejectsDofOutsideDeclaredJointSpan();

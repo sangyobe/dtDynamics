@@ -39,7 +39,7 @@ dt::Math::Vector3<dtDynReal> RootCom(const dtDynModel &model,
     {
         return data.subtree_com[static_cast<std::size_t>(rootBody)];
     }
-    return data.subtree_com[0];
+    return data.subtree_com[static_cast<std::size_t>(0)];
 }
 
 dt::Math::Vector6<dtDynReal> MotionSubspaceAtPoint(const dtDynModel &model,

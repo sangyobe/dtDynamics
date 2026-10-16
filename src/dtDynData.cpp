@@ -92,26 +92,26 @@ void dtDynData::Resize(const dtDynModel &model)
 
     for (dtDynIndex bodyId = 0; bodyId < model.nbody; ++bodyId)
     {
-        ResizeDenseMatrix(body_jacp[bodyId], 3, model.nv);
-        ResizeDenseMatrix(body_jacr[bodyId], 3, model.nv);
-        ResizeDenseMatrix(body_jacp_dot[bodyId], 3, model.nv);
-        ResizeDenseMatrix(body_jacr_dot[bodyId], 3, model.nv);
-        SetDenseMatrixZeroIfAllocated(body_jacp[bodyId]);
-        SetDenseMatrixZeroIfAllocated(body_jacr[bodyId]);
-        SetDenseMatrixZeroIfAllocated(body_jacp_dot[bodyId]);
-        SetDenseMatrixZeroIfAllocated(body_jacr_dot[bodyId]);
+        ResizeDenseMatrix(body_jacp[static_cast<std::size_t>(bodyId)], 3, model.nv);
+        ResizeDenseMatrix(body_jacr[static_cast<std::size_t>(bodyId)], 3, model.nv);
+        ResizeDenseMatrix(body_jacp_dot[static_cast<std::size_t>(bodyId)], 3, model.nv);
+        ResizeDenseMatrix(body_jacr_dot[static_cast<std::size_t>(bodyId)], 3, model.nv);
+        SetDenseMatrixZeroIfAllocated(body_jacp[static_cast<std::size_t>(bodyId)]);
+        SetDenseMatrixZeroIfAllocated(body_jacr[static_cast<std::size_t>(bodyId)]);
+        SetDenseMatrixZeroIfAllocated(body_jacp_dot[static_cast<std::size_t>(bodyId)]);
+        SetDenseMatrixZeroIfAllocated(body_jacr_dot[static_cast<std::size_t>(bodyId)]);
     }
 
     for (dtDynIndex siteId = 0; siteId < model.nsite; ++siteId)
     {
-        ResizeDenseMatrix(site_jacp[siteId], 3, model.nv);
-        ResizeDenseMatrix(site_jacr[siteId], 3, model.nv);
-        ResizeDenseMatrix(site_jacp_dot[siteId], 3, model.nv);
-        ResizeDenseMatrix(site_jacr_dot[siteId], 3, model.nv);
-        SetDenseMatrixZeroIfAllocated(site_jacp[siteId]);
-        SetDenseMatrixZeroIfAllocated(site_jacr[siteId]);
-        SetDenseMatrixZeroIfAllocated(site_jacp_dot[siteId]);
-        SetDenseMatrixZeroIfAllocated(site_jacr_dot[siteId]);
+        ResizeDenseMatrix(site_jacp[static_cast<std::size_t>(siteId)], 3, model.nv);
+        ResizeDenseMatrix(site_jacr[static_cast<std::size_t>(siteId)], 3, model.nv);
+        ResizeDenseMatrix(site_jacp_dot[static_cast<std::size_t>(siteId)], 3, model.nv);
+        ResizeDenseMatrix(site_jacr_dot[static_cast<std::size_t>(siteId)], 3, model.nv);
+        SetDenseMatrixZeroIfAllocated(site_jacp[static_cast<std::size_t>(siteId)]);
+        SetDenseMatrixZeroIfAllocated(site_jacr[static_cast<std::size_t>(siteId)]);
+        SetDenseMatrixZeroIfAllocated(site_jacp_dot[static_cast<std::size_t>(siteId)]);
+        SetDenseMatrixZeroIfAllocated(site_jacr_dot[static_cast<std::size_t>(siteId)]);
     }
 
     cdof.resize(model.nv);

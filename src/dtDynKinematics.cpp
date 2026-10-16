@@ -13,6 +13,7 @@
 #include "dtDynamics/dtDynUtils.h"
 
 #include <cassert>
+#include <cstdint>
 
 namespace dt::Dynamics
 {
@@ -21,11 +22,11 @@ void ForwardKinematics(const dtDynModel &model, dtDynData &data)
 {
     // MuJoCo-style forward kinematics over the body tree. qpos drives joint
     // transforms, then inertial and site frames are derived from each body pose.
-    data.xpos[0].SetZero();
-    math::SetIdentityQuaternion(data.xquat[0]);
-    data.xmat[0].SetIdentity();
-    data.xipos[0].SetZero();
-    data.ximat[0].SetIdentity();
+    data.xpos[static_cast<std::size_t>(0)].SetZero();
+    math::SetIdentityQuaternion(data.xquat[static_cast<std::size_t>(0)]);
+    data.xmat[static_cast<std::size_t>(0)].SetIdentity();
+    data.xipos[static_cast<std::size_t>(0)].SetZero();
+    data.ximat[static_cast<std::size_t>(0)].SetIdentity();
 
     for (dtDynIndex bodyId = 1; bodyId < model.nbody; ++bodyId)
     {
@@ -38,13 +39,13 @@ void ForwardKinematics(const dtDynModel &model, dtDynData &data)
             (model.jnt_type[static_cast<std::size_t>(jntAdr)] == static_cast<dtDynIndex>(dtDynJointType::Free)))
         {
             const dtDynIndex qadr = model.jnt_qposadr[static_cast<std::size_t>(jntAdr)];
-            xpos.At(0) = data.qpos.At(qadr + 0);
-            xpos.At(1) = data.qpos.At(qadr + 1);
-            xpos.At(2) = data.qpos.At(qadr + 2);
-            xquat.At(0) = data.qpos.At(qadr + 3);
-            xquat.At(1) = data.qpos.At(qadr + 4);
-            xquat.At(2) = data.qpos.At(qadr + 5);
-            xquat.At(3) = data.qpos.At(qadr + 6);
+            xpos.At(0) = data.qpos.At(static_cast<std::uint16_t>(qadr + 0));
+            xpos.At(1) = data.qpos.At(static_cast<std::uint16_t>(qadr + 1));
+            xpos.At(2) = data.qpos.At(static_cast<std::uint16_t>(qadr + 2));
+            xquat.At(0) = data.qpos.At(static_cast<std::uint16_t>(qadr + 3));
+            xquat.At(1) = data.qpos.At(static_cast<std::uint16_t>(qadr + 4));
+            xquat.At(2) = data.qpos.At(static_cast<std::uint16_t>(qadr + 5));
+            xquat.At(3) = data.qpos.At(static_cast<std::uint16_t>(qadr + 6));
             xquat = math::NormalizeOrIdentity(xquat);
             data.xanchor[static_cast<std::size_t>(jntAdr)] = xpos;
             data.xaxis[static_cast<std::size_t>(jntAdr)] = model.jnt_axis[static_cast<std::size_t>(jntAdr)];
@@ -82,22 +83,22 @@ void ForwardKinematics(const dtDynModel &model, dtDynData &data)
 
                 if (jointType == dtDynJointType::Slide)
                 {
-                    xpos = xpos + xaxis * data.qpos.At(qadr);
+                    xpos = xpos + xaxis * data.qpos.At(static_cast<std::uint16_t>(qadr));
                 }
                 else if ((jointType == dtDynJointType::Hinge) || (jointType == dtDynJointType::Ball))
                 {
                     dt::Math::Vector4<dtDynReal> qloc;
                     if (jointType == dtDynJointType::Ball)
                     {
-                        qloc.At(0) = data.qpos.At(qadr + 0);
-                        qloc.At(1) = data.qpos.At(qadr + 1);
-                        qloc.At(2) = data.qpos.At(qadr + 2);
-                        qloc.At(3) = data.qpos.At(qadr + 3);
+                        qloc.At(0) = data.qpos.At(static_cast<std::uint16_t>(qadr + 0));
+                        qloc.At(1) = data.qpos.At(static_cast<std::uint16_t>(qadr + 1));
+                        qloc.At(2) = data.qpos.At(static_cast<std::uint16_t>(qadr + 2));
+                        qloc.At(3) = data.qpos.At(static_cast<std::uint16_t>(qadr + 3));
                         qloc = math::NormalizeOrIdentity(qloc);
                     }
                     else
                     {
-                        qloc = math::AxisAngleQuat(model.jnt_axis[static_cast<std::size_t>(jointId)], data.qpos.At(qadr));
+                        qloc = math::AxisAngleQuat(model.jnt_axis[static_cast<std::size_t>(jointId)], data.qpos.At(static_cast<std::uint16_t>(qadr)));
                     }
 
                     xquat = math::MulQuat(xquat, qloc);
@@ -179,8 +180,8 @@ PointJacobianDotContext MakePointJacobianDotContext(const dtDynModel &model,
     dt::Math::Vector3<dtDynReal> bodyLinearVelocityAtRoot;
     for (dtDynIndex row = 0; row < 3; ++row)
     {
-        bodyAngularVelocity.At(row) = data.cvel[static_cast<std::size_t>(bodyId)].At(row);
-        bodyLinearVelocityAtRoot.At(row) = data.cvel[static_cast<std::size_t>(bodyId)].At(row + 3);
+        bodyAngularVelocity.At(static_cast<std::uint16_t>(row)) = data.cvel[static_cast<std::size_t>(bodyId)].At(static_cast<std::uint16_t>(row));
+        bodyLinearVelocityAtRoot.At(static_cast<std::uint16_t>(row)) = data.cvel[static_cast<std::size_t>(bodyId)].At(static_cast<std::uint16_t>(row + 3));
     }
     context.pointVelocity =
         bodyLinearVelocityAtRoot - (context.rootToPoint & bodyAngularVelocity);
@@ -215,9 +216,9 @@ void ComputePointJacobianDotColumn(const dtDynModel &model,
     dt::Math::Vector3<dtDynReal> linearDotAtRoot;
     for (dtDynIndex row = 0; row < 3; ++row)
     {
-        angularColumn.At(row) = data.cdof[static_cast<std::size_t>(dofId)].At(row);
-        angularDot.At(row) = cdofDot.At(row);
-        linearDotAtRoot.At(row) = cdofDot.At(row + 3);
+        angularColumn.At(static_cast<std::uint16_t>(row)) = data.cdof[static_cast<std::size_t>(dofId)].At(static_cast<std::uint16_t>(row));
+        angularDot.At(static_cast<std::uint16_t>(row)) = cdofDot.At(static_cast<std::uint16_t>(row));
+        linearDotAtRoot.At(static_cast<std::uint16_t>(row)) = cdofDot.At(static_cast<std::uint16_t>(row + 3));
     }
 
     linearDot =
@@ -276,11 +277,11 @@ void ComputePointJacobianTermsImpl(const dtDynModel &model,
             {
                 if (jacp != nullptr)
                 {
-                    (*jacp).At(row, dofId) = motion.At(row + 3);
+                    (*jacp).At(static_cast<std::uint16_t>(row), static_cast<std::uint16_t>(dofId)) = motion.At(static_cast<std::uint16_t>(row + 3));
                 }
                 if (jacr != nullptr)
                 {
-                    (*jacr).At(row, dofId) = motion.At(row);
+                    (*jacr).At(static_cast<std::uint16_t>(row), static_cast<std::uint16_t>(dofId)) = motion.At(static_cast<std::uint16_t>(row));
                 }
             }
         }
@@ -290,24 +291,24 @@ void ComputePointJacobianTermsImpl(const dtDynModel &model,
             dt::Math::Vector3<dtDynReal> linearDot;
             dt::Math::Vector3<dtDynReal> angularDot;
             ComputePointJacobianDotColumn(model, data, dofId, dotContext, linearDot, angularDot);
-            const dtDynReal velocity = data.qvel.At(dofId);
+            const dtDynReal velocity = data.qvel.At(static_cast<std::uint16_t>(dofId));
             for (dtDynIndex row = 0; row < 3; ++row)
             {
                 if (jacpDot != nullptr)
                 {
-                    (*jacpDot).At(row, dofId) = linearDot.At(row);
+                    (*jacpDot).At(static_cast<std::uint16_t>(row), static_cast<std::uint16_t>(dofId)) = linearDot.At(static_cast<std::uint16_t>(row));
                 }
                 if (jacrDot != nullptr)
                 {
-                    (*jacrDot).At(row, dofId) = angularDot.At(row);
+                    (*jacrDot).At(static_cast<std::uint16_t>(row), static_cast<std::uint16_t>(dofId)) = angularDot.At(static_cast<std::uint16_t>(row));
                 }
                 if (linearJdotQvel != nullptr)
                 {
-                    (*linearJdotQvel).At(row) += linearDot.At(row) * velocity;
+                    (*linearJdotQvel).At(static_cast<std::uint16_t>(row)) += linearDot.At(static_cast<std::uint16_t>(row)) * velocity;
                 }
                 if (angularJdotQvel != nullptr)
                 {
-                    (*angularJdotQvel).At(row) += angularDot.At(row) * velocity;
+                    (*angularJdotQvel).At(static_cast<std::uint16_t>(row)) += angularDot.At(static_cast<std::uint16_t>(row)) * velocity;
                 }
             }
         }
@@ -498,8 +499,8 @@ void ComputePointJacobiansIntoData(const dtDynModel &model,
     dt::Math::Vector3<dtDynReal> bodyLinearVelocityAtRoot;
     for (dtDynIndex row = 0; row < 3; ++row)
     {
-        bodyAngularVelocity.At(row) = data.cvel[static_cast<std::size_t>(bodyId)].At(row);
-        bodyLinearVelocityAtRoot.At(row) = data.cvel[static_cast<std::size_t>(bodyId)].At(row + 3);
+        bodyAngularVelocity.At(static_cast<std::uint16_t>(row)) = data.cvel[static_cast<std::size_t>(bodyId)].At(static_cast<std::uint16_t>(row));
+        bodyLinearVelocityAtRoot.At(static_cast<std::uint16_t>(row)) = data.cvel[static_cast<std::size_t>(bodyId)].At(static_cast<std::uint16_t>(row + 3));
     }
     const dt::Math::Vector3<dtDynReal> pointVelocity =
         bodyLinearVelocityAtRoot - (rootToPoint & bodyAngularVelocity);
@@ -529,18 +530,18 @@ void ComputePointJacobiansIntoData(const dtDynModel &model,
         dt::Math::Vector3<dtDynReal> linearDotAtRoot;
         for (dtDynIndex row = 0; row < 3; ++row)
         {
-            angular.At(row) = data.cdof[static_cast<std::size_t>(dofId)].At(row);
-            angularDot.At(row) = cdofDot.At(row);
-            linearDotAtRoot.At(row) = cdofDot.At(row + 3);
+            angular.At(static_cast<std::uint16_t>(row)) = data.cdof[static_cast<std::size_t>(dofId)].At(static_cast<std::uint16_t>(row));
+            angularDot.At(static_cast<std::uint16_t>(row)) = cdofDot.At(static_cast<std::uint16_t>(row));
+            linearDotAtRoot.At(static_cast<std::uint16_t>(row)) = cdofDot.At(static_cast<std::uint16_t>(row + 3));
         }
         linearDot = linearDotAtRoot + (angularDot & rootToPoint) + (angular & pointVelocity);
 
         for (dtDynIndex row = 0; row < 3; ++row)
         {
-            jacp.At(row, dofId) = motion.At(row + 3);
-            jacr.At(row, dofId) = motion.At(row);
-            jacpDot.At(row, dofId) = linearDot.At(row);
-            jacrDot.At(row, dofId) = angularDot.At(row);
+            jacp.At(static_cast<std::uint16_t>(row), static_cast<std::uint16_t>(dofId)) = motion.At(static_cast<std::uint16_t>(row + 3));
+            jacr.At(static_cast<std::uint16_t>(row), static_cast<std::uint16_t>(dofId)) = motion.At(static_cast<std::uint16_t>(row));
+            jacpDot.At(static_cast<std::uint16_t>(row), static_cast<std::uint16_t>(dofId)) = linearDot.At(static_cast<std::uint16_t>(row));
+            jacrDot.At(static_cast<std::uint16_t>(row), static_cast<std::uint16_t>(dofId)) = angularDot.At(static_cast<std::uint16_t>(row));
         }
 
         dofId = model.dof_parentid[static_cast<std::size_t>(dofId)];

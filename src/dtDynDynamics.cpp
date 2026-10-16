@@ -14,6 +14,7 @@
 #include "dtDynamics/dtDynUtils.h"
 
 #include <cassert>
+#include <cstdint>
 #include <limits>
 
 namespace dt::Dynamics
@@ -36,7 +37,7 @@ void AddScaledSpatialInPlace(dt::Math::Vector6<dtDynReal> &dst,
 
     for (dtDynIndex row = 0; row < 6; ++row)
     {
-        dst.At(row) += src.At(row) * scale;
+        dst.At(static_cast<std::uint16_t>(row)) += src.At(static_cast<std::uint16_t>(row)) * scale;
     }
 }
 
@@ -124,16 +125,16 @@ void SetMotionSubspaceAtPoint(const dtDynModel &model,
         const dtDynIndex jointBody = model.jnt_bodyid[static_cast<std::size_t>(jointId)];
         if (dofOffset < 3)
         {
-            out.At(3 + dofOffset) = 1.0;
+            out.At(static_cast<std::uint16_t>(3 + dofOffset)) = 1.0;
         }
         else
         {
             const dtDynIndex col = dofOffset - 3;
             const dt::Math::Matrix3<dtDynReal> &bodyMat =
                 data.xmat[static_cast<std::size_t>(jointBody)];
-            SetAngularPointMotionSubspace(bodyMat.At(0, col),
-                                          bodyMat.At(1, col),
-                                          bodyMat.At(2, col),
+            SetAngularPointMotionSubspace(bodyMat.At(0, static_cast<std::uint16_t>(col)),
+                                          bodyMat.At(1, static_cast<std::uint16_t>(col)),
+                                          bodyMat.At(2, static_cast<std::uint16_t>(col)),
                                           point,
                                           data.xpos[static_cast<std::size_t>(jointBody)],
                                           out);
@@ -144,9 +145,9 @@ void SetMotionSubspaceAtPoint(const dtDynModel &model,
         const dtDynIndex jointBody = model.jnt_bodyid[static_cast<std::size_t>(jointId)];
         const dt::Math::Matrix3<dtDynReal> &bodyMat =
             data.xmat[static_cast<std::size_t>(jointBody)];
-        SetAngularPointMotionSubspace(bodyMat.At(0, dofOffset),
-                                      bodyMat.At(1, dofOffset),
-                                      bodyMat.At(2, dofOffset),
+        SetAngularPointMotionSubspace(bodyMat.At(0, static_cast<std::uint16_t>(dofOffset)),
+                                      bodyMat.At(1, static_cast<std::uint16_t>(dofOffset)),
+                                      bodyMat.At(2, static_cast<std::uint16_t>(dofOffset)),
                                       point,
                                       data.xanchor[static_cast<std::size_t>(jointId)],
                                       out);
@@ -180,7 +181,7 @@ void ComputeSubtreeCom(const dtDynModel &model, dtDynData &data)
     for (dtDynIndex bodyId = 0; bodyId < model.nbody; ++bodyId)
     {
         data.scratch_weightedCom[static_cast<std::size_t>(bodyId)] =
-            data.xipos[static_cast<std::size_t>(bodyId)] * model.body_mass.At(bodyId);
+            data.xipos[static_cast<std::size_t>(bodyId)] * model.body_mass.At(static_cast<std::uint16_t>(bodyId));
     }
 
     for (dtDynIndex bodyId = model.nbody - 1; bodyId > 0; --bodyId)
@@ -196,7 +197,7 @@ void ComputeSubtreeCom(const dtDynModel &model, dtDynData &data)
 
     for (dtDynIndex bodyId = 0; bodyId < model.nbody; ++bodyId)
     {
-        if (model.body_subtreemass.At(bodyId) <= std::numeric_limits<dtDynReal>::epsilon())
+        if (model.body_subtreemass.At(static_cast<std::uint16_t>(bodyId)) <= std::numeric_limits<dtDynReal>::epsilon())
         {
             data.subtree_com[static_cast<std::size_t>(bodyId)].SetZero();
             continue;
@@ -204,7 +205,7 @@ void ComputeSubtreeCom(const dtDynModel &model, dtDynData &data)
 
         data.subtree_com[static_cast<std::size_t>(bodyId)] =
             data.scratch_weightedCom[static_cast<std::size_t>(bodyId)] *
-            (1.0 / model.body_subtreemass.At(bodyId));
+            (1.0 / model.body_subtreemass.At(static_cast<std::uint16_t>(bodyId)));
     }
 }
 
@@ -215,7 +216,7 @@ void ComputeDiffMotion(const dtDynModel &model, dtDynData &data)
     //   cdof_dot_j = crm(cvel_before_j) * cdof_j
     // The free-joint translational columns are applied before angular columns
     // to preserve MuJoCo qvel ordering and the expected cdof_dot convention.
-    data.cvel[0].SetZero();
+    data.cvel[static_cast<std::size_t>(0)].SetZero();
 
     for (dtDynIndex bodyId = 1; bodyId < model.nbody; ++bodyId)
     {
@@ -245,7 +246,7 @@ void ComputeDiffMotion(const dtDynModel &model, dtDynData &data)
                 {
                     AddScaledSpatialInPlace(bodyVelocity,
                                             data.cdof[static_cast<std::size_t>(dofAdr + offset)],
-                                            data.qvel.At(dofAdr + offset));
+                                            data.qvel.At(static_cast<std::uint16_t>(dofAdr + offset)));
                 }
                 if (IsZeroSpatial(bodyVelocity))
                 {
@@ -271,7 +272,7 @@ void ComputeDiffMotion(const dtDynModel &model, dtDynData &data)
                 {
                     AddScaledSpatialInPlace(bodyVelocity,
                                             data.cdof[static_cast<std::size_t>(dofAdr + offset)],
-                                            data.qvel.At(dofAdr + offset));
+                                            data.qvel.At(static_cast<std::uint16_t>(dofAdr + offset)));
                 }
             }
             else if (jointType == dtDynJointType::Ball)
@@ -296,7 +297,7 @@ void ComputeDiffMotion(const dtDynModel &model, dtDynData &data)
                 {
                     AddScaledSpatialInPlace(bodyVelocity,
                                             data.cdof[static_cast<std::size_t>(dofAdr + offset)],
-                                            data.qvel.At(dofAdr + offset));
+                                            data.qvel.At(static_cast<std::uint16_t>(dofAdr + offset)));
                 }
             }
             else
@@ -313,7 +314,7 @@ void ComputeDiffMotion(const dtDynModel &model, dtDynData &data)
                 }
                 AddScaledSpatialInPlace(bodyVelocity,
                                         data.cdof[static_cast<std::size_t>(dofAdr)],
-                                        data.qvel.At(dofAdr));
+                                        data.qvel.At(static_cast<std::uint16_t>(dofAdr)));
             }
         }
     }
@@ -332,7 +333,7 @@ void FillBodySpatialInertiaAtRootCom(const dtDynModel &model,
     const dtDynIndex rootBody = model.body_rootid[bodyIdx];
     const std::size_t refIdx = static_cast<std::size_t>((rootBody > 0) ? rootBody : 0);
 
-    const dtDynReal mass = model.body_mass.At(bodyId);
+    const dtDynReal mass = model.body_mass.At(static_cast<std::uint16_t>(bodyId));
     const dt::Math::Matrix3<dtDynReal> &rot = data.ximat[bodyIdx];
     const dt::Math::Vector3<dtDynReal> &diag = model.body_inertia[bodyIdx];
     const dt::Math::Vector3<dtDynReal> &bodyCom = data.xipos[bodyIdx];
@@ -347,9 +348,9 @@ void FillBodySpatialInertiaAtRootCom(const dtDynModel &model,
     {
         for (dtDynIndex col = 0; col < 3; ++col)
         {
-            const dtDynReal rotInertia = ((rot.At(row, 0) * diag.At(0)) * rot.At(col, 0)) +
-                                         ((rot.At(row, 1) * diag.At(1)) * rot.At(col, 1)) +
-                                         ((rot.At(row, 2) * diag.At(2)) * rot.At(col, 2));
+            const dtDynReal rotInertia = ((rot.At(static_cast<std::uint16_t>(row), 0) * diag.At(0)) * rot.At(static_cast<std::uint16_t>(col), 0)) +
+                                         ((rot.At(static_cast<std::uint16_t>(row), 1) * diag.At(1)) * rot.At(static_cast<std::uint16_t>(col), 1)) +
+                                         ((rot.At(static_cast<std::uint16_t>(row), 2) * diag.At(2)) * rot.At(static_cast<std::uint16_t>(col), 2));
 
             dtDynReal skew = 0.0;
             if ((row == 0) && (col == 1))
@@ -381,13 +382,13 @@ void FillBodySpatialInertiaAtRootCom(const dtDynModel &model,
                 skew = 0.0;
             }
 
-            out.At(row, col) =
+            out.At(static_cast<std::uint16_t>(row), static_cast<std::uint16_t>(col)) =
                 rotInertia +
                 ((row == col) ? (mass * c2sum) : 0.0) -
                 ((mass * c[row]) * c[col]);
-            out.At(row, col + 3) = mass * skew;
-            out.At(row + 3, col) = -mass * skew;
-            out.At(row + 3, col + 3) = (row == col) ? mass : 0.0;
+            out.At(static_cast<std::uint16_t>(row), static_cast<std::uint16_t>(col + 3)) = mass * skew;
+            out.At(static_cast<std::uint16_t>(row + 3), static_cast<std::uint16_t>(col)) = -mass * skew;
+            out.At(static_cast<std::uint16_t>(row + 3), static_cast<std::uint16_t>(col + 3)) = (row == col) ? mass : 0.0;
         }
     }
 }
@@ -398,7 +399,7 @@ void ComputeCompositeRigidBodyInertias(const dtDynModel &model, dtDynData &data)
     // then accumulate child composite inertias into the parent tree.
     for (dtDynIndex bodyId = 0; bodyId < model.nbody; ++bodyId)
     {
-        if (model.body_mass.At(bodyId) <= std::numeric_limits<dtDynReal>::epsilon())
+        if (model.body_mass.At(static_cast<std::uint16_t>(bodyId)) <= std::numeric_limits<dtDynReal>::epsilon())
         {
             data.cinert[static_cast<std::size_t>(bodyId)].SetZero();
             data.crb[static_cast<std::size_t>(bodyId)].SetZero();
@@ -427,7 +428,7 @@ bool IsZeroSpatial(const dt::Math::Vector6<dtDynReal> &value)
 {
     for (dtDynIndex row = 0; row < 6; ++row)
     {
-        if (value.At(row) != 0.0)
+        if (value.At(static_cast<std::uint16_t>(row)) != 0.0)
         {
             return false;
         }
@@ -463,14 +464,14 @@ void SpatialMulPair(const dt::Math::Matrix<6, 6, dtDynReal> &matrix,
 
     for (dtDynIndex row = 0; row < 6; ++row)
     {
-        const dtDynReal m0 = matrix.At(row, 0);
-        const dtDynReal m1 = matrix.At(row, 1);
-        const dtDynReal m2 = matrix.At(row, 2);
-        const dtDynReal m3 = matrix.At(row, 3);
-        const dtDynReal m4 = matrix.At(row, 4);
-        const dtDynReal m5 = matrix.At(row, 5);
-        leftOut.At(row) = (m0 * l0) + (m1 * l1) + (m2 * l2) + (m3 * l3) + (m4 * l4) + (m5 * l5);
-        rightOut.At(row) = (m0 * r0) + (m1 * r1) + (m2 * r2) + (m3 * r3) + (m4 * r4) + (m5 * r5);
+        const dtDynReal m0 = matrix.At(static_cast<std::uint16_t>(row), 0);
+        const dtDynReal m1 = matrix.At(static_cast<std::uint16_t>(row), 1);
+        const dtDynReal m2 = matrix.At(static_cast<std::uint16_t>(row), 2);
+        const dtDynReal m3 = matrix.At(static_cast<std::uint16_t>(row), 3);
+        const dtDynReal m4 = matrix.At(static_cast<std::uint16_t>(row), 4);
+        const dtDynReal m5 = matrix.At(static_cast<std::uint16_t>(row), 5);
+        leftOut.At(static_cast<std::uint16_t>(row)) = (m0 * l0) + (m1 * l1) + (m2 * l2) + (m3 * l3) + (m4 * l4) + (m5 * l5);
+        rightOut.At(static_cast<std::uint16_t>(row)) = (m0 * r0) + (m1 * r1) + (m2 * r2) + (m3 * r3) + (m4 * r4) + (m5 * r5);
     }
 }
 
@@ -489,9 +490,9 @@ void SpatialMulInto(const dt::Math::Matrix<6, 6, dtDynReal> &matrix,
 
     for (dtDynIndex row = 0; row < 6; ++row)
     {
-        out.At(row) = (matrix.At(row, 0) * v0) + (matrix.At(row, 1) * v1) +
-                      (matrix.At(row, 2) * v2) + (matrix.At(row, 3) * v3) +
-                      (matrix.At(row, 4) * v4) + (matrix.At(row, 5) * v5);
+        out.At(static_cast<std::uint16_t>(row)) = (matrix.At(static_cast<std::uint16_t>(row), 0) * v0) + (matrix.At(static_cast<std::uint16_t>(row), 1) * v1) +
+                                                  (matrix.At(static_cast<std::uint16_t>(row), 2) * v2) + (matrix.At(static_cast<std::uint16_t>(row), 3) * v3) +
+                                                  (matrix.At(static_cast<std::uint16_t>(row), 4) * v4) + (matrix.At(static_cast<std::uint16_t>(row), 5) * v5);
     }
 }
 
@@ -519,13 +520,13 @@ void AddSpatialMulAndTransposeMul(const dt::Math::Matrix<6, 6, dtDynReal> &matri
     dtDynReal transpose5 = 0.0;
     for (dtDynIndex row = 0; row < 6; ++row)
     {
-        const dtDynReal vectorRow = vector.At(row);
-        const dtDynReal m0 = matrix.At(row, 0);
-        const dtDynReal m1 = matrix.At(row, 1);
-        const dtDynReal m2 = matrix.At(row, 2);
-        const dtDynReal m3 = matrix.At(row, 3);
-        const dtDynReal m4 = matrix.At(row, 4);
-        const dtDynReal m5 = matrix.At(row, 5);
+        const dtDynReal vectorRow = vector.At(static_cast<std::uint16_t>(row));
+        const dtDynReal m0 = matrix.At(static_cast<std::uint16_t>(row), 0);
+        const dtDynReal m1 = matrix.At(static_cast<std::uint16_t>(row), 1);
+        const dtDynReal m2 = matrix.At(static_cast<std::uint16_t>(row), 2);
+        const dtDynReal m3 = matrix.At(static_cast<std::uint16_t>(row), 3);
+        const dtDynReal m4 = matrix.At(static_cast<std::uint16_t>(row), 4);
+        const dtDynReal m5 = matrix.At(static_cast<std::uint16_t>(row), 5);
         const dtDynReal forwardValue = m0 * v0 + m1 * v1 + m2 * v2 + m3 * v3 + m4 * v4 + m5 * v5;
         transpose0 += m0 * vectorRow;
         transpose1 += m1 * vectorRow;
@@ -533,7 +534,7 @@ void AddSpatialMulAndTransposeMul(const dt::Math::Matrix<6, 6, dtDynReal> &matri
         transpose3 += m3 * vectorRow;
         transpose4 += m4 * vectorRow;
         transpose5 += m5 * vectorRow;
-        forwardOut.At(row) += forwardValue;
+        forwardOut.At(static_cast<std::uint16_t>(row)) += forwardValue;
     }
 
     transposeOut.At(0) = transpose0;
@@ -563,10 +564,10 @@ void AddHalfSymmetricMotionCrossColumn2(const dt::Math::Matrix<6, 6, dtDynReal> 
     for (dtDynIndex col = 0; col < 6; ++col)
     {
         const dtDynReal contribution =
-            -0.5 * ((value0 * inertia.At(row0, col)) +
-                    (value1 * inertia.At(row1, col)));
-        out.At(motionCol, col) += contribution;
-        out.At(col, motionCol) += contribution;
+            -0.5 * ((value0 * inertia.At(static_cast<std::uint16_t>(row0), static_cast<std::uint16_t>(col))) +
+                    (value1 * inertia.At(static_cast<std::uint16_t>(row1), static_cast<std::uint16_t>(col))));
+        out.At(static_cast<std::uint16_t>(motionCol), static_cast<std::uint16_t>(col)) += contribution;
+        out.At(static_cast<std::uint16_t>(col), static_cast<std::uint16_t>(motionCol)) += contribution;
     }
 }
 
@@ -593,12 +594,12 @@ void AddHalfSymmetricMotionCrossColumn4(const dt::Math::Matrix<6, 6, dtDynReal> 
     for (dtDynIndex col = 0; col < 6; ++col)
     {
         const dtDynReal contribution =
-            -0.5 * ((value0 * inertia.At(row0, col)) +
-                    (value1 * inertia.At(row1, col)) +
-                    (value2 * inertia.At(row2, col)) +
-                    (value3 * inertia.At(row3, col)));
-        out.At(motionCol, col) += contribution;
-        out.At(col, motionCol) += contribution;
+            -0.5 * ((value0 * inertia.At(static_cast<std::uint16_t>(row0), static_cast<std::uint16_t>(col))) +
+                    (value1 * inertia.At(static_cast<std::uint16_t>(row1), static_cast<std::uint16_t>(col))) +
+                    (value2 * inertia.At(static_cast<std::uint16_t>(row2), static_cast<std::uint16_t>(col))) +
+                    (value3 * inertia.At(static_cast<std::uint16_t>(row3), static_cast<std::uint16_t>(col))));
+        out.At(static_cast<std::uint16_t>(motionCol), static_cast<std::uint16_t>(col)) += contribution;
+        out.At(static_cast<std::uint16_t>(col), static_cast<std::uint16_t>(motionCol)) += contribution;
     }
 }
 
@@ -683,7 +684,7 @@ void ComputeLocalBiasMatrices(const dtDynModel &model, dtDynData &data)
     // clearing or scanning a 6x6 block every tick.
     for (dtDynIndex bodyId = 0; bodyId < model.nbody; ++bodyId)
     {
-        if (model.body_mass.At(bodyId) <= std::numeric_limits<dtDynReal>::epsilon())
+        if (model.body_mass.At(static_cast<std::uint16_t>(bodyId)) <= std::numeric_limits<dtDynReal>::epsilon())
         {
             data.BmatCompNonzero[static_cast<std::size_t>(bodyId)] = 0;
             continue;
@@ -803,15 +804,15 @@ void ComputeMassMatrixFromCompositeInertias(const dtDynModel &model, dtDynData &
             const dtDynReal value =
                 math::SpatialDot(data.cdof[static_cast<std::size_t>(ancestorDofId)], compositeForce);
 
-            data.Mmat.At(dofId, ancestorDofId) = value;
-            data.Mmat.At(ancestorDofId, dofId) = value;
+            data.Mmat.At(static_cast<std::uint16_t>(dofId), static_cast<std::uint16_t>(ancestorDofId)) = value;
+            data.Mmat.At(static_cast<std::uint16_t>(ancestorDofId), static_cast<std::uint16_t>(dofId)) = value;
             ancestorDofId = model.dof_parentid[static_cast<std::size_t>(ancestorDofId)];
         }
     }
 
     for (dtDynIndex dofId = 0; dofId < model.nv; ++dofId)
     {
-        data.Mmat.At(dofId, dofId) += model.dof_armature.At(dofId);
+        data.Mmat.At(static_cast<std::uint16_t>(dofId), static_cast<std::uint16_t>(dofId)) += model.dof_armature.At(static_cast<std::uint16_t>(dofId));
     }
 }
 
@@ -883,7 +884,7 @@ void ComputeRootComOutputs(const dtDynModel &model, dtDynData &data)
         const dtDynIndex comRow = utils::RootComRow(rootIdx);
         for (dtDynIndex row = 0; row < 3; ++row)
         {
-            data.comPos.At(comRow + row) = data.subtree_com[static_cast<std::size_t>(rootBody)].At(row);
+            data.comPos.At(static_cast<std::uint16_t>(comRow + row)) = data.subtree_com[static_cast<std::size_t>(rootBody)].At(static_cast<std::uint16_t>(row));
         }
     }
 }
@@ -901,12 +902,12 @@ void ComputeCentroidalMomentumMatrix(const dtDynModel &model, dtDynData &data)
         {
             const dtDynIndex linearRow = utils::RootCentroidalLinearRow(rootIdx);
             const dtDynIndex angularRow = utils::RootCentroidalAngularRow(rootIdx);
-            data.cmAmat.At(linearRow + 0, dofId) = data.f2[static_cast<std::size_t>(dofId)].At(3);
-            data.cmAmat.At(linearRow + 1, dofId) = data.f2[static_cast<std::size_t>(dofId)].At(4);
-            data.cmAmat.At(linearRow + 2, dofId) = data.f2[static_cast<std::size_t>(dofId)].At(5);
-            data.cmAmat.At(angularRow + 0, dofId) = data.f2[static_cast<std::size_t>(dofId)].At(0);
-            data.cmAmat.At(angularRow + 1, dofId) = data.f2[static_cast<std::size_t>(dofId)].At(1);
-            data.cmAmat.At(angularRow + 2, dofId) = data.f2[static_cast<std::size_t>(dofId)].At(2);
+            data.cmAmat.At(static_cast<std::uint16_t>(linearRow + 0), static_cast<std::uint16_t>(dofId)) = data.f2[static_cast<std::size_t>(dofId)].At(static_cast<std::uint16_t>(3));
+            data.cmAmat.At(static_cast<std::uint16_t>(linearRow + 1), static_cast<std::uint16_t>(dofId)) = data.f2[static_cast<std::size_t>(dofId)].At(static_cast<std::uint16_t>(4));
+            data.cmAmat.At(static_cast<std::uint16_t>(linearRow + 2), static_cast<std::uint16_t>(dofId)) = data.f2[static_cast<std::size_t>(dofId)].At(static_cast<std::uint16_t>(5));
+            data.cmAmat.At(static_cast<std::uint16_t>(angularRow + 0), static_cast<std::uint16_t>(dofId)) = data.f2[static_cast<std::size_t>(dofId)].At(static_cast<std::uint16_t>(0));
+            data.cmAmat.At(static_cast<std::uint16_t>(angularRow + 1), static_cast<std::uint16_t>(dofId)) = data.f2[static_cast<std::size_t>(dofId)].At(static_cast<std::uint16_t>(1));
+            data.cmAmat.At(static_cast<std::uint16_t>(angularRow + 2), static_cast<std::uint16_t>(dofId)) = data.f2[static_cast<std::size_t>(dofId)].At(static_cast<std::uint16_t>(2));
         }
     }
 }
@@ -923,12 +924,12 @@ void ComputeCentroidalMomentumMatrixDot(const dtDynModel &model, dtDynData &data
         {
             const dtDynIndex linearRow = utils::RootCentroidalLinearRow(rootIdx);
             const dtDynIndex angularRow = utils::RootCentroidalAngularRow(rootIdx);
-            data.cmAmatDot.At(linearRow + 0, dofId) = data.f1[static_cast<std::size_t>(dofId)].At(3);
-            data.cmAmatDot.At(linearRow + 1, dofId) = data.f1[static_cast<std::size_t>(dofId)].At(4);
-            data.cmAmatDot.At(linearRow + 2, dofId) = data.f1[static_cast<std::size_t>(dofId)].At(5);
-            data.cmAmatDot.At(angularRow + 0, dofId) = data.f1[static_cast<std::size_t>(dofId)].At(0);
-            data.cmAmatDot.At(angularRow + 1, dofId) = data.f1[static_cast<std::size_t>(dofId)].At(1);
-            data.cmAmatDot.At(angularRow + 2, dofId) = data.f1[static_cast<std::size_t>(dofId)].At(2);
+            data.cmAmatDot.At(static_cast<std::uint16_t>(linearRow + 0), static_cast<std::uint16_t>(dofId)) = data.f1[static_cast<std::size_t>(dofId)].At(static_cast<std::uint16_t>(3));
+            data.cmAmatDot.At(static_cast<std::uint16_t>(linearRow + 1), static_cast<std::uint16_t>(dofId)) = data.f1[static_cast<std::size_t>(dofId)].At(static_cast<std::uint16_t>(4));
+            data.cmAmatDot.At(static_cast<std::uint16_t>(linearRow + 2), static_cast<std::uint16_t>(dofId)) = data.f1[static_cast<std::size_t>(dofId)].At(static_cast<std::uint16_t>(5));
+            data.cmAmatDot.At(static_cast<std::uint16_t>(angularRow + 0), static_cast<std::uint16_t>(dofId)) = data.f1[static_cast<std::size_t>(dofId)].At(static_cast<std::uint16_t>(0));
+            data.cmAmatDot.At(static_cast<std::uint16_t>(angularRow + 1), static_cast<std::uint16_t>(dofId)) = data.f1[static_cast<std::size_t>(dofId)].At(static_cast<std::uint16_t>(1));
+            data.cmAmatDot.At(static_cast<std::uint16_t>(angularRow + 2), static_cast<std::uint16_t>(dofId)) = data.f1[static_cast<std::size_t>(dofId)].At(static_cast<std::uint16_t>(2));
         }
     }
 }
@@ -939,10 +940,10 @@ void ComputeMassMatrixCCRBA(const dtDynModel &model, dtDynData &data)
     // avoiding a separate composite-force projection per column.
     for (dtDynIndex dofId = model.nv - 1; dofId >= 0; --dofId)
     {
-        data.Mmat.At(dofId, dofId) =
+        data.Mmat.At(static_cast<std::uint16_t>(dofId), static_cast<std::uint16_t>(dofId)) =
             math::SpatialDot(data.cdof[static_cast<std::size_t>(dofId)],
                              data.f2[static_cast<std::size_t>(dofId)]) +
-            model.dof_armature.At(dofId);
+            model.dof_armature.At(static_cast<std::uint16_t>(dofId));
 
         dtDynIndex ancestorDofId = model.dof_parentid[static_cast<std::size_t>(dofId)];
         while (ancestorDofId >= 0)
@@ -950,8 +951,8 @@ void ComputeMassMatrixCCRBA(const dtDynModel &model, dtDynData &data)
             const dtDynReal massValue =
                 math::SpatialDot(data.cdof[static_cast<std::size_t>(ancestorDofId)],
                                  data.f2[static_cast<std::size_t>(dofId)]);
-            data.Mmat.At(dofId, ancestorDofId) = massValue;
-            data.Mmat.At(ancestorDofId, dofId) = massValue;
+            data.Mmat.At(static_cast<std::uint16_t>(dofId), static_cast<std::uint16_t>(ancestorDofId)) = massValue;
+            data.Mmat.At(static_cast<std::uint16_t>(ancestorDofId), static_cast<std::uint16_t>(dofId)) = massValue;
 
             ancestorDofId = model.dof_parentid[static_cast<std::size_t>(ancestorDofId)];
         }
@@ -964,7 +965,7 @@ void ComputeMassMatrixDotCCRBA(const dtDynModel &model, dtDynData &data)
     // ancestor sparsity pattern as M.
     for (dtDynIndex dofId = model.nv - 1; dofId >= 0; --dofId)
     {
-        data.MmatDot.At(dofId, dofId) =
+        data.MmatDot.At(static_cast<std::uint16_t>(dofId), static_cast<std::uint16_t>(dofId)) =
             math::SpatialDot(data.cdof_dot[static_cast<std::size_t>(dofId)],
                              data.f2[static_cast<std::size_t>(dofId)]) +
             math::SpatialDot3(data.cdof[static_cast<std::size_t>(dofId)],
@@ -980,8 +981,8 @@ void ComputeMassMatrixDotCCRBA(const dtDynModel &model, dtDynData &data)
                 math::SpatialDot3(data.cdof[static_cast<std::size_t>(ancestorDofId)],
                                   data.f1[static_cast<std::size_t>(dofId)],
                                   data.f3[static_cast<std::size_t>(dofId)]);
-            data.MmatDot.At(dofId, ancestorDofId) = massDotValue;
-            data.MmatDot.At(ancestorDofId, dofId) = massDotValue;
+            data.MmatDot.At(static_cast<std::uint16_t>(dofId), static_cast<std::uint16_t>(ancestorDofId)) = massDotValue;
+            data.MmatDot.At(static_cast<std::uint16_t>(ancestorDofId), static_cast<std::uint16_t>(dofId)) = massDotValue;
 
             ancestorDofId = model.dof_parentid[static_cast<std::size_t>(ancestorDofId)];
         }
@@ -994,17 +995,17 @@ void ComputeCoriolisMatrixCCRBA(const dtDynModel &model, dtDynData &data)
     // Parent-chain traversal writes only dynamically coupled ancestor entries.
     for (dtDynIndex dofId = model.nv - 1; dofId >= 0; --dofId)
     {
-        data.Cmat.At(dofId, dofId) =
+        data.Cmat.At(static_cast<std::uint16_t>(dofId), static_cast<std::uint16_t>(dofId)) =
             math::SpatialDot(data.cdof[static_cast<std::size_t>(dofId)],
                              data.f1[static_cast<std::size_t>(dofId)]);
 
         dtDynIndex ancestorDofId = model.dof_parentid[static_cast<std::size_t>(dofId)];
         while (ancestorDofId >= 0)
         {
-            data.Cmat.At(ancestorDofId, dofId) =
+            data.Cmat.At(static_cast<std::uint16_t>(ancestorDofId), static_cast<std::uint16_t>(dofId)) =
                 math::SpatialDot(data.cdof[static_cast<std::size_t>(ancestorDofId)],
                                  data.f1[static_cast<std::size_t>(dofId)]);
-            data.Cmat.At(dofId, ancestorDofId) =
+            data.Cmat.At(static_cast<std::uint16_t>(dofId), static_cast<std::uint16_t>(ancestorDofId)) =
                 math::SpatialDot(data.cdof_dot[static_cast<std::size_t>(ancestorDofId)],
                                  data.f2[static_cast<std::size_t>(dofId)]) +
                 math::SpatialDot(data.cdof[static_cast<std::size_t>(ancestorDofId)],
@@ -1026,8 +1027,8 @@ void ComputeCoriolisMatrixAndTorqueCCRBA(const dtDynModel &model, dtDynData &dat
         const dtDynReal diagonalValue =
             math::SpatialDot(data.cdof[static_cast<std::size_t>(dofId)],
                              data.f1[static_cast<std::size_t>(dofId)]);
-        data.Cmat.At(dofId, dofId) = diagonalValue;
-        data.coriolisTorq.At(dofId) += diagonalValue * data.qvel.At(dofId);
+        data.Cmat.At(static_cast<std::uint16_t>(dofId), static_cast<std::uint16_t>(dofId)) = diagonalValue;
+        data.coriolisTorq.At(static_cast<std::uint16_t>(dofId)) += diagonalValue * data.qvel.At(static_cast<std::uint16_t>(dofId));
 
         dtDynIndex ancestorDofId = model.dof_parentid[static_cast<std::size_t>(dofId)];
         while (ancestorDofId >= 0)
@@ -1041,10 +1042,10 @@ void ComputeCoriolisMatrixAndTorqueCCRBA(const dtDynModel &model, dtDynData &dat
                 math::SpatialDot(data.cdof[static_cast<std::size_t>(ancestorDofId)],
                                  data.f3[static_cast<std::size_t>(dofId)]);
 
-            data.Cmat.At(ancestorDofId, dofId) = ancestorRowValue;
-            data.Cmat.At(dofId, ancestorDofId) = dofRowValue;
-            data.coriolisTorq.At(ancestorDofId) += ancestorRowValue * data.qvel.At(dofId);
-            data.coriolisTorq.At(dofId) += dofRowValue * data.qvel.At(ancestorDofId);
+            data.Cmat.At(static_cast<std::uint16_t>(ancestorDofId), static_cast<std::uint16_t>(dofId)) = ancestorRowValue;
+            data.Cmat.At(static_cast<std::uint16_t>(dofId), static_cast<std::uint16_t>(ancestorDofId)) = dofRowValue;
+            data.coriolisTorq.At(static_cast<std::uint16_t>(ancestorDofId)) += ancestorRowValue * data.qvel.At(static_cast<std::uint16_t>(dofId));
+            data.coriolisTorq.At(static_cast<std::uint16_t>(dofId)) += dofRowValue * data.qvel.At(static_cast<std::uint16_t>(ancestorDofId));
 
             ancestorDofId = model.dof_parentid[static_cast<std::size_t>(ancestorDofId)];
         }
@@ -1062,7 +1063,7 @@ void ComputeComJacobianMatrixFromForces(const dtDynModel &model, dtDynData &data
         {
             continue;
         }
-        if (model.root_mass.At(rootIdx) <= std::numeric_limits<dtDynReal>::epsilon())
+        if (model.root_mass.At(static_cast<std::uint16_t>(rootIdx)) <= std::numeric_limits<dtDynReal>::epsilon())
         {
             continue;
         }
@@ -1070,8 +1071,8 @@ void ComputeComJacobianMatrixFromForces(const dtDynModel &model, dtDynData &data
         const dtDynIndex comRow = utils::RootComRow(rootIdx);
         for (dtDynIndex row = 0; row < 3; ++row)
         {
-            data.comJmat.At(comRow + row, dofId) =
-                data.f2[static_cast<std::size_t>(dofId)].At(3 + row) / model.root_mass.At(rootIdx);
+            data.comJmat.At(static_cast<std::uint16_t>(comRow + row), static_cast<std::uint16_t>(dofId)) =
+                data.f2[static_cast<std::size_t>(dofId)].At(static_cast<std::uint16_t>(3 + row)) / model.root_mass.At(static_cast<std::uint16_t>(rootIdx));
         }
     }
 }
@@ -1087,7 +1088,7 @@ void ComputeComJacobianMatrixDotFromForces(const dtDynModel &model, dtDynData &d
         {
             continue;
         }
-        if (model.root_mass.At(rootIdx) <= std::numeric_limits<dtDynReal>::epsilon())
+        if (model.root_mass.At(static_cast<std::uint16_t>(rootIdx)) <= std::numeric_limits<dtDynReal>::epsilon())
         {
             continue;
         }
@@ -1095,8 +1096,8 @@ void ComputeComJacobianMatrixDotFromForces(const dtDynModel &model, dtDynData &d
         const dtDynIndex comRow = utils::RootComRow(rootIdx);
         for (dtDynIndex row = 0; row < 3; ++row)
         {
-            data.comJmatDot.At(comRow + row, dofId) =
-                data.f1[static_cast<std::size_t>(dofId)].At(3 + row) / model.root_mass.At(rootIdx);
+            data.comJmatDot.At(static_cast<std::uint16_t>(comRow + row), static_cast<std::uint16_t>(dofId)) =
+                data.f1[static_cast<std::size_t>(dofId)].At(static_cast<std::uint16_t>(3 + row)) / model.root_mass.At(static_cast<std::uint16_t>(rootIdx));
         }
     }
 }
@@ -1118,11 +1119,11 @@ void ComputeCentroidalMomentumProductFromForces(const dtDynModel &model, dtDynDa
 
         const dtDynIndex linearRow = utils::RootCentroidalLinearRow(rootIdx);
         const dtDynIndex angularRow = utils::RootCentroidalAngularRow(rootIdx);
-        const dtDynReal qvel = data.qvel.At(dofId);
+        const dtDynReal qvel = data.qvel.At(static_cast<std::uint16_t>(dofId));
         for (dtDynIndex row = 0; row < 3; ++row)
         {
-            data.centMom.At(linearRow + row) += data.f2[static_cast<std::size_t>(dofId)].At(3 + row) * qvel;
-            data.centMom.At(angularRow + row) += data.f2[static_cast<std::size_t>(dofId)].At(row) * qvel;
+            data.centMom.At(static_cast<std::uint16_t>(linearRow + row)) += data.f2[static_cast<std::size_t>(dofId)].At(static_cast<std::uint16_t>(3 + row)) * qvel;
+            data.centMom.At(static_cast<std::uint16_t>(angularRow + row)) += data.f2[static_cast<std::size_t>(dofId)].At(static_cast<std::uint16_t>(row)) * qvel;
         }
     }
 }
@@ -1140,17 +1141,17 @@ void ComputeComVelocityProductFromForces(const dtDynModel &model, dtDynData &dat
         {
             continue;
         }
-        if (model.root_mass.At(rootIdx) <= std::numeric_limits<dtDynReal>::epsilon())
+        if (model.root_mass.At(static_cast<std::uint16_t>(rootIdx)) <= std::numeric_limits<dtDynReal>::epsilon())
         {
             continue;
         }
 
         const dtDynIndex comRow = utils::RootComRow(rootIdx);
-        const dtDynReal qvel = data.qvel.At(dofId);
+        const dtDynReal qvel = data.qvel.At(static_cast<std::uint16_t>(dofId));
         for (dtDynIndex row = 0; row < 3; ++row)
         {
-            data.comVel.At(comRow + row) +=
-                data.f2[static_cast<std::size_t>(dofId)].At(3 + row) * qvel / model.root_mass.At(rootIdx);
+            data.comVel.At(static_cast<std::uint16_t>(comRow + row)) +=
+                data.f2[static_cast<std::size_t>(dofId)].At(static_cast<std::uint16_t>(3 + row)) * qvel / model.root_mass.At(static_cast<std::uint16_t>(rootIdx));
         }
     }
 }
@@ -1163,7 +1164,7 @@ void ComputeCoriolisTorqueProduct(const dtDynModel &model, dtDynData &data)
     {
         for (dtDynIndex col = 0; col < model.nv; ++col)
         {
-            data.coriolisTorq.At(row) += data.Cmat.At(row, col) * data.qvel.At(col);
+            data.coriolisTorq.At(static_cast<std::uint16_t>(row)) += data.Cmat.At(static_cast<std::uint16_t>(row), static_cast<std::uint16_t>(col)) * data.qvel.At(static_cast<std::uint16_t>(col));
         }
     }
 }
@@ -1195,9 +1196,9 @@ void ComputeRNEATorque(const dtDynModel &model,
         }
         else
         {
-            data.cacc[static_cast<std::size_t>(bodyId)].At(3) = -gravity.At(0);
-            data.cacc[static_cast<std::size_t>(bodyId)].At(4) = -gravity.At(1);
-            data.cacc[static_cast<std::size_t>(bodyId)].At(5) = -gravity.At(2);
+            data.cacc[static_cast<std::size_t>(bodyId)].At(static_cast<std::uint16_t>(3)) = -gravity.At(0);
+            data.cacc[static_cast<std::size_t>(bodyId)].At(static_cast<std::uint16_t>(4)) = -gravity.At(1);
+            data.cacc[static_cast<std::size_t>(bodyId)].At(static_cast<std::uint16_t>(5)) = -gravity.At(2);
         }
 
         if (includeVelocityTerms)
@@ -1209,11 +1210,11 @@ void ComputeRNEATorque(const dtDynModel &model,
                 const dtDynIndex dofId = dofAdr + localDofId;
                 AddScaledSpatialInPlace(data.cacc[static_cast<std::size_t>(bodyId)],
                                         data.cdof_dot[static_cast<std::size_t>(dofId)],
-                                        data.qvel.At(dofId));
+                                        data.qvel.At(static_cast<std::uint16_t>(dofId)));
             }
         }
 
-        if (model.body_mass.At(bodyId) <= std::numeric_limits<dtDynReal>::epsilon())
+        if (model.body_mass.At(static_cast<std::uint16_t>(bodyId)) <= std::numeric_limits<dtDynReal>::epsilon())
         {
             continue;
         }
@@ -1241,7 +1242,7 @@ void ComputeRNEATorque(const dtDynModel &model,
         for (dtDynIndex localDofId = 0; localDofId < dofNum; ++localDofId)
         {
             const dtDynIndex dofId = dofAdr + localDofId;
-            output.At(dofId) =
+            output.At(static_cast<std::uint16_t>(dofId)) =
                 math::SpatialDot(data.cdof[static_cast<std::size_t>(dofId)],
                                  data.cfrc[static_cast<std::size_t>(bodyId)]);
         }
@@ -1265,7 +1266,7 @@ void ComputeRNEABiasForces(const dtDynModel &model,
     data.coriolisTorq.SetZero();
     for (dtDynIndex dofId = 0; dofId < model.nv; ++dofId)
     {
-        data.coriolisTorq.At(dofId) = data.nonlinTorq.At(dofId) - data.gravityTorq.At(dofId);
+        data.coriolisTorq.At(static_cast<std::uint16_t>(dofId)) = data.nonlinTorq.At(static_cast<std::uint16_t>(dofId)) - data.gravityTorq.At(static_cast<std::uint16_t>(dofId));
     }
 }
 
@@ -1286,10 +1287,10 @@ void ComputeGravityFromCentroidalForces(const dtDynModel &model,
         }
 
         dt::Math::Vector3<dtDynReal> linearMomentumColumn;
-        linearMomentumColumn.At(0) = data.f2[static_cast<std::size_t>(dofId)].At(3);
-        linearMomentumColumn.At(1) = data.f2[static_cast<std::size_t>(dofId)].At(4);
-        linearMomentumColumn.At(2) = data.f2[static_cast<std::size_t>(dofId)].At(5);
-        data.gravityTorq.At(dofId) -= linearMomentumColumn.Inner(gravity);
+        linearMomentumColumn.At(0) = data.f2[static_cast<std::size_t>(dofId)].At(static_cast<std::uint16_t>(3));
+        linearMomentumColumn.At(1) = data.f2[static_cast<std::size_t>(dofId)].At(static_cast<std::uint16_t>(4));
+        linearMomentumColumn.At(2) = data.f2[static_cast<std::size_t>(dofId)].At(static_cast<std::uint16_t>(5));
+        data.gravityTorq.At(static_cast<std::uint16_t>(dofId)) -= linearMomentumColumn.Inner(gravity);
     }
 }
 
@@ -1303,7 +1304,7 @@ void ComputeCCRBABiasForces(const dtDynModel &model,
     data.nonlinTorq.SetZero();
     for (dtDynIndex dofId = 0; dofId < model.nv; ++dofId)
     {
-        data.nonlinTorq.At(dofId) = data.gravityTorq.At(dofId) + data.coriolisTorq.At(dofId);
+        data.nonlinTorq.At(static_cast<std::uint16_t>(dofId)) = data.gravityTorq.At(static_cast<std::uint16_t>(dofId)) + data.coriolisTorq.At(static_cast<std::uint16_t>(dofId));
     }
 }
 
@@ -1316,7 +1317,7 @@ void ComputeCCRBABiasForcesFromReadyCoriolisTorque(const dtDynModel &model,
     data.nonlinTorq.SetZero();
     for (dtDynIndex dofId = 0; dofId < model.nv; ++dofId)
     {
-        data.nonlinTorq.At(dofId) = data.gravityTorq.At(dofId) + data.coriolisTorq.At(dofId);
+        data.nonlinTorq.At(static_cast<std::uint16_t>(dofId)) = data.gravityTorq.At(static_cast<std::uint16_t>(dofId)) + data.coriolisTorq.At(static_cast<std::uint16_t>(dofId));
     }
 }
 

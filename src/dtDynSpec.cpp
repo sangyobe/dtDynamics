@@ -14,6 +14,7 @@
 #include <array>
 #include <cctype>
 #include <cmath>
+#include <cstdint>
 #include <fstream>
 #include <iomanip>
 #include <sstream>
@@ -96,7 +97,7 @@ std::string Trim(const std::string &text)
     std::size_t first = 0;
     while (first < text.size())
     {
-        if (!std::isspace(static_cast<unsigned char>(text[first])))
+        if (!std::isspace(static_cast<std::uint8_t>(text[first])))
         {
             break;
         }
@@ -106,7 +107,7 @@ std::string Trim(const std::string &text)
     std::size_t last = text.size();
     while (last > first)
     {
-        if (!std::isspace(static_cast<unsigned char>(text[last - 1])))
+        if (!std::isspace(static_cast<std::uint8_t>(text[last - 1])))
         {
             break;
         }
@@ -120,7 +121,7 @@ std::string TagName(const std::string &tag)
     std::size_t pos = 0;
     while (pos < tag.size())
     {
-        if (std::isspace(static_cast<unsigned char>(tag[pos])))
+        if (std::isspace(static_cast<std::uint8_t>(tag[pos])))
         {
             break;
         }
@@ -130,7 +131,7 @@ std::string TagName(const std::string &tag)
         }
         ++pos;
     }
-    return tag.substr(0, pos);
+    return tag.substr(static_cast<std::size_t>(0), pos);
 }
 
 struct ElementFrame
@@ -190,7 +191,7 @@ bool IsValidTagName(const std::string &name)
     {
         return false;
     }
-    if (!std::isalpha(static_cast<unsigned char>(name[0])))
+    if (!std::isalpha(static_cast<std::uint8_t>(name[0])))
     {
         if (name[0] != '_')
         {
@@ -199,7 +200,7 @@ bool IsValidTagName(const std::string &name)
     }
     for (const char character : name)
     {
-        if (!std::isalnum(static_cast<unsigned char>(character)))
+        if (!std::isalnum(static_cast<std::uint8_t>(character)))
         {
             if (character != '_')
             {
@@ -225,7 +226,7 @@ std::size_t FindFirstNonWhitespace(const std::string &xml,
 {
     for (std::size_t offset = begin; offset < end; ++offset)
     {
-        if (!std::isspace(static_cast<unsigned char>(xml[offset])))
+        if (!std::isspace(static_cast<std::uint8_t>(xml[offset])))
         {
             return offset;
         }
@@ -372,7 +373,7 @@ AttributeMap ParseAttributes(const std::string &tag, const std::size_t tagOffset
     {
         while (pos < tag.size())
         {
-            if (!std::isspace(static_cast<unsigned char>(tag[pos])))
+            if (!std::isspace(static_cast<std::uint8_t>(tag[pos])))
             {
                 break;
             }
@@ -396,7 +397,7 @@ AttributeMap ParseAttributes(const std::string &tag, const std::size_t tagOffset
             {
                 break;
             }
-            if (std::isspace(static_cast<unsigned char>(tag[pos])))
+            if (std::isspace(static_cast<std::uint8_t>(tag[pos])))
             {
                 break;
             }
@@ -412,7 +413,7 @@ AttributeMap ParseAttributes(const std::string &tag, const std::size_t tagOffset
 
         while (pos < tag.size())
         {
-            if (!std::isspace(static_cast<unsigned char>(tag[pos])))
+            if (!std::isspace(static_cast<std::uint8_t>(tag[pos])))
             {
                 break;
             }
@@ -441,7 +442,7 @@ AttributeMap ParseAttributes(const std::string &tag, const std::size_t tagOffset
         ++pos;
         while (pos < tag.size())
         {
-            if (!std::isspace(static_cast<unsigned char>(tag[pos])))
+            if (!std::isspace(static_cast<std::uint8_t>(tag[pos])))
             {
                 break;
             }
@@ -511,7 +512,7 @@ dtDynReal ParseReal(const AttributeValue &attribute, const std::string &sourcePa
     std::size_t first = 0;
     while (first < attribute.text.size())
     {
-        if (!std::isspace(static_cast<unsigned char>(attribute.text[first])))
+        if (!std::isspace(static_cast<std::uint8_t>(attribute.text[first])))
         {
             break;
         }
@@ -520,7 +521,7 @@ dtDynReal ParseReal(const AttributeValue &attribute, const std::string &sourcePa
     std::size_t last = attribute.text.size();
     while (last > first)
     {
-        if (!std::isspace(static_cast<unsigned char>(attribute.text[last - 1])))
+        if (!std::isspace(static_cast<std::uint8_t>(attribute.text[last - 1])))
         {
             break;
         }
@@ -593,7 +594,7 @@ dtArray<dtDynReal> ParseVectorValues(const AttributeValue &attribute, const std:
     {
         while (pos < attribute.text.size())
         {
-            if (!std::isspace(static_cast<unsigned char>(attribute.text[pos])))
+            if (!std::isspace(static_cast<std::uint8_t>(attribute.text[pos])))
             {
                 break;
             }
@@ -606,7 +607,7 @@ dtArray<dtDynReal> ParseVectorValues(const AttributeValue &attribute, const std:
         const std::size_t tokenStart = pos;
         while (pos < attribute.text.size())
         {
-            if (std::isspace(static_cast<unsigned char>(attribute.text[pos])))
+            if (std::isspace(static_cast<std::uint8_t>(attribute.text[pos])))
             {
                 break;
             }
@@ -767,8 +768,8 @@ void EncodeBody(const dtDynSpec &spec,
     const dtDynBodySpec &body = spec.Bodies()[static_cast<std::size_t>(bodyId)];
     const std::string indent(static_cast<std::size_t>(depth * 2), ' ');
     out << indent << "<body name=\"" << body.name << "\" pos=\"" << FormatVector3(body.pos) << "\"";
-    if ((body.quat.At(0) != 0.0) || (body.quat.At(1) != 0.0) ||
-        (body.quat.At(2) != 0.0) || (body.quat.At(3) != 0.0))
+    if ((body.quat.At(static_cast<std::uint16_t>(0)) != 0.0) || (body.quat.At(static_cast<std::uint16_t>(1)) != 0.0) ||
+        (body.quat.At(static_cast<std::uint16_t>(2)) != 0.0) || (body.quat.At(static_cast<std::uint16_t>(3)) != 0.0))
     {
         out << " quat=\"" << FormatVector4(body.quat) << "\"";
     }
@@ -779,8 +780,8 @@ void EncodeBody(const dtDynSpec &spec,
         out << indent << "  <inertial pos=\"" << FormatVector3(body.inertial.pos)
             << "\" mass=\"" << FormatReal(body.inertial.mass)
             << "\" diaginertia=\"" << FormatVector3(body.inertial.inertia) << "\"";
-        if ((body.inertial.quat.At(0) != 0.0) || (body.inertial.quat.At(1) != 0.0) ||
-            (body.inertial.quat.At(2) != 0.0) || (body.inertial.quat.At(3) != 0.0))
+        if ((body.inertial.quat.At(static_cast<std::uint16_t>(0)) != 0.0) || (body.inertial.quat.At(static_cast<std::uint16_t>(1)) != 0.0) ||
+            (body.inertial.quat.At(static_cast<std::uint16_t>(2)) != 0.0) || (body.inertial.quat.At(static_cast<std::uint16_t>(3)) != 0.0))
         {
             out << " quat=\"" << FormatVector4(body.inertial.quat) << "\"";
         }
@@ -808,8 +809,8 @@ void EncodeBody(const dtDynSpec &spec,
         const dtDynSiteSpec &site = spec.Sites()[static_cast<std::size_t>(siteId)];
         out << indent << "  <site name=\"" << site.name
             << "\" pos=\"" << FormatVector3(site.pos) << "\"";
-        if ((site.quat.At(0) != 0.0) || (site.quat.At(1) != 0.0) ||
-            (site.quat.At(2) != 0.0) || (site.quat.At(3) != 0.0))
+        if ((site.quat.At(static_cast<std::uint16_t>(0)) != 0.0) || (site.quat.At(static_cast<std::uint16_t>(1)) != 0.0) ||
+            (site.quat.At(static_cast<std::uint16_t>(2)) != 0.0) || (site.quat.At(static_cast<std::uint16_t>(3)) != 0.0))
         {
             out << " quat=\"" << FormatVector4(site.quat) << "\"";
         }
@@ -962,8 +963,8 @@ dtDynIndex dtDynSpec::AddBody(const std::string &name, const dtDynIndex parent)
 
     if ((parent >= 0) && (parent < id))
     {
-        m_storage.m_bodies[id].nextSibling = m_storage.m_bodies[parent].firstChild;
-        m_storage.m_bodies[parent].firstChild = id;
+        m_storage.m_bodies[static_cast<std::size_t>(id)].nextSibling = m_storage.m_bodies[static_cast<std::size_t>(parent)].firstChild;
+        m_storage.m_bodies[static_cast<std::size_t>(parent)].firstChild = id;
     }
 
     return id;
@@ -976,16 +977,16 @@ dtDynIndex dtDynSpec::AddJoint(const dtDynIndex body, const std::string &name, c
     joint.name = name;
     joint.body = body;
     joint.type = type;
-    joint.axis.At(0) = 0.0;
-    joint.axis.At(1) = 0.0;
-    joint.axis.At(2) = 1.0;
+    joint.axis.At(static_cast<std::uint16_t>(0)) = 0.0;
+    joint.axis.At(static_cast<std::uint16_t>(1)) = 0.0;
+    joint.axis.At(static_cast<std::uint16_t>(2)) = 1.0;
 
     const dtDynIndex id = static_cast<dtDynIndex>(m_storage.m_joints.size());
     m_storage.m_joints.push_back(std::move(joint));
 
     if ((body >= 0) && (body < static_cast<dtDynIndex>(m_storage.m_bodies.size())))
     {
-        m_storage.m_bodies[body].joints.push_back(id);
+        m_storage.m_bodies[static_cast<std::size_t>(body)].joints.push_back(id);
     }
 
     return id;
@@ -1004,7 +1005,7 @@ dtDynIndex dtDynSpec::AddSite(const dtDynIndex body, const std::string &name)
 
     if ((body >= 0) && (body < static_cast<dtDynIndex>(m_storage.m_bodies.size())))
     {
-        m_storage.m_bodies[body].sites.push_back(id);
+        m_storage.m_bodies[static_cast<std::size_t>(body)].sites.push_back(id);
     }
 
     return id;
@@ -1038,7 +1039,7 @@ std::string dtDynSpec::EncodeXml() const
     out << "<mujoco>\n";
     out << "  <compiler angle=\"radian\"/>\n";
     out << "  <worldbody>\n";
-    dtDynIndex child = m_storage.m_bodies[0].firstChild;
+    dtDynIndex child = m_storage.m_bodies[static_cast<std::size_t>(0)].firstChild;
     while (child >= 0)
     {
         EncodeBody(*this, child, 2, out);
@@ -1089,7 +1090,7 @@ dtDynSpec DecodeXmlImpl(const std::string &xml, const std::string &sourcePath)
     bodyStack.push_back(0);
     dtArray<ElementFrame> elementStack;
     dtArray<std::size_t> bodyOrigins;
-    bodyOrigins.push_back(0);
+    bodyOrigins.push_back(static_cast<std::size_t>(0));
     dtArray<std::size_t> jointOrigins;
     dtArray<std::size_t> siteOrigins;
     dtArray<std::size_t> actuatorOrigins;
@@ -1137,7 +1138,7 @@ dtDynSpec DecodeXmlImpl(const std::string &xml, const std::string &sourcePath)
         std::size_t leadingWhitespace = 0;
         while (leadingWhitespace < rawTag.size())
         {
-            if (!std::isspace(static_cast<unsigned char>(rawTag[leadingWhitespace])))
+            if (!std::isspace(static_cast<std::uint8_t>(rawTag[leadingWhitespace])))
             {
                 break;
             }
@@ -1158,7 +1159,7 @@ dtDynSpec DecodeXmlImpl(const std::string &xml, const std::string &sourcePath)
                 throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath, begin,
                                     "malformed or misplaced XML declaration");
             }
-            const std::string declaration = Trim(tag.substr(1, tag.size() - 2));
+            const std::string declaration = Trim(tag.substr(static_cast<std::size_t>(1), tag.size() - 2));
             if (TagName(declaration) != "xml")
             {
                 throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath, begin,
@@ -1233,11 +1234,11 @@ dtDynSpec DecodeXmlImpl(const std::string &xml, const std::string &sourcePath)
         if (tag[0] == '/')
         {
             closing = true;
-            const std::string closingTag = tag.substr(1);
+            const std::string closingTag = tag.substr(static_cast<std::size_t>(1));
             std::size_t closingWhitespace = 0;
             while (closingWhitespace < closingTag.size())
             {
-                if (!std::isspace(static_cast<unsigned char>(closingTag[closingWhitespace])))
+                if (!std::isspace(static_cast<std::uint8_t>(closingTag[closingWhitespace])))
                 {
                     break;
                 }
@@ -1253,7 +1254,7 @@ dtDynSpec DecodeXmlImpl(const std::string &xml, const std::string &sourcePath)
             if (tag.back() == '/')
             {
                 selfClosing = true;
-                tag = Trim(tag.substr(0, tag.size() - 1));
+                tag = Trim(tag.substr(static_cast<std::size_t>(0), tag.size() - 1));
             }
         }
 
@@ -1274,7 +1275,7 @@ dtDynSpec DecodeXmlImpl(const std::string &xml, const std::string &sourcePath)
             std::size_t suffix = name.size();
             while (suffix < tag.size())
             {
-                if (!std::isspace(static_cast<unsigned char>(tag[suffix])))
+                if (!std::isspace(static_cast<std::uint8_t>(tag[suffix])))
                 {
                     break;
                 }

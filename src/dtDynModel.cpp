@@ -134,10 +134,10 @@ bool dtDynModel::IsFixedBody(const dtDynIndex body) const
         return false;
     }
 
-    return (body_jntnum[body] == 0) &&
-           (body_jntadr[body] == DTDYN_INVALID_INDEX) &&
-           (body_dofnum[body] == 0) &&
-           (body_dofadr[body] == DTDYN_INVALID_INDEX);
+    return (body_jntnum[static_cast<std::size_t>(body)] == 0) &&
+           (body_jntadr[static_cast<std::size_t>(body)] == DTDYN_INVALID_INDEX) &&
+           (body_dofnum[static_cast<std::size_t>(body)] == 0) &&
+           (body_dofadr[static_cast<std::size_t>(body)] == DTDYN_INVALID_INDEX);
 }
 
 void dtDynModel::RebuildNameMaps()
