@@ -13,7 +13,7 @@ Author: Joonhee Jo
 | editable spec | `dtDynSpec`, `ValidateSpec` | immutable collection views, callback-scoped `Edit*`, setup-time linear lookup |
 | checked compile | `CompileSpecChecked` | external/editable input을 validate한 뒤 compile |
 | trusted compile | `CompileSpec` | 이미 검증된 setup input을 위한 호환 path |
-| fixed-layout physical update | `UpdateSpec` | topology/address/storage/name map이 같을 때만 사용; exclusive model access가 보장된 control-safe boundary에서 실행; incompatible spec은 `false`와 함께 model write 없이 종료; 성공 뒤 `dtDynData` output은 stale이므로 재계산 필요 |
+| fixed-layout physical update | `UpdateSpec` (`noexcept`) | topology/address/storage/name map이 같을 때만 사용; exclusive model access가 보장된 control-safe boundary에서 실행; incompatible spec은 `false`와 함께 model write 없이 종료; 성공 뒤 `dtDynData` output은 stale이므로 재계산 필요 |
 | compiled model | `dtDynModel`, `ValidateModel` | dimensions/address/name map이 고정된 setup contract |
 | runtime storage | `dtDynData::Resize`, `IsCompatible` | model-indexed storage 준비; compatibility는 dimension-only |
 

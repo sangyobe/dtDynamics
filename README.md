@@ -4,7 +4,9 @@
 - 제공 항목: 질량행렬, 중력·코리올리·비선형 토크, body/site Jacobian과 시간미분 항, CoM, centroidal momentum 항
 - 미제공 항목: 접촉 해석, 시뮬레이션 적분, 최종 토크 결정
 - 현재 패키지 버전: **0.1.3**
-- production library 의존성: `dtMath` 단일
+- production library 의존성: `dtMath` 단일. named element accessor `At()`를 제공하는 revision 필요
+- CI 고정 revision: `b6cb3af6d0ec930d3bcfc030b146380d0fc56cfd`
+- 다른 위치의 dtMath 사용: `cmake --preset release -DDTDYNAMICS_DTMATH_INCLUDE_DIR=/path/to/dtMath/include` (`dtMath/dtMath.h`를 포함하는 include root)
 - MuJoCo 3.8.0, Pinocchio 3.9.0: `.validation_deps` 아래의 검증·benchmark 전용 참조 구현
 
 ## 가장 짧은 사용 흐름
@@ -83,8 +85,7 @@ tools/audit_release_readiness.sh
   - production CMake export에 MuJoCo/Pinocchio 없음
   - installed public-header version과 current SVG package claim이 `0.1.3`
   - `PATHS ... NO_DEFAULT_PATH`로 선택한 config만 찾고, imported library가 선택한 staged `${prefix}/${install_libdir}` 아래에 있으며 package include가 staged prefix 아래에 있는지 확인
-  - staged prefix를 이동한 뒤에도 fresh consumer가 configure, compile, link, run
-  - fresh downstream consumer의 configure, compile, link, run
+  - staged prefix를 이동한 뒤에도 fresh downstream consumer가 configure, compile, link, run
 - `validate_package.sh` 기본 matrix는 위 validator를 `lib`와 `lib64` 각각에 독립 실행
 
 - benchmark 결과: wall-clock byte replay 비보장

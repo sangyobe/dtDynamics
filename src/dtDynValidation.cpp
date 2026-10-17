@@ -438,8 +438,8 @@ bool ValidateSpec(const dtDynSpec &spec, dtDynValidationError *error)
     for (std::size_t jointIndex = 0; jointIndex < dofJointCount; ++jointIndex)
     {
         const dtDynJointDofSize size = GetJointDofSize(spec.Joints()[jointIndex].type);
-        nq += static_cast<long long>(size.qposSize);
-        nv += static_cast<long long>(size.qvelSize);
+        nq += static_cast<decltype(nq)>(size.qposSize);
+        nv += static_cast<decltype(nv)>(size.qvelSize);
         if ((nq > maximum) || nv > maximum)
         {
             return Fail(error, dtDynValidationCode::DimensionOverflow, dtDynObjectType::Joint,
@@ -711,70 +711,182 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
                     DTDYN_INVALID_INDEX, "compiled model has no world body[0]");
     }
 
-#define DTDYN_REQUIRE_ARRAY(label, member, count)                       \
-    if (!RequireModelArraySize(label, model.member.size(), model.count, \
-                               error))                                  \
-    {                                                                   \
-        return false;                                                   \
-    }                                                                   \
-    static_assert(true, "")
-#define DTDYN_REQUIRE_DENSE(label, member, count)                        \
-    if (!RequireModelDenseSize(label, model.member, model.count, error)) \
-    {                                                                    \
-        return false;                                                    \
-    }                                                                    \
-    static_assert(true, "")
+    if (!RequireModelArraySize("body_names", model.body_names.size(), model.nbody, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("body_parentid", model.body_parentid.size(), model.nbody, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("body_rootid", model.body_rootid.size(), model.nbody, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("body_rootidx", model.body_rootidx.size(), model.nbody, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("body_jntnum", model.body_jntnum.size(), model.nbody, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("body_jntadr", model.body_jntadr.size(), model.nbody, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("body_dofnum", model.body_dofnum.size(), model.nbody, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("body_dofadr", model.body_dofadr.size(), model.nbody, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("body_weldid", model.body_weldid.size(), model.nbody, error))
+    {
+        return false;
+    }
+    if (!RequireModelDenseSize("body_mass", model.body_mass, model.nbody, error))
+    {
+        return false;
+    }
+    if (!RequireModelDenseSize("body_subtreemass", model.body_subtreemass, model.nbody, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("body_pos", model.body_pos.size(), model.nbody, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("body_quat", model.body_quat.size(), model.nbody, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("body_mat", model.body_mat.size(), model.nbody, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("body_ipos", model.body_ipos.size(), model.nbody, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("body_iquat", model.body_iquat.size(), model.nbody, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("body_imat", model.body_imat.size(), model.nbody, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("body_inertia", model.body_inertia.size(), model.nbody, error))
+    {
+        return false;
+    }
 
-    DTDYN_REQUIRE_ARRAY("body_names", body_names, nbody);
-    DTDYN_REQUIRE_ARRAY("body_parentid", body_parentid, nbody);
-    DTDYN_REQUIRE_ARRAY("body_rootid", body_rootid, nbody);
-    DTDYN_REQUIRE_ARRAY("body_rootidx", body_rootidx, nbody);
-    DTDYN_REQUIRE_ARRAY("body_jntnum", body_jntnum, nbody);
-    DTDYN_REQUIRE_ARRAY("body_jntadr", body_jntadr, nbody);
-    DTDYN_REQUIRE_ARRAY("body_dofnum", body_dofnum, nbody);
-    DTDYN_REQUIRE_ARRAY("body_dofadr", body_dofadr, nbody);
-    DTDYN_REQUIRE_ARRAY("body_weldid", body_weldid, nbody);
-    DTDYN_REQUIRE_DENSE("body_mass", body_mass, nbody);
-    DTDYN_REQUIRE_DENSE("body_subtreemass", body_subtreemass, nbody);
-    DTDYN_REQUIRE_ARRAY("body_pos", body_pos, nbody);
-    DTDYN_REQUIRE_ARRAY("body_quat", body_quat, nbody);
-    DTDYN_REQUIRE_ARRAY("body_mat", body_mat, nbody);
-    DTDYN_REQUIRE_ARRAY("body_ipos", body_ipos, nbody);
-    DTDYN_REQUIRE_ARRAY("body_iquat", body_iquat, nbody);
-    DTDYN_REQUIRE_ARRAY("body_imat", body_imat, nbody);
-    DTDYN_REQUIRE_ARRAY("body_inertia", body_inertia, nbody);
+    if (!RequireModelArraySize("joint_names", model.joint_names.size(), model.njnt, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("jnt_type", model.jnt_type.size(), model.njnt, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("jnt_bodyid", model.jnt_bodyid.size(), model.njnt, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("jnt_specid", model.jnt_specid.size(), model.njnt, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("jnt_qposadr", model.jnt_qposadr.size(), model.njnt, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("jnt_dofadr", model.jnt_dofadr.size(), model.njnt, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("jnt_limited", model.jnt_limited.size(), model.njnt, error))
+    {
+        return false;
+    }
+    if (!RequireModelDenseSize("jnt_range_min", model.jnt_range_min, model.njnt, error))
+    {
+        return false;
+    }
+    if (!RequireModelDenseSize("jnt_range_max", model.jnt_range_max, model.njnt, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("jnt_pos", model.jnt_pos.size(), model.njnt, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("jnt_axis", model.jnt_axis.size(), model.njnt, error))
+    {
+        return false;
+    }
 
-    DTDYN_REQUIRE_ARRAY("joint_names", joint_names, njnt);
-    DTDYN_REQUIRE_ARRAY("jnt_type", jnt_type, njnt);
-    DTDYN_REQUIRE_ARRAY("jnt_bodyid", jnt_bodyid, njnt);
-    DTDYN_REQUIRE_ARRAY("jnt_specid", jnt_specid, njnt);
-    DTDYN_REQUIRE_ARRAY("jnt_qposadr", jnt_qposadr, njnt);
-    DTDYN_REQUIRE_ARRAY("jnt_dofadr", jnt_dofadr, njnt);
-    DTDYN_REQUIRE_ARRAY("jnt_limited", jnt_limited, njnt);
-    DTDYN_REQUIRE_DENSE("jnt_range_min", jnt_range_min, njnt);
-    DTDYN_REQUIRE_DENSE("jnt_range_max", jnt_range_max, njnt);
-    DTDYN_REQUIRE_ARRAY("jnt_pos", jnt_pos, njnt);
-    DTDYN_REQUIRE_ARRAY("jnt_axis", jnt_axis, njnt);
+    if (!RequireModelArraySize("dof_bodyid", model.dof_bodyid.size(), model.nv, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("dof_parentid", model.dof_parentid.size(), model.nv, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("dof_jntid", model.dof_jntid.size(), model.nv, error))
+    {
+        return false;
+    }
+    if (!RequireModelDenseSize("dof_armature", model.dof_armature, model.nv, error))
+    {
+        return false;
+    }
 
-    DTDYN_REQUIRE_ARRAY("dof_bodyid", dof_bodyid, nv);
-    DTDYN_REQUIRE_ARRAY("dof_parentid", dof_parentid, nv);
-    DTDYN_REQUIRE_ARRAY("dof_jntid", dof_jntid, nv);
-    DTDYN_REQUIRE_DENSE("dof_armature", dof_armature, nv);
+    if (!RequireModelArraySize("site_names", model.site_names.size(), model.nsite, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("site_bodyid", model.site_bodyid.size(), model.nsite, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("site_pos", model.site_pos.size(), model.nsite, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("site_quat", model.site_quat.size(), model.nsite, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("site_mat", model.site_mat.size(), model.nsite, error))
+    {
+        return false;
+    }
 
-    DTDYN_REQUIRE_ARRAY("site_names", site_names, nsite);
-    DTDYN_REQUIRE_ARRAY("site_bodyid", site_bodyid, nsite);
-    DTDYN_REQUIRE_ARRAY("site_pos", site_pos, nsite);
-    DTDYN_REQUIRE_ARRAY("site_quat", site_quat, nsite);
-    DTDYN_REQUIRE_ARRAY("site_mat", site_mat, nsite);
-
-    DTDYN_REQUIRE_ARRAY("actuator_names", actuator_names, nu);
-    DTDYN_REQUIRE_ARRAY("actuator_jointid", actuator_jointid, nu);
-    DTDYN_REQUIRE_DENSE("actuator_gear", actuator_gear, nu);
-    DTDYN_REQUIRE_ARRAY("root_bodyid", root_bodyid, nroot);
-    DTDYN_REQUIRE_DENSE("root_mass", root_mass, nroot);
-
-#undef DTDYN_REQUIRE_DENSE
-#undef DTDYN_REQUIRE_ARRAY
+    if (!RequireModelArraySize("actuator_names", model.actuator_names.size(), model.nu, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("actuator_jointid", model.actuator_jointid.size(), model.nu, error))
+    {
+        return false;
+    }
+    if (!RequireModelDenseSize("actuator_gear", model.actuator_gear, model.nu, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("root_bodyid", model.root_bodyid.size(), model.nroot, error))
+    {
+        return false;
+    }
+    if (!RequireModelDenseSize("root_mass", model.root_mass, model.nroot, error))
+    {
+        return false;
+    }
 
     if (!ValidateUniqueNames(model.body_names, dtDynObjectType::Body, "body", error))
     {

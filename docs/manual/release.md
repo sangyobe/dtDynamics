@@ -7,7 +7,7 @@ Author: Joonhee Jo
 
 ## 11-1. Required gate
 
-- gate 실행 명령: `docs/manual.md` 8장 "문서 생성·Release 절차" 참고
+- gate 실행 명령: `docs/manual.md` 8장 "Markdown 문서·Release 절차" 참고
 - 0.1.3 consumer 사용 방식:
 
 ```cmake

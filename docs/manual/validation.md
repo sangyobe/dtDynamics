@@ -64,7 +64,7 @@ Author: Joonhee Jo
 
 ## 6-6. Static-analysis gate
 
-- authoritative evidence: GitLab `Polyspace` job artifact의 canonical `result_list.txt`
+- authoritative evidence: GitLab `polyspace-job` job artifact의 canonical `result_list.txt`
 - analysis scope: production `dtDynamics` library의 compile database. test, benchmark, MuJoCo/Pinocchio reference target은 이 static-analysis scope에 포함하지 않음
 - checker profile: `polyspace/checkers.xml`에 고정한 Bug Finder 237개와 MISRA C++:2023 179개 rule. full profile은 `tools/test_polyspace_checker_profile.py`가 검증
 - execution: `ci/polyspace.sh`는 cache 결과, 기존 configure options, 기존 report를 제거하고 현재 compile database에서 nonempty configure options를 새로 만든다. 이후 새 canonical `result_list.txt`만 `tools/polyspace_result_gate.py`에 전달한다. parser exit code가 GitLab job exit를 결정하며 Access upload는 이 판정을 바꾸지 않는다.

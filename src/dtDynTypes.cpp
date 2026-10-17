@@ -10,19 +10,21 @@
 #include "dtDynamics/dtDynTypes.h"
 
 #include <cassert>
+#include <cstdint>
+#include <limits>
 
 namespace dt::Dynamics
 {
 
-uint16_t ToDtMathDim(const dtDynIndex value)
+std::uint16_t ToDtMathDim(const dtDynIndex value)
 {
-    assert((value >= 0) && (value <= static_cast<dtDynIndex>(std::numeric_limits<uint16_t>::max())));
-    return static_cast<uint16_t>(value);
+    assert((value >= 0) && (value <= static_cast<dtDynIndex>(std::numeric_limits<std::uint16_t>::max())));
+    return static_cast<std::uint16_t>(value);
 }
 
 void ResizeDenseVector(dtDynDenseVector &vector, const dtDynIndex dim)
 {
-    const uint16_t rows = ToDtMathDim(dim);
+    const std::uint16_t rows = ToDtMathDim(dim);
 
     if (vector.GetDim() == 0)
     {
@@ -36,8 +38,8 @@ void ResizeDenseVector(dtDynDenseVector &vector, const dtDynIndex dim)
 
 void ResizeDenseMatrix(dtDynDenseMatrix &matrix, const dtDynIndex rows, const dtDynIndex cols)
 {
-    const uint16_t mathRows = ToDtMathDim(rows);
-    const uint16_t mathCols = ToDtMathDim(cols);
+    const std::uint16_t mathRows = ToDtMathDim(rows);
+    const std::uint16_t mathCols = ToDtMathDim(cols);
 
     if ((matrix.GetRowSize() == 0) && (matrix.GetColSize() == 0))
     {
@@ -51,7 +53,7 @@ void ResizeDenseMatrix(dtDynDenseMatrix &matrix, const dtDynIndex rows, const dt
 
 void EnsureDenseVectorSize(dtDynDenseVector &vector, const dtDynIndex dim)
 {
-    const uint16_t rows = ToDtMathDim(dim);
+    const std::uint16_t rows = ToDtMathDim(dim);
     if (vector.GetDim() != rows)
     {
         ResizeDenseVector(vector, dim);
@@ -60,8 +62,8 @@ void EnsureDenseVectorSize(dtDynDenseVector &vector, const dtDynIndex dim)
 
 void EnsureDenseMatrixSize(dtDynDenseMatrix &matrix, const dtDynIndex rows, const dtDynIndex cols)
 {
-    const uint16_t mathRows = ToDtMathDim(rows);
-    const uint16_t mathCols = ToDtMathDim(cols);
+    const std::uint16_t mathRows = ToDtMathDim(rows);
+    const std::uint16_t mathCols = ToDtMathDim(cols);
     if ((matrix.GetRowSize() != mathRows) || (matrix.GetColSize() != mathCols))
     {
         ResizeDenseMatrix(matrix, rows, cols);

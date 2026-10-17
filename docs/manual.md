@@ -15,7 +15,7 @@ Author: Joonhee Jo
 5. [Realtime 적용 checklist](#5-realtime-적용-checklist)
 6. [검증 실행 방법](#6-검증-실행-방법)
 7. [Benchmark 재현 방법](#7-benchmark-재현-방법)
-8. [문서 생성·Release 절차](#8-문서-생성release-절차)
+8. [Markdown 문서·Release 절차](#8-markdown-문서release-절차)
 9. [Troubleshooting](#9-troubleshooting)
 10. [상세 설명 chapter와 관련 문서](#10-상세-설명-chapter와-관련-문서)
 
@@ -265,7 +265,8 @@ if (foot == DTDYN_INVALID_INDEX || hipMotor == DTDYN_INVALID_INDEX)
 ### 4-2. Control tick
 
 - 아래는 controller-owned symbol을 포함한 **pseudocode**
-- `Jp`, `Jr`, `JdvP`, `JdvR`: setup에서 `3 x model.nv`로 미리 sizing
+- `Jp`, `Jr`: setup에서 `3 x model.nv`로 미리 sizing
+- `JdvP`, `JdvR`: `dt::Math::Vector3<dtDynReal>`. `Jdot * qvel`의 linear/angular 3-vector
 
 ```text
 WriteEstimatorStateInto(data.qpos, data.qvel); // controller-owned mapping
@@ -327,7 +328,6 @@ python3 tools/validate_reference_benchmark.py \
 python3 tools/validate_benchmark_results.py \
   --native /path/to/native.csv \
   --stages /path/to/stages.csv \
-  --references /path/to/reference.csv \
   --generated docs/figures
 ```
 
@@ -343,7 +343,7 @@ python3 tools/validate_docs.py
 
 ### 6-3. GitLab static-analysis gate
 
-- authoritative execution: GitLab `polyspace` job와 job artifact `reports/polyspace/polyspace/result_list.txt`
+- authoritative execution: GitLab `polyspace-job` job과 job artifact `reports/polyspace/polyspace/result_list.txt`
 - analysis scope: test/benchmark/reference target을 끈 production `dtDynamics` compile database
 - checker profile: production library compile database에 `polyspace/checkers.xml`로 고정한 Bug Finder 237개와 MISRA C++:2023 179개 rule 적용. exact profile은 `tools/test_polyspace_checker_profile.py`가 검증
 - execution: `ci/polyspace.sh`가 cache 결과, 기존 configure options, 기존 report를 제거하고 현재 compile database에서 nonempty configure options를 새로 만든다. 이후 새 canonical `result_list.txt`만 `tools/polyspace_result_gate.py`에 전달. parser exit code가 GitLab job exit를 결정하며 Polyspace Access 업로드는 이 판정을 바꾸지 않음

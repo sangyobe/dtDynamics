@@ -52,6 +52,14 @@ catch (const dtDynXmlError &error)
 > fail-closed 거부 대상: invalid/overflow number, `NaN`/`Inf`, 잘못된 vector arity, malformed/misnested markup, duplicate name, unresolved reference, unsupported syntax·semantics (조용한 보정 없음).
 >
 > XML declaration 허용 조건: original input byte 0에서 한 번만.
+>
+> XML 문법 규칙:
+>
+> - self-closing 요소(`<body .../>`) 허용
+> - document 안의 `<compiler>`, `<worldbody>`, `<actuator>` 중복은 `MalformedSyntax`로 거부
+> - closing tag에 attribute나 suffix text 금지. `</x/>`도 금지
+> - `<mujoco>` root는 정확히 1개. 요소 밖 text 금지
+> - 오류 offset: 0부터 시작하는 byte offset
 
 ## 2-2. Checked compilation과 trusted compilation
 
@@ -67,7 +75,9 @@ const dtDynModel model = CompileSpecChecked(spec);
 ```
 
 - `dtDynValidationError`의 `code`, `object`, `index`: machine-readable 위치 제공
-- `CompileSpecChecked()` 동작: validation 후 기존 compiler 호출
+- `CompileSpecChecked()` 동작: `ValidateSpec` → `CompileSpec` → `ValidateModel` 순서로 실행
+- `CompileSpecChecked()` 실패: `std::runtime_error`(`CompileSpecChecked: ` + message). `dtDynXmlError`가 아님
+- code/object/index가 필요하면 `ValidateSpec(spec, &error)`를 먼저 호출
 - `CompileSpec()` 유지 목적: backward compatibility, 이미 검증된 trusted setup data 전용
 - validation scan 범위: dynamics hot loop 밖
 
