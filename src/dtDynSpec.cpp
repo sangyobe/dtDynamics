@@ -18,6 +18,7 @@
 #include <iomanip>
 #include <sstream>
 #include <stdexcept>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -91,23 +92,37 @@ using AttributeMap = std::unordered_map<std::string, AttributeValue>;
 static constexpr dtDynReal kPi = static_cast<dtDynReal>(3.141592653589793238462643383279502884);
 static constexpr dtDynReal kDegreeToRadian = kPi / static_cast<dtDynReal>(180.0);
 
-// ASCII character classification that does not depend on the C locale.
+// ASCII character classification that does not depend on the C locale. The comparisons go
+// through std::char_traits so a plain char is never promoted by a built-in operator.
+bool CharEquals(const char left, const char right)
+{
+    return std::char_traits<char>::eq(left, right);
+}
+
+bool CharInRange(const char value, const char first, const char last)
+{
+    bool result = false;
+    if (!std::char_traits<char>::lt(value, first))
+    {
+        result = !std::char_traits<char>::lt(last, value);
+    }
+    return result;
+}
+
 bool IsXmlWhitespace(const char character)
 {
     bool result = false;
-    switch (character)
+    if (CharEquals(character, ' '))
     {
-    case ' ':
-    case '\t':
-    case '\n':
-    case '\v':
-    case '\f':
-    case '\r':
         result = true;
-        break;
-    default:
+    }
+    else if (CharInRange(character, '\t', '\r'))
+    {
+        result = true;
+    }
+    else
+    {
         result = false;
-        break;
     }
     return result;
 }
@@ -115,65 +130,17 @@ bool IsXmlWhitespace(const char character)
 bool IsAsciiAlpha(const char character)
 {
     bool result = false;
-    switch (character)
+    if (CharInRange(character, 'a', 'z'))
     {
-    case 'a':
-    case 'b':
-    case 'c':
-    case 'd':
-    case 'e':
-    case 'f':
-    case 'g':
-    case 'h':
-    case 'i':
-    case 'j':
-    case 'k':
-    case 'l':
-    case 'm':
-    case 'n':
-    case 'o':
-    case 'p':
-    case 'q':
-    case 'r':
-    case 's':
-    case 't':
-    case 'u':
-    case 'v':
-    case 'w':
-    case 'x':
-    case 'y':
-    case 'z':
-    case 'A':
-    case 'B':
-    case 'C':
-    case 'D':
-    case 'E':
-    case 'F':
-    case 'G':
-    case 'H':
-    case 'I':
-    case 'J':
-    case 'K':
-    case 'L':
-    case 'M':
-    case 'N':
-    case 'O':
-    case 'P':
-    case 'Q':
-    case 'R':
-    case 'S':
-    case 'T':
-    case 'U':
-    case 'V':
-    case 'W':
-    case 'X':
-    case 'Y':
-    case 'Z':
         result = true;
-        break;
-    default:
+    }
+    else if (CharInRange(character, 'A', 'Z'))
+    {
+        result = true;
+    }
+    else
+    {
         result = false;
-        break;
     }
     return result;
 }
@@ -181,75 +148,17 @@ bool IsAsciiAlpha(const char character)
 bool IsAsciiAlnum(const char character)
 {
     bool result = false;
-    switch (character)
+    if (IsAsciiAlpha(character))
     {
-    case 'a':
-    case 'b':
-    case 'c':
-    case 'd':
-    case 'e':
-    case 'f':
-    case 'g':
-    case 'h':
-    case 'i':
-    case 'j':
-    case 'k':
-    case 'l':
-    case 'm':
-    case 'n':
-    case 'o':
-    case 'p':
-    case 'q':
-    case 'r':
-    case 's':
-    case 't':
-    case 'u':
-    case 'v':
-    case 'w':
-    case 'x':
-    case 'y':
-    case 'z':
-    case 'A':
-    case 'B':
-    case 'C':
-    case 'D':
-    case 'E':
-    case 'F':
-    case 'G':
-    case 'H':
-    case 'I':
-    case 'J':
-    case 'K':
-    case 'L':
-    case 'M':
-    case 'N':
-    case 'O':
-    case 'P':
-    case 'Q':
-    case 'R':
-    case 'S':
-    case 'T':
-    case 'U':
-    case 'V':
-    case 'W':
-    case 'X':
-    case 'Y':
-    case 'Z':
-    case '0':
-    case '1':
-    case '2':
-    case '3':
-    case '4':
-    case '5':
-    case '6':
-    case '7':
-    case '8':
-    case '9':
         result = true;
-        break;
-    default:
+    }
+    else if (CharInRange(character, '0', '9'))
+    {
+        result = true;
+    }
+    else
+    {
         result = false;
-        break;
     }
     return result;
 }
@@ -287,7 +196,7 @@ std::string TagName(const std::string &tag)
         {
             break;
         }
-        if (tag[pos] == '/')
+        if (CharEquals(tag[pos], '/'))
         {
             break;
         }
@@ -355,7 +264,7 @@ bool IsValidTagName(const std::string &name)
     }
     if (!IsAsciiAlpha(name[0]))
     {
-        if (name[0] != '_')
+        if (!CharEquals(name[0], '_'))
         {
             return false;
         }
@@ -364,13 +273,13 @@ bool IsValidTagName(const std::string &name)
     {
         if (!IsAsciiAlnum(character))
         {
-            if (character != '_')
+            if (!CharEquals(character, '_'))
             {
-                if (character != '-')
+                if (!CharEquals(character, '-'))
                 {
-                    if (character != ':')
+                    if (!CharEquals(character, ':'))
                     {
-                        if (character != '.')
+                        if (!CharEquals(character, '.'))
                         {
                             return false;
                         }
@@ -405,19 +314,19 @@ std::size_t FindTagEnd(const std::string &xml,
     for (std::size_t offset = begin + 1; offset < xmlSize; ++offset)
     {
         const char character = xml[offset];
-        if (quote != '\0')
+        if (!CharEquals(quote, '\0'))
         {
-            if (character == quote)
+            if (CharEquals(character, quote))
             {
                 quote = '\0';
             }
             continue;
         }
-        if ((character == '"') || (character == '\''))
+        if ((CharEquals(character, '"')) || (CharEquals(character, '\'')))
         {
             quote = character;
         }
-        else if (character == '>')
+        else if (CharEquals(character, '>'))
         {
             return offset;
         }
@@ -545,7 +454,7 @@ AttributeMap ParseAttributes(const std::string &tag, const std::size_t tagOffset
         {
             break;
         }
-        if (tag[pos] == '/')
+        if (CharEquals(tag[pos], '/'))
         {
             throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath,
                                 tagOffset + pos,
@@ -555,7 +464,7 @@ AttributeMap ParseAttributes(const std::string &tag, const std::size_t tagOffset
         const std::size_t keyStart = pos;
         while (pos < tag.size())
         {
-            if (tag[pos] == '=')
+            if (CharEquals(tag[pos], '='))
             {
                 break;
             }
@@ -591,7 +500,7 @@ AttributeMap ParseAttributes(const std::string &tag, const std::size_t tagOffset
         }
         if (!malformedAttribute)
         {
-            if (tag[pos] != '=')
+            if (!CharEquals(tag[pos], '='))
             {
                 malformedAttribute = true;
             }
@@ -613,9 +522,9 @@ AttributeMap ParseAttributes(const std::string &tag, const std::size_t tagOffset
         bool unquotedAttributeValue = pos >= tag.size();
         if (!unquotedAttributeValue)
         {
-            if (tag[pos] != '"')
+            if (!CharEquals(tag[pos], '"'))
             {
-                unquotedAttributeValue = tag[pos] != '\'';
+                unquotedAttributeValue = !CharEquals(tag[pos], '\'');
             }
         }
         if (unquotedAttributeValue)
@@ -628,11 +537,11 @@ AttributeMap ParseAttributes(const std::string &tag, const std::size_t tagOffset
         const std::size_t valueStart = pos;
         while (pos < tag.size())
         {
-            if (tag[pos] == quote)
+            if (CharEquals(tag[pos], quote))
             {
                 break;
             }
-            if (tag[pos] == '<')
+            if (CharEquals(tag[pos], '<'))
             {
                 throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath,
                                     tagOffset + pos,
@@ -1314,9 +1223,9 @@ dtDynSpec DecodeXmlImpl(const std::string &xml, const std::string &sourcePath)
             throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath, begin,
                                 "empty XML tag");
         }
-        if (tag[0] == '?')
+        if (CharEquals(tag[0], '?'))
         {
-            if ((tag.back() != '?') || (begin != 0) || sawMarkup || sawMujocoRoot)
+            if ((!CharEquals(tag.back(), '?')) || (begin != 0) || sawMarkup || sawMujocoRoot)
             {
                 throw dtDynXmlError(dtDynXmlErrorCode::MalformedSyntax, sourcePath, begin,
                                     "malformed or misplaced XML declaration");
@@ -1386,14 +1295,14 @@ dtDynSpec DecodeXmlImpl(const std::string &xml, const std::string &sourcePath)
             continue;
         }
         sawMarkup = true;
-        if (tag[0] == '!')
+        if (CharEquals(tag[0], '!'))
         {
             throw dtDynXmlError(dtDynXmlErrorCode::UnsupportedElement, sourcePath, begin,
                                 "unsupported XML declaration");
         }
 
         bool closing = false;
-        if (tag[0] == '/')
+        if (CharEquals(tag[0], '/'))
         {
             closing = true;
             const std::string closingTag = tag.substr(static_cast<std::size_t>(1));
@@ -1413,7 +1322,7 @@ dtDynSpec DecodeXmlImpl(const std::string &xml, const std::string &sourcePath)
         bool selfClosing = false;
         if (!tag.empty())
         {
-            if (tag.back() == '/')
+            if (CharEquals(tag.back(), '/'))
             {
                 selfClosing = true;
                 tag = Trim(tag.substr(static_cast<std::size_t>(0), tag.size() - 1));
