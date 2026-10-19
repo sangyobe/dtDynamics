@@ -320,7 +320,7 @@ dt::Math::Matrix<6, 6, dtDynReal> CrossSpatialMotionMatrix(const dt::Math::Vecto
 
 dt::Math::Matrix<6, 6, dtDynReal> CrossSpatialMotionMatrixStar(const dt::Math::Vector6<dtDynReal> &velocity)
 {
-    return CrossSpatialMotionMatrix(velocity).Transpose() * -1.0;
+    return CrossSpatialMotionMatrix(velocity).Transpose() * static_cast<dtDynReal>(-1.0);
 }
 
 dt::Math::Matrix<6, 6, dtDynReal> CrossSpatialMomentumMatrix(const dt::Math::Vector6<dtDynReal> &momentum)
