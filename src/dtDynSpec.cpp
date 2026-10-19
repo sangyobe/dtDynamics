@@ -92,12 +92,46 @@ using AttributeMap = std::unordered_map<std::string, AttributeValue>;
 static constexpr dtDynReal kPi = static_cast<dtDynReal>(3.141592653589793238462643383279502884);
 static constexpr dtDynReal kDegreeToRadian = kPi / static_cast<dtDynReal>(180.0);
 
+bool IsXmlWhitespace(const char character)
+{
+    bool result = false;
+    if (character == ' ')
+    {
+        result = true;
+    }
+    else if (character == '\t')
+    {
+        result = true;
+    }
+    else if (character == '\n')
+    {
+        result = true;
+    }
+    else if (character == '\v')
+    {
+        result = true;
+    }
+    else if (character == '\f')
+    {
+        result = true;
+    }
+    else if (character == '\r')
+    {
+        result = true;
+    }
+    else
+    {
+        result = false;
+    }
+    return result;
+}
+
 std::string Trim(const std::string &text)
 {
     std::size_t first = 0;
     while (first < text.size())
     {
-        if (!std::isspace(static_cast<std::uint8_t>(text[first])))
+        if (!IsXmlWhitespace(text[first]))
         {
             break;
         }
@@ -107,7 +141,7 @@ std::string Trim(const std::string &text)
     std::size_t last = text.size();
     while (last > first)
     {
-        if (!std::isspace(static_cast<std::uint8_t>(text[last - 1])))
+        if (!IsXmlWhitespace(text[last - 1]))
         {
             break;
         }
