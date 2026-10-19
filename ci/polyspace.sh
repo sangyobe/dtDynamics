@@ -136,7 +136,11 @@ fi
 # Canonical raw-defect-zero gate. It is the only release decision source: every row
 # must be Green with a blank or Unreviewed status. The parser also fails closed on
 # malformed TSV, missing values, and "File does not compile" rows.
-python3 tools/polyspace_result_gate.py --input "${REPORT}"
+# 21.6.1/21.6.2/21.6.3 are accepted only for the setup-phase files listed in
+# polyspace/setup_phase_deviation.txt (provisional until the team decides the review
+# policy). Any other file reporting these rules still fails this gate.
+python3 tools/polyspace_result_gate.py --input "${REPORT}" \
+    --setup-phase-deviation polyspace/setup_phase_deviation.txt
 POLYSPACE_EXIT=$?
 
 # Polyspace Access 에 결과 업로드 (변수 미설정 시 건너뜀)

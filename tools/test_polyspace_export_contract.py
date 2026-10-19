@@ -51,6 +51,9 @@ def run_job(
     (root / "build-polyspace" / "configure.opts").write_text("stale\n", encoding="utf-8")
     (root / "polyspace" / "polyspace.opts").write_text("# fixture\n", encoding="utf-8")
     (root / "polyspace" / "checkers.xml").write_text("<fixture/>\n", encoding="utf-8")
+    (root / "polyspace" / "setup_phase_deviation.txt").write_text(
+        "21.6.1 src/example_setup.cpp\n", encoding="utf-8"
+    )
     report_template = root / "green-result-list.txt"
     report_template.write_text(report_content, encoding="utf-8")
     (root / "reports" / "polyspace" / "polyspace" / "result_list.txt").write_text(

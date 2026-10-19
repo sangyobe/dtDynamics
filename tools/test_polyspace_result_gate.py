@@ -240,6 +240,77 @@ def assert_gate_fails_for_non_green_rows() -> None:
     assert "unresolved=3" in result.stdout
 
 
+def run_gate_with_deviation(rows: list[str], table: str) -> subprocess.CompletedProcess[str]:
+    with tempfile.TemporaryDirectory() as directory:
+        report = Path(directory) / "result_list.txt"
+        report.write_text(HEADER + "".join(rows), encoding="utf-8")
+        deviation = Path(directory) / "deviation.txt"
+        deviation.write_text(table, encoding="utf-8")
+        return subprocess.run(
+            [sys.executable, str(GATE), "--input", str(report), "--setup-phase-deviation", str(deviation)],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+
+DEVIATION_TABLE = "21.6.1 src/setup.cpp\n21.6.2 include/container.h\n"
+HEAP_CHECK = "21.6.1 The Standard Library functions malloc, calloc, realloc and free shall not be used"
+
+
+def assert_deviation_accepts_listed_setup_file_only() -> None:
+    row = result_row(HEAP_CHECK, "Not Applicable", "Unreviewed", file="/builds/x/dtdynamics/src/setup.cpp")
+    result = run_gate_with_deviation([row], DEVIATION_TABLE)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "unresolved=0" in result.stdout
+    assert "deviated=1" in result.stdout
+
+
+def assert_deviation_rejects_same_check_in_realtime_file() -> None:
+    listed = result_row(HEAP_CHECK, "Not Applicable", "Unreviewed", file="/b/dtdynamics/src/setup.cpp")
+    realtime = result_row(HEAP_CHECK, "Not Applicable", "Unreviewed", file="/b/dtdynamics/src/dtDynDynamics.cpp")
+    result = run_gate_with_deviation([listed, realtime], DEVIATION_TABLE)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "unresolved=1" in result.stdout
+    assert "dtDynDynamics.cpp" in result.stdout
+
+
+def assert_deviation_rejects_unlisted_check_in_listed_file() -> None:
+    row = result_row("7.0.5 Integral promotion", "Not Applicable", "Unreviewed", file="/b/dtdynamics/src/setup.cpp")
+    result = run_gate_with_deviation([row], DEVIATION_TABLE)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "unresolved=1" in result.stdout
+
+
+def assert_deviation_rejects_check_not_listed_for_that_file() -> None:
+    row = result_row(
+        "21.6.3 Memory allocation functions", "Not Applicable", "Unreviewed", file="/b/dtdynamics/include/container.h"
+    )
+    result = run_gate_with_deviation([row], DEVIATION_TABLE)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "unresolved=1" in result.stdout
+
+
+def assert_deviation_does_not_match_partial_file_name() -> None:
+    row = result_row(HEAP_CHECK, "Not Applicable", "Unreviewed", file="/b/dtdynamics/src/mysetup.cpp")
+    result = run_gate_with_deviation([row], DEVIATION_TABLE)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "unresolved=1" in result.stdout
+
+
+def assert_deviation_table_rejects_other_checks_and_bad_paths() -> None:
+    for table in ("7.0.5 src/setup.cpp\n", "21.6.1 /abs/src/setup.cpp\n", "21.6.1 ../setup.cpp\n", "21.6.1\n", "# only\n"):
+        result = run_gate_with_deviation([result_row("NULL_PTR", "Green", "Unreviewed")], table)
+        assert result.returncode == 2, (table, result.stdout, result.stderr)
+
+
+def assert_strict_gate_ignores_deviation_without_option() -> None:
+    row = result_row(HEAP_CHECK, "Not Applicable", "Unreviewed", file="/b/dtdynamics/src/setup.cpp")
+    result = run_gate([row])
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "unresolved=1" in result.stdout
+
+
 def main() -> None:
     assert_gate_accepts_only_zero_defect_export()
     assert_gate_accepts_crlf_export()
@@ -264,6 +335,13 @@ def main() -> None:
     assert_gate_fails_for_duplicate_header()
     assert_gate_fails_for_extra_tsv_field()
     assert_gate_fails_for_non_green_rows()
+    assert_deviation_accepts_listed_setup_file_only()
+    assert_deviation_rejects_same_check_in_realtime_file()
+    assert_deviation_rejects_unlisted_check_in_listed_file()
+    assert_deviation_rejects_check_not_listed_for_that_file()
+    assert_deviation_does_not_match_partial_file_name()
+    assert_deviation_table_rejects_other_checks_and_bad_paths()
+    assert_strict_gate_ignores_deviation_without_option()
     print("polyspace result gate tests: PASS")
 
 

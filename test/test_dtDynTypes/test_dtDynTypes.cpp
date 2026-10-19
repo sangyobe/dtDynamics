@@ -16,6 +16,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -50,6 +51,9 @@ constexpr std::size_t kMaximumAllocationFailuresToTest = 64;
 std::size_t g_allocationsBeforeFailure = kNoAllocationFailure;
 std::size_t g_outstandingTestAllocations = 0;
 std::size_t g_totalTestAllocations = 0;
+// Direct C allocator calls (dtMath dense storage uses malloc/calloc/realloc, not operator new).
+// Counted only when the test target links with -Wl,--wrap for these functions.
+std::size_t g_rawCAllocatorCalls = 0;
 
 bool IsDtMathNear(const dtDynReal actual,
                   const dtDynReal expected,
@@ -245,6 +249,30 @@ struct OverloadedCopyAssignment
 static_assert(std::is_copy_assignable<OverloadedCopyAssignment>::value);
 
 } // namespace
+
+#ifdef DTDYN_TEST_WRAP_C_ALLOCATOR
+extern "C" void *__real_malloc(std::size_t size);
+extern "C" void *__real_calloc(std::size_t count, std::size_t size);
+extern "C" void *__real_realloc(void *pointer, std::size_t size);
+
+extern "C" void *__wrap_malloc(std::size_t size)
+{
+    ++g_rawCAllocatorCalls;
+    return __real_malloc(size);
+}
+
+extern "C" void *__wrap_calloc(std::size_t count, std::size_t size)
+{
+    ++g_rawCAllocatorCalls;
+    return __real_calloc(count, size);
+}
+
+extern "C" void *__wrap_realloc(void *pointer, std::size_t size)
+{
+    ++g_rawCAllocatorCalls;
+    return __real_realloc(pointer, size);
+}
+#endif
 
 void *operator new(const std::size_t size)
 {
@@ -9030,6 +9058,7 @@ void TestIndexedJacobiansRefreshFloatingBaseBodyAndTaskSite()
 }
 
 constexpr dtDynReal kP52JacobianTolerance = 1.0e-12;
+constexpr dtDynReal kAllocationProofTolerance = 1.0e-9;
 
 void ConfigureP52FreeRootBody(dtDynBodySpec &draft)
 {
@@ -10929,6 +10958,518 @@ void TestCcrbaFillBodySpatialInertiaAtRootComCoversAllP50Rows()
     AssertP50ChildRotationAndParallelAxis(model, data, root, child);
 }
 
+// Allocation-free realtime compute proof. The counter observed here is the
+// global allocation-function counter; dtMath dense storage uses malloc directly.
+struct AllocationProofBodyEditor
+{
+    dtDynReal mass = 0.0;
+    dtDynReal position[3] = {0.0, 0.0, 0.0};
+    dtDynReal inertialPosition[3] = {0.0, 0.0, 0.0};
+    dtDynReal inertia[3] = {0.0, 0.0, 0.0};
+    bool rotated = false;
+
+    void operator()(dtDynBodySpec &draft) const
+    {
+        draft.inertial.mass = mass;
+        for (std::uint16_t axis = 0; axis < 3; ++axis)
+        {
+            draft.pos.At(axis) = position[axis];
+            draft.inertial.pos.At(axis) = inertialPosition[axis];
+            draft.inertial.inertia.At(axis) = inertia[axis];
+        }
+        if (rotated)
+        {
+            draft.quat.At(0) = 0.5;
+            draft.quat.At(1) = 0.5;
+            draft.quat.At(2) = 0.5;
+            draft.quat.At(3) = 0.5;
+            draft.inertial.quat.At(0) = 0.5;
+            draft.inertial.quat.At(1) = 0.5;
+            draft.inertial.quat.At(2) = -0.5;
+            draft.inertial.quat.At(3) = 0.5;
+        }
+    }
+};
+
+struct AllocationProofJointEditor
+{
+    dtDynReal position[3] = {0.0, 0.0, 0.0};
+    dtDynReal axis[3] = {0.0, 0.0, 1.0};
+    dtDynReal armature = 0.0;
+
+    void operator()(dtDynJointSpec &draft) const
+    {
+        draft.axis.SetZero();
+        for (std::uint16_t component = 0; component < 3; ++component)
+        {
+            draft.pos.At(component) = position[component];
+            draft.axis.At(component) = axis[component];
+        }
+        draft.armature = armature;
+    }
+};
+
+struct AllocationProofSiteEditor
+{
+    dtDynReal position[3] = {0.0, 0.0, 0.0};
+
+    void operator()(dtDynSiteSpec &draft) const
+    {
+        for (std::uint16_t component = 0; component < 3; ++component)
+        {
+            draft.pos.At(component) = position[component];
+        }
+    }
+};
+
+struct AllocationProofFixture
+{
+    dtDynIndex baseBody = DTDYN_INVALID_INDEX;
+    dtDynIndex chainBody = DTDYN_INVALID_INDEX;
+    dtDynIndex ballBody = DTDYN_INVALID_INDEX;
+    dtDynIndex slideBody = DTDYN_INVALID_INDEX;
+    dtDynIndex fixedBody = DTDYN_INVALID_INDEX;
+    dtDynIndex firstSite = DTDYN_INVALID_INDEX;
+    dtDynIndex secondSite = DTDYN_INVALID_INDEX;
+    dtDynIndex thirdSite = DTDYN_INVALID_INDEX;
+    dtDynArray<dtDynIndex> bodyIds;
+    dtDynArray<dtDynIndex> siteIds;
+    dtDynDenseMatrix jacp;
+    dtDynDenseMatrix jacr;
+    dtDynDenseMatrix jacpDot;
+    dtDynDenseMatrix jacrDot;
+    dt::Math::Vector3<dtDynReal> pointOffset;
+    dt::Math::Vector3<dtDynReal> gravity;
+    dt::Math::Vector3<dtDynReal> linear;
+    dt::Math::Vector3<dtDynReal> angular;
+};
+
+// Explicit check that survives -DNDEBUG, unlike assert().
+void RequireAllocationProof(const bool condition, const char *message)
+{
+    if (!condition)
+    {
+        throw std::runtime_error(std::string("allocation proof failed: ") + message);
+    }
+}
+
+class AllocationProofLedger
+{
+public:
+    explicit AllocationProofLedger(const bool enforce)
+        : m_enforce(enforce)
+    {
+    }
+
+    void SetPass(const char *pass)
+    {
+        m_pass = pass;
+    }
+
+    void Begin()
+    {
+        m_before = g_totalTestAllocations;
+        m_beforeRaw = g_rawCAllocatorCalls;
+    }
+
+    std::size_t CheckCount() const
+    {
+        return m_checks;
+    }
+
+    void End(const char *api)
+    {
+        const std::size_t observed = (g_totalTestAllocations - m_before) + (g_rawCAllocatorCalls - m_beforeRaw);
+        ++m_checks;
+        if (m_enforce && (observed != 0))
+        {
+            throw std::runtime_error(std::string("allocation proof failed: realtime API ") + api +
+                                     " performed " + std::to_string(observed) +
+                                     " heap allocation(s) during " + m_pass);
+        }
+    }
+
+private:
+    bool m_enforce;
+    const char *m_pass = "setup";
+    std::size_t m_before = 0;
+    std::size_t m_beforeRaw = 0;
+    std::size_t m_checks = 0;
+};
+
+void SetAllocationProofQuaternion(dtDynData &data, const dtDynIndex address, const dtDynReal phase)
+{
+    dt::Math::Vector4<dtDynReal> raw;
+    raw.At(0) = 1.0 + (0.3 * phase);
+    raw.At(1) = -0.4 + phase;
+    raw.At(2) = 0.5;
+    raw.At(3) = 0.1 - (0.2 * phase);
+    const dt::Math::Vector4<dtDynReal> unit = math::NormalizeOrIdentity(raw);
+    for (std::uint16_t component = 0; component < 4; ++component)
+    {
+        data.qpos.At(static_cast<std::uint16_t>(address + component)) = unit.At(component);
+    }
+}
+
+void SetAllocationProofState(const dtDynModel &model, dtDynData &data, const dtDynIndex pass)
+{
+    const dtDynReal phase = 0.31 * static_cast<dtDynReal>(pass + 1);
+    for (dtDynIndex jointId = 0; jointId < model.njnt; ++jointId)
+    {
+        const std::size_t jointIndex = static_cast<std::size_t>(jointId);
+        const dtDynJointType type = static_cast<dtDynJointType>(model.jnt_type[jointIndex]);
+        const dtDynIndex address = model.jnt_qposadr[jointIndex];
+        if (type == dtDynJointType::Free)
+        {
+            data.qpos.At(static_cast<std::uint16_t>(address + 0)) = 0.10 * phase;
+            data.qpos.At(static_cast<std::uint16_t>(address + 1)) = -0.20 + (0.05 * phase);
+            data.qpos.At(static_cast<std::uint16_t>(address + 2)) = 0.60 - (0.10 * phase);
+            SetAllocationProofQuaternion(data, address + 3, phase);
+        }
+        else if (type == dtDynJointType::Ball)
+        {
+            SetAllocationProofQuaternion(data, address, -0.7 * phase);
+        }
+        else
+        {
+            data.qpos.At(static_cast<std::uint16_t>(address)) =
+                0.4 * std::sin(phase + static_cast<dtDynReal>(jointId));
+        }
+    }
+    for (dtDynIndex dofId = 0; dofId < model.nv; ++dofId)
+    {
+        data.qvel.At(static_cast<std::uint16_t>(dofId)) =
+            (0.2 * std::cos(phase * static_cast<dtDynReal>(dofId + 1))) +
+            (0.03 * static_cast<dtDynReal>(dofId + 1));
+    }
+}
+
+bool IsAllocationProofFinite(const dtDynReal value)
+{
+    return std::isfinite(value);
+}
+
+void RequireAllocationProofOutputsAreLive(const dtDynModel &model,
+                                          const dtDynData &data,
+                                          const AllocationProofFixture &fixture)
+{
+    RequireAllocationProof(std::fabs(data.Mmat.At(0, 0) - model.root_mass.At(0)) < kAllocationProofTolerance,
+                           "free-base mass matrix entry must equal the root mass");
+    dtDynReal gravityMagnitude = 0.0;
+    dtDynReal siteSignal = 0.0;
+    for (dtDynIndex dofId = 0; dofId < model.nv; ++dofId)
+    {
+        const std::uint16_t dof = static_cast<std::uint16_t>(dofId);
+        RequireAllocationProof(IsAllocationProofFinite(data.gravityTorq.At(dof)), "gravity torque must be finite");
+        RequireAllocationProof(IsAllocationProofFinite(data.coriolisTorq.At(dof)), "Coriolis torque must be finite");
+        gravityMagnitude += std::fabs(data.gravityTorq.At(dof));
+        for (std::uint16_t row = 0; row < 3; ++row)
+        {
+            const std::size_t siteIndex = static_cast<std::size_t>(fixture.firstSite);
+            RequireAllocationProof(IsAllocationProofFinite(data.site_jacp[siteIndex].At(row, dof)),
+                                   "site Jacobian must be finite");
+            siteSignal += std::fabs(data.site_jacp[siteIndex].At(row, dof)) +
+                          std::fabs(data.site_jacr_dot[siteIndex].At(row, dof));
+        }
+    }
+    RequireAllocationProof(gravityMagnitude > kAllocationProofTolerance, "gravity torque must be nonzero");
+    RequireAllocationProof(siteSignal > kAllocationProofTolerance, "site Jacobian terms must be nonzero");
+}
+
+void RunAllocationProofJacobianApis(const dtDynModel &model,
+                                    dtDynData &data,
+                                    AllocationProofFixture &fixture,
+                                    AllocationProofLedger &ledger)
+{
+    ledger.Begin();
+    ComputeBodyJacobians(model, data);
+    ledger.End("ComputeBodyJacobians(model, data)");
+
+    ledger.Begin();
+    ComputeSiteJacobians(model, data);
+    ledger.End("ComputeSiteJacobians(model, data)");
+
+    ledger.Begin();
+    ComputeJacobians(model, data);
+    ledger.End("ComputeJacobians(model, data)");
+
+    ledger.Begin();
+    ComputeBodyJacobians(model, data, fixture.bodyIds);
+    ledger.End("ComputeBodyJacobians(model, data, bodyIds)");
+
+    ledger.Begin();
+    ComputeSiteJacobians(model, data, fixture.siteIds);
+    ledger.End("ComputeSiteJacobians(model, data, siteIds)");
+
+    ledger.Begin();
+    ComputeJacobians(model, data, fixture.bodyIds, fixture.siteIds);
+    ledger.End("ComputeJacobians(model, data, bodyIds, siteIds)");
+
+    ledger.Begin();
+    for (dtDynIndex bodyId = 0; bodyId < model.nbody; ++bodyId)
+    {
+        ComputeBodyJacobian(model, data, bodyId, fixture.jacp, fixture.jacr);
+    }
+    ledger.End("ComputeBodyJacobian");
+
+    ledger.Begin();
+    for (dtDynIndex siteId = 0; siteId < model.nsite; ++siteId)
+    {
+        ComputeSiteJacobian(model, data, siteId, fixture.jacp, fixture.jacr);
+    }
+    ledger.End("ComputeSiteJacobian");
+
+    ledger.Begin();
+    for (dtDynIndex bodyId = 0; bodyId < model.nbody; ++bodyId)
+    {
+        const dt::Math::Vector3<dtDynReal> point =
+            data.xpos[static_cast<std::size_t>(bodyId)] + fixture.pointOffset;
+        ComputePointJacobian(model, data, bodyId, point, fixture.jacp, fixture.jacr);
+    }
+    ledger.End("ComputePointJacobian");
+
+    ledger.Begin();
+    for (dtDynIndex bodyId = 0; bodyId < model.nbody; ++bodyId)
+    {
+        const dt::Math::Vector3<dtDynReal> point =
+            data.xpos[static_cast<std::size_t>(bodyId)] + fixture.pointOffset;
+        ComputePointJacobianDot(model, data, bodyId, point, fixture.jacpDot, fixture.jacrDot);
+    }
+    ledger.End("ComputePointJacobianDot");
+
+    ledger.Begin();
+    for (dtDynIndex bodyId = 0; bodyId < model.nbody; ++bodyId)
+    {
+        const dt::Math::Vector3<dtDynReal> point =
+            data.xpos[static_cast<std::size_t>(bodyId)] + fixture.pointOffset;
+        ComputePointJacobianDotTimesVelocity(model, data, bodyId, point, fixture.linear, fixture.angular);
+    }
+    ledger.End("ComputePointJacobianDotTimesVelocity");
+
+    ledger.Begin();
+    for (dtDynIndex bodyId = 0; bodyId < model.nbody; ++bodyId)
+    {
+        const dt::Math::Vector3<dtDynReal> point =
+            data.xpos[static_cast<std::size_t>(bodyId)] + fixture.pointOffset;
+        ComputePointJacobianTerms(model, data, bodyId, point,
+                                  &fixture.jacp, &fixture.jacr, &fixture.jacpDot, &fixture.jacrDot,
+                                  &fixture.linear, &fixture.angular);
+    }
+    ledger.End("ComputePointJacobianTerms(all outputs)");
+
+    ledger.Begin();
+    for (dtDynIndex bodyId = 0; bodyId < model.nbody; ++bodyId)
+    {
+        const dt::Math::Vector3<dtDynReal> point =
+            data.xpos[static_cast<std::size_t>(bodyId)] + fixture.pointOffset;
+        ComputePointJacobianTerms(model, data, bodyId, point,
+                                  &fixture.jacp, nullptr, nullptr, nullptr, nullptr, nullptr);
+        ComputePointJacobianTerms(model, data, bodyId, point,
+                                  nullptr, nullptr, &fixture.jacpDot, &fixture.jacrDot, nullptr, nullptr);
+        ComputePointJacobianTerms(model, data, bodyId, point,
+                                  nullptr, nullptr, nullptr, nullptr, &fixture.linear, &fixture.angular);
+    }
+    ledger.End("ComputePointJacobianTerms(output subsets)");
+
+    ledger.Begin();
+    for (dtDynIndex bodyId = 0; bodyId < model.nbody; ++bodyId)
+    {
+        ComputeBodyJacobianTerms(model, data, bodyId,
+                                 &fixture.jacp, &fixture.jacr, &fixture.jacpDot, &fixture.jacrDot,
+                                 &fixture.linear, &fixture.angular);
+        ComputeBodyJacobianTerms(model, data, bodyId,
+                                 nullptr, &fixture.jacr, nullptr, &fixture.jacrDot, nullptr, &fixture.angular);
+    }
+    ledger.End("ComputeBodyJacobianTerms");
+
+    ledger.Begin();
+    for (dtDynIndex siteId = 0; siteId < model.nsite; ++siteId)
+    {
+        ComputeSiteJacobianTerms(model, data, siteId,
+                                 &fixture.jacp, &fixture.jacr, &fixture.jacpDot, &fixture.jacrDot,
+                                 &fixture.linear, &fixture.angular);
+        ComputeSiteJacobianTerms(model, data, siteId,
+                                 &fixture.jacp, nullptr, nullptr, nullptr, &fixture.linear, nullptr);
+    }
+    ledger.End("ComputeSiteJacobianTerms");
+
+    ledger.Begin();
+    for (dtDynIndex bodyId = 0; bodyId < model.nbody; ++bodyId)
+    {
+        ComputeBodyJacobianDot(model, data, bodyId, fixture.jacpDot, fixture.jacrDot);
+    }
+    ledger.End("ComputeBodyJacobianDot");
+
+    ledger.Begin();
+    for (dtDynIndex siteId = 0; siteId < model.nsite; ++siteId)
+    {
+        ComputeSiteJacobianDot(model, data, siteId, fixture.jacpDot, fixture.jacrDot);
+    }
+    ledger.End("ComputeSiteJacobianDot");
+
+    ledger.Begin();
+    for (dtDynIndex bodyId = 0; bodyId < model.nbody; ++bodyId)
+    {
+        ComputeBodyJacobianDotTimesVelocity(model, data, bodyId, fixture.linear, fixture.angular);
+    }
+    ledger.End("ComputeBodyJacobianDotTimesVelocity");
+
+    ledger.Begin();
+    for (dtDynIndex siteId = 0; siteId < model.nsite; ++siteId)
+    {
+        ComputeSiteJacobianDotTimesVelocity(model, data, siteId, fixture.linear, fixture.angular);
+    }
+    ledger.End("ComputeSiteJacobianDotTimesVelocity");
+}
+
+void RunAllocationProofPass(const dtDynModel &model,
+                            dtDynData &data,
+                            AllocationProofFixture &fixture,
+                            AllocationProofLedger &ledger)
+{
+    ledger.Begin();
+    ForwardKinematics(model, data);
+    ledger.End("ForwardKinematics");
+
+    ledger.Begin();
+    ComputeDynamicsRNEA(model, data, fixture.gravity, DTDYN_RNEA_TERM_NONE);
+    ledger.End("ComputeDynamicsRNEA(DTDYN_RNEA_TERM_NONE)");
+
+    ledger.Begin();
+    ComputeDynamicsRNEA(model, data, fixture.gravity, DTDYN_RNEA_TERM_ALL);
+    ledger.End("ComputeDynamicsRNEA(DTDYN_RNEA_TERM_ALL)");
+    RunAllocationProofJacobianApis(model, data, fixture, ledger);
+
+    ledger.Begin();
+    ComputeDynamicsCCRBA(model, data, fixture.gravity, DTDYN_CCRBA_TERM_NONE);
+    ledger.End("ComputeDynamicsCCRBA(DTDYN_CCRBA_TERM_NONE)");
+
+    ledger.Begin();
+    ComputeDynamicsCCRBA(model, data, fixture.gravity, DTDYN_CCRBA_TERM_ALL);
+    ledger.End("ComputeDynamicsCCRBA(DTDYN_CCRBA_TERM_ALL)");
+    RunAllocationProofJacobianApis(model, data, fixture, ledger);
+}
+
+void TestRealtimeComputePathPerformsNoHeapAllocation()
+{
+    dtDynSpec spec;
+    AllocationProofFixture fixture;
+    fixture.baseBody = spec.AddBody("alloc_base", 0);
+    const dtDynIndex chain1 = spec.AddBody("alloc_chain1", fixture.baseBody);
+    const dtDynIndex chain2 = spec.AddBody("alloc_chain2", chain1);
+    fixture.chainBody = spec.AddBody("alloc_chain3", chain2);
+    fixture.ballBody = spec.AddBody("alloc_ball", fixture.baseBody);
+    fixture.slideBody = spec.AddBody("alloc_slide", fixture.baseBody);
+    fixture.fixedBody = spec.AddBody("alloc_fixed", fixture.chainBody);
+
+    spec.EditBody(fixture.baseBody,
+                  AllocationProofBodyEditor{3.5, {0.10, -0.20, 0.30}, {0.05, -0.04, 0.06}, {0.30, 0.40, 0.50}, true});
+    spec.EditBody(chain1,
+                  AllocationProofBodyEditor{1.2, {0.25, 0.10, -0.15}, {0.02, 0.03, -0.04}, {0.05, 0.06, 0.07}, false});
+    spec.EditBody(chain2,
+                  AllocationProofBodyEditor{0.9, {-0.10, 0.30, 0.20}, {0.03, -0.02, 0.05}, {0.04, 0.05, 0.06}, true});
+    spec.EditBody(fixture.chainBody,
+                  AllocationProofBodyEditor{0.7, {0.15, -0.25, 0.35}, {-0.01, 0.04, 0.02}, {0.03, 0.04, 0.05}, false});
+    spec.EditBody(fixture.ballBody,
+                  AllocationProofBodyEditor{1.1, {-0.30, 0.20, 0.10}, {0.04, 0.01, -0.03}, {0.06, 0.07, 0.08}, true});
+    spec.EditBody(fixture.slideBody,
+                  AllocationProofBodyEditor{0.8, {0.05, 0.35, -0.20}, {-0.02, 0.03, 0.04}, {0.04, 0.05, 0.05}, false});
+    spec.EditBody(fixture.fixedBody,
+                  AllocationProofBodyEditor{0.4, {0.20, 0.05, -0.10}, {0.01, -0.02, 0.03}, {0.02, 0.03, 0.04}, true});
+
+    const dtDynIndex freeJoint = spec.AddJoint(fixture.baseBody, "alloc_free", dtDynJointType::Free);
+    const dtDynIndex hinge1 = spec.AddJoint(chain1, "alloc_hinge1", dtDynJointType::Hinge);
+    const dtDynIndex hinge2 = spec.AddJoint(chain2, "alloc_hinge2", dtDynJointType::Hinge);
+    const dtDynIndex hinge3 = spec.AddJoint(fixture.chainBody, "alloc_hinge3", dtDynJointType::Hinge);
+    const dtDynIndex ballJoint = spec.AddJoint(fixture.ballBody, "alloc_ball_joint", dtDynJointType::Ball);
+    const dtDynIndex slideJoint = spec.AddJoint(fixture.slideBody, "alloc_slide_joint", dtDynJointType::Slide);
+    spec.EditJoint(freeJoint, AllocationProofJointEditor{{0.01, 0.02, -0.03}, {0.0, 0.0, 1.0}, 0.0});
+    spec.EditJoint(hinge1, AllocationProofJointEditor{{0.05, -0.04, 0.03}, {0.6, 0.0, 0.8}, 0.01});
+    spec.EditJoint(hinge2, AllocationProofJointEditor{{-0.03, 0.06, 0.02}, {0.0, 0.8, 0.6}, 0.02});
+    spec.EditJoint(hinge3, AllocationProofJointEditor{{0.04, 0.02, -0.05}, {0.48, 0.6, 0.64}, 0.015});
+    spec.EditJoint(ballJoint, AllocationProofJointEditor{{-0.05, 0.03, 0.04}, {0.0, 0.0, 1.0}, 0.0});
+    spec.EditJoint(slideJoint, AllocationProofJointEditor{{0.02, -0.06, 0.01}, {0.0, 0.6, 0.8}, 0.0});
+
+    fixture.firstSite = spec.AddSite(fixture.chainBody, "alloc_site_chain");
+    fixture.secondSite = spec.AddSite(fixture.ballBody, "alloc_site_ball");
+    fixture.thirdSite = spec.AddSite(fixture.fixedBody, "alloc_site_fixed");
+    spec.EditSite(fixture.firstSite, AllocationProofSiteEditor{{0.05, 0.02, -0.10}});
+    spec.EditSite(fixture.secondSite, AllocationProofSiteEditor{{-0.04, 0.06, 0.08}});
+    spec.EditSite(fixture.thirdSite, AllocationProofSiteEditor{{0.07, -0.03, 0.09}});
+
+    dtDynModel model = CompileSpecChecked(spec);
+    RequireAllocationProof(model.nq == 15, "fixture must expose 15 qpos coordinates");
+    RequireAllocationProof(model.nv == 13, "fixture must expose 13 velocity coordinates");
+    RequireAllocationProof(model.nbody == 8, "fixture must contain eight bodies");
+    RequireAllocationProof(model.njnt == 6, "fixture must contain six joints");
+    RequireAllocationProof(model.nsite == 3, "fixture must contain three sites");
+
+    dtDynData data;
+    data.Resize(model);
+
+    // Setup-time work: id lists with duplicates/out-of-order entries and
+    // caller-owned Jacobian outputs are sized before any measurement.
+    fixture.bodyIds = {fixture.fixedBody, fixture.baseBody, fixture.chainBody, fixture.ballBody,
+                       fixture.chainBody, 0, fixture.slideBody, fixture.baseBody};
+    fixture.siteIds = {fixture.thirdSite, fixture.firstSite, fixture.secondSite,
+                       fixture.firstSite, fixture.thirdSite};
+    ResizeDenseMatrix(fixture.jacp, 3, model.nv);
+    ResizeDenseMatrix(fixture.jacr, 3, model.nv);
+    ResizeDenseMatrix(fixture.jacpDot, 3, model.nv);
+    ResizeDenseMatrix(fixture.jacrDot, 3, model.nv);
+    fixture.pointOffset.At(0) = 0.03;
+    fixture.pointOffset.At(1) = -0.02;
+    fixture.pointOffset.At(2) = 0.04;
+    fixture.gravity.SetZero();
+    fixture.gravity.At(2) = -9.81;
+    fixture.linear.SetZero();
+    fixture.angular.SetZero();
+
+    // Warm-up: every API runs once so that first-call effects cannot be
+    // mistaken for steady-state behavior; its counts are not enforced.
+    AllocationProofLedger warmup(false);
+    warmup.SetPass("warm-up");
+    SetAllocationProofState(model, data, 0);
+    RunAllocationProofPass(model, data, fixture, warmup);
+    RequireAllocationProofOutputsAreLive(model, data, fixture);
+
+    const std::size_t checksPerPass = warmup.CheckCount();
+    RequireAllocationProof(checksPerPass > 0, "warm-up pass must exercise the realtime APIs");
+
+    static const char *const kPassNames[3] = {"measured pass 1", "measured pass 2", "measured pass 3"};
+    AllocationProofLedger measured(true);
+    for (dtDynIndex pass = 0; pass < 3; ++pass)
+    {
+        measured.SetPass(kPassNames[pass]);
+        SetAllocationProofState(model, data, pass + 1);
+        RunAllocationProofPass(model, data, fixture, measured);
+        RequireAllocationProofOutputsAreLive(model, data, fixture);
+    }
+
+    // UpdateSpec after a physical edit is allocation-free, and the updated
+    // model keeps the compute path allocation-free.
+    spec.EditBody(fixture.baseBody,
+                  AllocationProofBodyEditor{4.25, {0.12, -0.18, 0.33}, {0.06, -0.03, 0.05}, {0.35, 0.45, 0.55}, true});
+    spec.EditBody(chain1,
+                  AllocationProofBodyEditor{1.4, {0.22, 0.12, -0.17}, {0.03, 0.02, -0.05}, {0.06, 0.07, 0.08}, false});
+    RequireAllocationProof(measured.CheckCount() == (3 * checksPerPass),
+                           "every measured pass must run the same API sequence as warm-up");
+    measured.SetPass("UpdateSpec");
+    measured.Begin();
+    const bool updated = UpdateSpec(spec, model);
+    measured.End("UpdateSpec");
+    RequireAllocationProof(updated, "UpdateSpec must accept a physical-only edit");
+    RequireAllocationProof(std::fabs(model.root_mass.At(0) - 9.55) < kAllocationProofTolerance,
+                           "UpdateSpec must refresh the root mass cache");
+
+    measured.SetPass("measured pass after UpdateSpec");
+    SetAllocationProofState(model, data, 4);
+    RunAllocationProofPass(model, data, fixture, measured);
+    RequireAllocationProofOutputsAreLive(model, data, fixture);
+    RequireAllocationProof(measured.CheckCount() == ((4 * checksPerPass) + 1),
+                           "post-UpdateSpec pass must run the same API sequence as warm-up");
+}
+
 } // namespace
 
 int main()
@@ -11145,5 +11686,6 @@ int main()
     TestDynamicsCCRBAComputesOnlyRequestedExtraTerms();
     TestDynamicsRNEAComputesOnlyRneaRequestedTerms();
     TestDynamicsCCRBAAllTermsIsRepeatable();
+    TestRealtimeComputePathPerformsNoHeapAllocation();
     return 0;
 }

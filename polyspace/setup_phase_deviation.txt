@@ -1,0 +1,19 @@
+# Provisional deviation for the setup-phase heap rules (21.6.1, 21.6.2, 21.6.3).
+#
+# Scope: only these project-relative source files. They belong to the setup phase
+# (XML I/O, validation, compile, model/spec containers), which allocates by design.
+# The realtime compute path (kinematics, dynamics, math, utils, data, types) is NOT
+# listed and must report zero rows for these rules; the gate fails if any other file
+# reports one. allocation-free compute is additionally proven by the registered test
+# TestRealtimeComputePathPerformsNoHeapAllocation.
+#
+# Status: provisional until the team decides the MISRA review policy. One entry per
+# line: "<check-number> <path-suffix>". Blank lines and "#" comments are ignored.
+21.6.1 src/dtDynSpec.cpp
+21.6.1 src/dtDynValidation.cpp
+21.6.1 src/dtDynModel.cpp
+21.6.1 include/dtDynamics/dtArray.h
+21.6.1 include/dtDynamics/dtDynSpec.h
+21.6.1 include/dtDynamics/dtDynModel.h
+21.6.2 include/dtDynamics/dtArray.h
+21.6.3 include/dtDynamics/dtArray.h
