@@ -94,7 +94,7 @@ static constexpr dtDynReal kDegreeToRadian = kPi / static_cast<dtDynReal>(180.0)
 
 // ASCII character classification that does not depend on the C locale. The comparisons go
 // through std::char_traits so a plain char is never promoted by a built-in operator.
-bool CharEquals(const char left, const char right)
+constexpr bool CharEquals(const char left, const char right)
 {
     return std::char_traits<char>::eq(left, right);
 }
