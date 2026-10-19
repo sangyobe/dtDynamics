@@ -345,6 +345,7 @@ python3 tools/validate_docs.py
 
 - authoritative execution: GitLab `polyspace-job` job과 job artifact `reports/polyspace/polyspace/result_list.txt`
 - analysis scope: test/benchmark/reference target을 끈 production `dtDynamics` compile database
+- 결과 범위: dtDynamics 자체 소스로 한정. 시스템 헤더, ART Framework prefix, 고정 SHA dtMath checkout(`.ci/dtmath`)은 `polyspace/polyspace.opts`에서 제외
 - checker profile: production library compile database에 `polyspace/checkers.xml`로 고정한 Bug Finder 237개와 MISRA C++:2023 179개 rule 적용. exact profile은 `tools/test_polyspace_checker_profile.py`가 검증
 - execution: `ci/polyspace.sh`가 cache 결과, 기존 configure options, 기존 report를 제거하고 현재 compile database에서 nonempty configure options를 새로 만든다. 이후 새 canonical `result_list.txt`만 `tools/polyspace_result_gate.py`에 전달. parser exit code가 GitLab job exit를 결정하며 Polyspace Access 업로드는 이 판정을 바꾸지 않음
 - canonical schema: TSV header는 `ID`부터 `Col`까지 정해진 16개 column을 같은 순서로 모두 포함해야 함. 축약·순서 변경·추가 column은 즉시 실패
