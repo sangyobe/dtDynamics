@@ -92,36 +92,88 @@ using AttributeMap = std::unordered_map<std::string, AttributeValue>;
 static constexpr dtDynReal kPi = static_cast<dtDynReal>(3.141592653589793238462643383279502884);
 static constexpr dtDynReal kDegreeToRadian = kPi / static_cast<dtDynReal>(180.0);
 
+// ASCII whitespace classification that does not depend on the C locale.
 bool IsXmlWhitespace(const char character)
 {
+    static constexpr char kSpace = ' ';
+    static constexpr char kTab = '\t';
+    static constexpr char kLineFeed = '\n';
+    static constexpr char kVerticalTab = '\v';
+    static constexpr char kFormFeed = '\f';
+    static constexpr char kCarriageReturn = '\r';
     bool result = false;
-    if (character == ' ')
+    if (character == kSpace)
     {
         result = true;
     }
-    else if (character == '\t')
+    else if (character == kTab)
     {
         result = true;
     }
-    else if (character == '\n')
+    else if (character == kLineFeed)
     {
         result = true;
     }
-    else if (character == '\v')
+    else if (character == kVerticalTab)
     {
         result = true;
     }
-    else if (character == '\f')
+    else if (character == kFormFeed)
     {
         result = true;
     }
-    else if (character == '\r')
+    else if (character == kCarriageReturn)
     {
         result = true;
     }
     else
     {
         result = false;
+    }
+    return result;
+}
+
+bool IsXmlWhitespaceUnsigned(const char character)
+{
+    static constexpr unsigned char kSpace = 0x20U;
+    static constexpr unsigned char kTab = 0x09U;
+    static constexpr unsigned char kLineFeed = 0x0AU;
+    static constexpr unsigned char kVerticalTab = 0x0BU;
+    static constexpr unsigned char kFormFeed = 0x0CU;
+    static constexpr unsigned char kCarriageReturn = 0x0DU;
+    const unsigned char value = static_cast<unsigned char>(character);
+    bool result = false;
+    if (value == kSpace)
+    {
+        result = true;
+    }
+    else if ((value >= kTab) && (value <= kCarriageReturn))
+    {
+        result = true;
+    }
+    else
+    {
+        result = false;
+    }
+    return result;
+}
+
+bool IsXmlWhitespaceSwitch(const char character)
+{
+    bool result = false;
+    switch (character)
+    {
+    case ' ':
+    case '\t':
+    case '\n':
+    case '\v':
+    case '\f':
+    case '\r':
+        result = true;
+        break;
+    default:
+        result = false;
+        break;
     }
     return result;
 }
@@ -141,7 +193,7 @@ std::string Trim(const std::string &text)
     std::size_t last = text.size();
     while (last > first)
     {
-        if (!IsXmlWhitespace(text[last - 1]))
+        if (!IsXmlWhitespaceUnsigned(text[last - 1]))
         {
             break;
         }
@@ -155,7 +207,7 @@ std::string TagName(const std::string &tag)
     std::size_t pos = 0;
     while (pos < tag.size())
     {
-        if (std::isspace(static_cast<std::uint8_t>(tag[pos])))
+        if (IsXmlWhitespaceSwitch(tag[pos]))
         {
             break;
         }
