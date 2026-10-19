@@ -12,7 +12,6 @@
 #include "dtDynamics/dtDynValidation.h"
 
 #include <array>
-#include <cctype>
 #include <cmath>
 #include <cstdint>
 #include <fstream>
@@ -92,73 +91,8 @@ using AttributeMap = std::unordered_map<std::string, AttributeValue>;
 static constexpr dtDynReal kPi = static_cast<dtDynReal>(3.141592653589793238462643383279502884);
 static constexpr dtDynReal kDegreeToRadian = kPi / static_cast<dtDynReal>(180.0);
 
-// ASCII whitespace classification that does not depend on the C locale.
+// ASCII character classification that does not depend on the C locale.
 bool IsXmlWhitespace(const char character)
-{
-    static constexpr char kSpace = ' ';
-    static constexpr char kTab = '\t';
-    static constexpr char kLineFeed = '\n';
-    static constexpr char kVerticalTab = '\v';
-    static constexpr char kFormFeed = '\f';
-    static constexpr char kCarriageReturn = '\r';
-    bool result = false;
-    if (character == kSpace)
-    {
-        result = true;
-    }
-    else if (character == kTab)
-    {
-        result = true;
-    }
-    else if (character == kLineFeed)
-    {
-        result = true;
-    }
-    else if (character == kVerticalTab)
-    {
-        result = true;
-    }
-    else if (character == kFormFeed)
-    {
-        result = true;
-    }
-    else if (character == kCarriageReturn)
-    {
-        result = true;
-    }
-    else
-    {
-        result = false;
-    }
-    return result;
-}
-
-bool IsXmlWhitespaceUnsigned(const char character)
-{
-    static constexpr unsigned char kSpace = 0x20U;
-    static constexpr unsigned char kTab = 0x09U;
-    static constexpr unsigned char kLineFeed = 0x0AU;
-    static constexpr unsigned char kVerticalTab = 0x0BU;
-    static constexpr unsigned char kFormFeed = 0x0CU;
-    static constexpr unsigned char kCarriageReturn = 0x0DU;
-    const unsigned char value = static_cast<unsigned char>(character);
-    bool result = false;
-    if (value == kSpace)
-    {
-        result = true;
-    }
-    else if ((value >= kTab) && (value <= kCarriageReturn))
-    {
-        result = true;
-    }
-    else
-    {
-        result = false;
-    }
-    return result;
-}
-
-bool IsXmlWhitespaceSwitch(const char character)
 {
     bool result = false;
     switch (character)
@@ -169,6 +103,148 @@ bool IsXmlWhitespaceSwitch(const char character)
     case '\v':
     case '\f':
     case '\r':
+        result = true;
+        break;
+    default:
+        result = false;
+        break;
+    }
+    return result;
+}
+
+bool IsAsciiAlpha(const char character)
+{
+    bool result = false;
+    switch (character)
+    {
+    case 'a':
+    case 'b':
+    case 'c':
+    case 'd':
+    case 'e':
+    case 'f':
+    case 'g':
+    case 'h':
+    case 'i':
+    case 'j':
+    case 'k':
+    case 'l':
+    case 'm':
+    case 'n':
+    case 'o':
+    case 'p':
+    case 'q':
+    case 'r':
+    case 's':
+    case 't':
+    case 'u':
+    case 'v':
+    case 'w':
+    case 'x':
+    case 'y':
+    case 'z':
+    case 'A':
+    case 'B':
+    case 'C':
+    case 'D':
+    case 'E':
+    case 'F':
+    case 'G':
+    case 'H':
+    case 'I':
+    case 'J':
+    case 'K':
+    case 'L':
+    case 'M':
+    case 'N':
+    case 'O':
+    case 'P':
+    case 'Q':
+    case 'R':
+    case 'S':
+    case 'T':
+    case 'U':
+    case 'V':
+    case 'W':
+    case 'X':
+    case 'Y':
+    case 'Z':
+        result = true;
+        break;
+    default:
+        result = false;
+        break;
+    }
+    return result;
+}
+
+bool IsAsciiAlnum(const char character)
+{
+    bool result = false;
+    switch (character)
+    {
+    case 'a':
+    case 'b':
+    case 'c':
+    case 'd':
+    case 'e':
+    case 'f':
+    case 'g':
+    case 'h':
+    case 'i':
+    case 'j':
+    case 'k':
+    case 'l':
+    case 'm':
+    case 'n':
+    case 'o':
+    case 'p':
+    case 'q':
+    case 'r':
+    case 's':
+    case 't':
+    case 'u':
+    case 'v':
+    case 'w':
+    case 'x':
+    case 'y':
+    case 'z':
+    case 'A':
+    case 'B':
+    case 'C':
+    case 'D':
+    case 'E':
+    case 'F':
+    case 'G':
+    case 'H':
+    case 'I':
+    case 'J':
+    case 'K':
+    case 'L':
+    case 'M':
+    case 'N':
+    case 'O':
+    case 'P':
+    case 'Q':
+    case 'R':
+    case 'S':
+    case 'T':
+    case 'U':
+    case 'V':
+    case 'W':
+    case 'X':
+    case 'Y':
+    case 'Z':
+    case '0':
+    case '1':
+    case '2':
+    case '3':
+    case '4':
+    case '5':
+    case '6':
+    case '7':
+    case '8':
+    case '9':
         result = true;
         break;
     default:
@@ -193,7 +269,7 @@ std::string Trim(const std::string &text)
     std::size_t last = text.size();
     while (last > first)
     {
-        if (!IsXmlWhitespaceUnsigned(text[last - 1]))
+        if (!IsXmlWhitespace(text[last - 1]))
         {
             break;
         }
@@ -207,7 +283,7 @@ std::string TagName(const std::string &tag)
     std::size_t pos = 0;
     while (pos < tag.size())
     {
-        if (IsXmlWhitespaceSwitch(tag[pos]))
+        if (IsXmlWhitespace(tag[pos]))
         {
             break;
         }
@@ -277,7 +353,7 @@ bool IsValidTagName(const std::string &name)
     {
         return false;
     }
-    if (!std::isalpha(static_cast<std::uint8_t>(name[0])))
+    if (!IsAsciiAlpha(name[0]))
     {
         if (name[0] != '_')
         {
@@ -286,7 +362,7 @@ bool IsValidTagName(const std::string &name)
     }
     for (const char character : name)
     {
-        if (!std::isalnum(static_cast<std::uint8_t>(character)))
+        if (!IsAsciiAlnum(character))
         {
             if (character != '_')
             {
@@ -312,7 +388,7 @@ std::size_t FindFirstNonWhitespace(const std::string &xml,
 {
     for (std::size_t offset = begin; offset < end; ++offset)
     {
-        if (!std::isspace(static_cast<std::uint8_t>(xml[offset])))
+        if (!IsXmlWhitespace(xml[offset]))
         {
             return offset;
         }
@@ -459,7 +535,7 @@ AttributeMap ParseAttributes(const std::string &tag, const std::size_t tagOffset
     {
         while (pos < tag.size())
         {
-            if (!std::isspace(static_cast<std::uint8_t>(tag[pos])))
+            if (!IsXmlWhitespace(tag[pos]))
             {
                 break;
             }
@@ -483,7 +559,7 @@ AttributeMap ParseAttributes(const std::string &tag, const std::size_t tagOffset
             {
                 break;
             }
-            if (std::isspace(static_cast<std::uint8_t>(tag[pos])))
+            if (IsXmlWhitespace(tag[pos]))
             {
                 break;
             }
@@ -499,7 +575,7 @@ AttributeMap ParseAttributes(const std::string &tag, const std::size_t tagOffset
 
         while (pos < tag.size())
         {
-            if (!std::isspace(static_cast<std::uint8_t>(tag[pos])))
+            if (!IsXmlWhitespace(tag[pos]))
             {
                 break;
             }
@@ -528,7 +604,7 @@ AttributeMap ParseAttributes(const std::string &tag, const std::size_t tagOffset
         ++pos;
         while (pos < tag.size())
         {
-            if (!std::isspace(static_cast<std::uint8_t>(tag[pos])))
+            if (!IsXmlWhitespace(tag[pos]))
             {
                 break;
             }
@@ -598,7 +674,7 @@ dtDynReal ParseReal(const AttributeValue &attribute, const std::string &sourcePa
     std::size_t first = 0;
     while (first < attribute.text.size())
     {
-        if (!std::isspace(static_cast<std::uint8_t>(attribute.text[first])))
+        if (!IsXmlWhitespace(attribute.text[first]))
         {
             break;
         }
@@ -607,7 +683,7 @@ dtDynReal ParseReal(const AttributeValue &attribute, const std::string &sourcePa
     std::size_t last = attribute.text.size();
     while (last > first)
     {
-        if (!std::isspace(static_cast<std::uint8_t>(attribute.text[last - 1])))
+        if (!IsXmlWhitespace(attribute.text[last - 1]))
         {
             break;
         }
@@ -680,7 +756,7 @@ dtArray<dtDynReal> ParseVectorValues(const AttributeValue &attribute, const std:
     {
         while (pos < attribute.text.size())
         {
-            if (!std::isspace(static_cast<std::uint8_t>(attribute.text[pos])))
+            if (!IsXmlWhitespace(attribute.text[pos]))
             {
                 break;
             }
@@ -693,7 +769,7 @@ dtArray<dtDynReal> ParseVectorValues(const AttributeValue &attribute, const std:
         const std::size_t tokenStart = pos;
         while (pos < attribute.text.size())
         {
-            if (std::isspace(static_cast<std::uint8_t>(attribute.text[pos])))
+            if (IsXmlWhitespace(attribute.text[pos]))
             {
                 break;
             }
@@ -1224,7 +1300,7 @@ dtDynSpec DecodeXmlImpl(const std::string &xml, const std::string &sourcePath)
         std::size_t leadingWhitespace = 0;
         while (leadingWhitespace < rawTag.size())
         {
-            if (!std::isspace(static_cast<std::uint8_t>(rawTag[leadingWhitespace])))
+            if (!IsXmlWhitespace(rawTag[leadingWhitespace]))
             {
                 break;
             }
@@ -1324,7 +1400,7 @@ dtDynSpec DecodeXmlImpl(const std::string &xml, const std::string &sourcePath)
             std::size_t closingWhitespace = 0;
             while (closingWhitespace < closingTag.size())
             {
-                if (!std::isspace(static_cast<std::uint8_t>(closingTag[closingWhitespace])))
+                if (!IsXmlWhitespace(closingTag[closingWhitespace]))
                 {
                     break;
                 }
@@ -1361,7 +1437,7 @@ dtDynSpec DecodeXmlImpl(const std::string &xml, const std::string &sourcePath)
             std::size_t suffix = name.size();
             while (suffix < tag.size())
             {
-                if (!std::isspace(static_cast<std::uint8_t>(tag[suffix])))
+                if (!IsXmlWhitespace(tag[suffix]))
                 {
                     break;
                 }
