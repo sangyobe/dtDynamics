@@ -1937,9 +1937,9 @@ void TestSpecValidationPreservesOrderedPhysicalAndNameFailures()
     const dtDynIndex secondBody = named.AddBody("body_two", 0);
     const dtDynIndex firstJoint = named.AddJoint(firstBody, "joint_one", dtDynJointType::Hinge);
     const dtDynIndex secondJoint = named.AddJoint(secondBody, "joint_two", dtDynJointType::Hinge);
-    const dtDynIndex firstSite = named.AddSite(firstBody, "site_one");
+    static_cast<void>(named.AddSite(firstBody, "site_one"));
     const dtDynIndex secondSite = named.AddSite(secondBody, "site_two");
-    const dtDynIndex firstActuator = named.AddActuator(firstJoint, "actuator_one");
+    static_cast<void>(named.AddActuator(firstJoint, "actuator_one"));
     const dtDynIndex secondActuator = named.AddActuator(secondJoint, "actuator_two");
 
     dtDynSpec duplicateBody = named;

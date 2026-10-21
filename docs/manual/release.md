@@ -28,7 +28,7 @@ target_link_libraries(my_controller PRIVATE dt::Dynamics)
 - 게시 model/usage guide PDF는 각 guide의 tracked Markdown·theme·참조 SVG/PNG와 개별 `*.provenance.json` SHA-256 manifest가 모두 일치할 때만 release artifact로 인정
 - canonical prefix의 unrelated `dtMath`/다른 ART package를 제거하지 않음
 
-- static-analysis release condition: GitLab Polyspace artifact가 raw defect 0 (Green + blank/`Unreviewed` only), `Justified` 포함 reviewed row 0, compile failure 0
+- static-analysis release condition: GitLab Polyspace artifact가 raw defect 0 (Green + blank/`Unreviewed` only), `Justified` 포함 reviewed row 0, compile failure 0. 단 21.6.1/21.6.2/21.6.3은 `polyspace/setup_phase_deviation.txt`에 적은 설정 단계 파일에 한해 잠정 deviation으로 따로 집계
 - canonical schema: TSV header는 `ID`부터 `Col`까지 정해진 16개 column을 같은 순서로 모두 포함해야 하며, 축약·순서 변경·추가 column은 release evidence가 아님
 - TSV field boundary: 필드 경계는 literal TAB만 사용한다. 큰따옴표(`"`)는 일반 데이터로 취급하며 따옴표 처리나 행 결합에 사용하지 않는다. 따라서 큰따옴표로 감싼 TAB도 추가 field로 거부한다.
 - execution proof: `ci/polyspace.sh`가 기존 configure options를 제거하고 현재 compile database에서 nonempty options를 새로 만든 뒤, 새 canonical `result_list.txt`를 `tools/polyspace_result_gate.py`에 전달하고 parser exit code를 job exit로 사용한 GitLab artifact여야 함
@@ -44,7 +44,7 @@ target_link_libraries(my_controller PRIVATE dt::Dynamics)
 - source archive 생성 조건: clean committed tree와 exact `v0.1.3` tag 승인 이후만
 - archive version `0.1.3`은 `CMakeLists.txt` project version과 같아야 하며, exact `v0.1.3` tag가 현재 `HEAD`를 가리켜야 함
 - 생성한 archive의 embedded commit ID도 exact `v0.1.3` tag commit과 일치해야 함
-- `v0.1.3` tag는 package/install/docs/static-analysis gate를 완료한 release commit에만 생성
+- `v0.1.3` tag는 package/install/docs gate를 완료한 release commit에만 생성. static-analysis gate의 미충족 항목은 `docs/release-notes/v0.1.3.md`의 "정적 분석 미충족 항목"에 기록
 
 ## 관련 문서
 

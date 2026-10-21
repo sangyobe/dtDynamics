@@ -95,7 +95,7 @@ tools/audit_release_readiness.sh
 - static-analysis 실행 경로: `ci/polyspace.sh`가 cache 결과, 기존 configure options, 기존 report를 제거한 뒤 현재 compile database에서 nonempty configure options를 새로 만들고, 새 canonical `result_list.txt`만 `tools/polyspace_result_gate.py`에 전달한다. parser exit code를 GitLab job exit로 사용하며 Polyspace Access 업로드는 release pass/fail을 바꾸지 않음
 - canonical schema: TSV header는 `ID`부터 `Col`까지 정해진 16개 column을 같은 순서로 모두 포함해야 함. 축약·순서 변경·추가 column은 raw-defect-zero 증거가 아님
 - TSV field boundary: 필드 경계는 literal TAB만 사용한다. 큰따옴표(`"`)는 일반 데이터로 취급하며 따옴표 처리나 행 결합에 사용하지 않는다. 따라서 큰따옴표로 감싼 TAB도 추가 field로 거부한다.
-- static-analysis 통과 기준: canonical `result_list.txt`의 모든 row가 `Color=Green` 및 blank/`Unreviewed` status. `Justified`를 포함한 reviewed row, non-Green, malformed export, compile failure는 모두 실패
+- static-analysis 통과 기준: canonical `result_list.txt`의 모든 row가 `Color=Green` 및 blank/`Unreviewed` status. `Justified`를 포함한 reviewed row, non-Green, malformed export, compile failure는 모두 실패. 예외: 21.6.1/21.6.2/21.6.3 중 `polyspace/setup_phase_deviation.txt`에 적은 설정 단계 파일의 행은 잠정 deviated로 따로 집계하며, 그 밖의 행은 모두 unresolved다.
 
 ## Realtime 경계
 

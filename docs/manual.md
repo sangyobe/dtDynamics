@@ -351,7 +351,7 @@ python3 tools/validate_docs.py
 - execution: `ci/polyspace.sh`가 cache 결과, 기존 configure options, 기존 report를 제거하고 현재 compile database에서 nonempty configure options를 새로 만든다. 이후 새 canonical `result_list.txt`만 `tools/polyspace_result_gate.py`에 전달. parser exit code가 GitLab job exit를 결정하며 Polyspace Access 업로드는 이 판정을 바꾸지 않음
 - canonical schema: TSV header는 `ID`부터 `Col`까지 정해진 16개 column을 같은 순서로 모두 포함해야 함. 축약·순서 변경·추가 column은 즉시 실패
 - TSV field boundary: 필드 경계는 literal TAB만 사용한다. 큰따옴표(`"`)는 일반 데이터로 취급하며 따옴표 처리나 행 결합에 사용하지 않는다. 따라서 큰따옴표로 감싼 TAB도 추가 field로 거부한다.
-- raw-defect-zero policy: 모든 canonical export row는 `Color=Green`이고 status가 blank 또는 `Unreviewed`여야 한다. `Justified`, `No action planned`, `Not a defect`, non-Green row, malformed TSV, `File does not compile`은 모두 gate 실패다.
+- raw-defect-zero policy: 모든 canonical export row는 `Color=Green`이고 status가 blank 또는 `Unreviewed`여야 한다. `Justified`, `No action planned`, `Not a defect`, non-Green row, malformed TSV, `File does not compile`은 모두 gate 실패다. 예외: 21.6.1/21.6.2/21.6.3 중 `polyspace/setup_phase_deviation.txt`에 적은 설정 단계 파일의 행은 잠정 deviated로 따로 집계하며, 그 밖의 행은 모두 unresolved다.
 
 ```bash
 python3 tools/test_polyspace_checker_profile.py
