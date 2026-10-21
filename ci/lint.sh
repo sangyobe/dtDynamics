@@ -2,6 +2,10 @@
 # Side-effect-free clang-format gate for the dtDynamics production source tree.
 set -euo pipefail
 
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd -P)"
+PACKAGE_CONFIG_TEST="${REPO_ROOT}/tools/test_dtdynamics_config_include_order.py"
+
 mkdir -p reports
 
 SEARCH_DIRS=()
@@ -55,6 +59,8 @@ FORMAT_EXIT=${PIPE_STATUS[0]:-1}
 TEE_EXIT=${PIPE_STATUS[1]:-1}
 if [[ ${FORMAT_EXIT} -eq 0 && ${TEE_EXIT} -eq 0 ]]; then
     echo "clang-format check passed"
+    echo "=== dtDynamics package-config include precedence ==="
+    python3 "${PACKAGE_CONFIG_TEST}"
     exit 0
 fi
 

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
@@ -25,10 +26,19 @@ def run(command: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
     )
 
 
-def create_repository() -> tuple[tempfile.TemporaryDirectory[str], Path]:
+# Incompressible payload size. The archive must be larger than a pipe buffer (64 KiB) so
+# `git get-tar-commit-id` exits while `gzip -dc` is still writing; a tiny archive hides that.
+LARGE_PAYLOAD_BYTES = 512 * 1024
+
+
+def create_repository(
+    large_payload: bool = False,
+) -> tuple[tempfile.TemporaryDirectory[str], Path]:
     temporary = tempfile.TemporaryDirectory()
     repository = Path(temporary.name) / "repository"
     (repository / "tools").mkdir(parents=True)
+    if large_payload:
+        (repository / "large_payload.bin").write_bytes(os.urandom(LARGE_PAYLOAD_BYTES))
     shutil.copy2(RELEASE_SCRIPT, repository / "tools" / "package_release.sh")
     (repository / "tools" / "package_release.sh").chmod(0o755)
     (repository / "CMakeLists.txt").write_text(
@@ -138,11 +148,76 @@ def assert_exact_tagged_head_archives_the_tagged_tree() -> None:
         temporary.cleanup()
 
 
+def assert_large_archive_does_not_fail_with_sigpipe() -> None:
+    temporary, repository = create_repository(large_payload=True)
+    try:
+        result = run(["git", "tag", "v0.1.3"], repository)
+        assert result.returncode == 0, result.stdout + result.stderr
+        expected_head = run(["git", "rev-parse", "HEAD"], repository)
+        assert expected_head.returncode == 0, expected_head.stdout + expected_head.stderr
+
+        result = package(repository)
+        assert result.returncode == 0, (
+            f"package_release.sh failed on a large archive (rc={result.returncode}; "
+            f"141 means SIGPIPE from the commit-id check)\n" + result.stdout + result.stderr
+        )
+        archive = repository.parent / "dist" / "dtDynamics-0.1.3.tar.gz"
+        assert archive.is_file()
+        assert archive.stat().st_size > 64 * 1024, "archive is not larger than a pipe buffer"
+        assert (archive.parent / f"{archive.name}.sha256").is_file()
+        identity = run(
+            ["bash", "-c", 'set -o pipefail; gzip -dc "$1" > "$2" && git get-tar-commit-id < "$2"', "bash",
+             str(archive), str(repository.parent / "dist" / "identity.tar")],
+            repository,
+        )
+        assert identity.returncode == 0, identity.stdout + identity.stderr
+        assert identity.stdout.strip() == expected_head.stdout.strip()
+    finally:
+        temporary.cleanup()
+
+
+def assert_archive_with_wrong_commit_id_is_rejected() -> None:
+    temporary, repository = create_repository(large_payload=True)
+    try:
+        result = run(["git", "tag", "v0.1.3"], repository)
+        assert result.returncode == 0, result.stdout + result.stderr
+        # Stub `git` so archive creation reports a different embedded commit id.
+        fake_bin = repository.parent / "fake-bin"
+        fake_bin.mkdir()
+        real_git = shutil.which("git")
+        assert real_git is not None
+        wrapper = fake_bin / "git"
+        wrapper.write_text(
+            "#!/usr/bin/env bash\n"
+            'if [ "${1:-}" = "get-tar-commit-id" ]; then\n'
+            "  cat >/dev/null\n"
+            "  echo 0000000000000000000000000000000000000000\n"
+            "  exit 0\n"
+            "fi\n"
+            f'exec "{real_git}" "$@"\n',
+            encoding="utf-8",
+        )
+        wrapper.chmod(0o755)
+        env = dict(os.environ, PATH=f"{fake_bin}:{os.environ['PATH']}")
+        result = subprocess.run(
+            ["bash", "tools/package_release.sh", "--skip-audit", "--version", "0.1.3",
+             "--output-dir", str(repository.parent / "dist")],
+            cwd=repository, check=False, capture_output=True, text=True, env=env,
+        )
+        assert result.returncode != 0, result.stdout + result.stderr
+        assert "does not identify the exact release tag commit" in (result.stdout + result.stderr)
+        assert not (repository.parent / "dist" / "dtDynamics-0.1.3.tar.gz").exists()
+    finally:
+        temporary.cleanup()
+
+
 def main() -> None:
     assert_untagged_head_is_rejected()
     assert_tag_on_other_commit_is_rejected()
     assert_version_must_match_project_version()
     assert_exact_tagged_head_archives_the_tagged_tree()
+    assert_large_archive_does_not_fail_with_sigpipe()
+    assert_archive_with_wrong_commit_id_is_rejected()
     print("package release contract tests: PASS")
 
 

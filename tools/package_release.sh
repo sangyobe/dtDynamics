@@ -136,7 +136,8 @@ if [[ "${FORCE}" == "ON" ]]; then
 fi
 
 archive_tmp="${archive_path}.tmp.$$"
-trap 'rm -f "${archive_tmp}"' EXIT
+archive_tar_tmp="${archive_path}.tar.tmp.$$"
+trap 'rm -f "${archive_tmp}" "${archive_tar_tmp}"' EXIT
 
 git archive \
     --format=tar.gz \
@@ -144,7 +145,12 @@ git archive \
     -o "${archive_tmp}" \
     "${tag_commit}"
 
-archive_commit="$(gzip -dc "${archive_tmp}" | git get-tar-commit-id)"
+# Decompress to a file instead of piping into `git get-tar-commit-id`: that command reads only
+# the tar header and exits, so on an archive larger than a pipe buffer `gzip` is killed by
+# SIGPIPE and `set -o pipefail` aborts the release with status 141.
+gzip -dc -- "${archive_tmp}" > "${archive_tar_tmp}"
+archive_commit="$(git get-tar-commit-id < "${archive_tar_tmp}")"
+rm -f "${archive_tar_tmp}"
 if [[ "${archive_commit}" != "${tag_commit}" ]]; then
     echo "Generated source archive does not identify the exact release tag commit." >&2
     echo "archive=${archive_commit:-missing}" >&2

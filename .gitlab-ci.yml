@@ -56,6 +56,8 @@ release-contracts:
     - python3 tools/test_polyspace_transport.py
     - python3 tools/test_polyspace_checker_profile.py
     - python3 tools/test_release_gate_wiring.py
+    - python3 tools/test_gitlab_ci_contract_parser.py
+    - python3 tools/test_gitlab_ci_contract.py
 
 build-job:
   stage: build
