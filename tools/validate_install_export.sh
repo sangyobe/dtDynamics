@@ -8,16 +8,29 @@ BUILD_TYPE="${CMAKE_BUILD_TYPE:-Release}"
 ARTF_PREFIX="${ARTF_INSTALL_DIR:-${HOME}/.local/ART_Framework}"
 DTMATH_INCLUDE_DIR="${DTDYNAMICS_DTMATH_INCLUDE_DIR:-${ARTF_PREFIX}/include}"
 WORK_ROOT="${DTDYNAMICS_INSTALL_VALIDATE_ROOT:-$(mktemp -d "${TMPDIR:-/tmp}/dtdynamics-install-export-XXXXXX")}"
+INSTALL_LIBDIR="${DTDYNAMICS_INSTALL_LIBDIR:-lib}"
+INSTALL_DOCDIR="${DTDYNAMICS_INSTALL_DOCDIR:-share/doc/dtDynamics}"
 BUILD_DIR="${WORK_ROOT}/build"
 INSTALL_PREFIX="${WORK_ROOT}/install"
+RELOCATED_PREFIX="${WORK_ROOT}/relocated-install"
 CONSUMER_DIR="${WORK_ROOT}/consumer"
 CONSUMER_BUILD_DIR="${WORK_ROOT}/consumer-build"
 CONSUMER_FILE_BUILD_DIR="${WORK_ROOT}/consumer-file-build"
+CONSUMER_RELOCATED_BUILD_DIR="${WORK_ROOT}/consumer-relocated-build"
 CONSUMER_COLLISION_DIR="${WORK_ROOT}/consumer-collision"
 CONSUMER_COLLISION_BUILD_DIR="${WORK_ROOT}/consumer-collision-build"
 CONSUMER_XML_PATH="${DTDYNAMICS_INSTALL_VALIDATE_XML:-${CONSUMER_DIR}/install-consumer-model.xml}"
 CONSUMER_PREINCLUDE_CONFIG="${DTDYNAMICS_INSTALL_VALIDATE_PREINCLUDE_CONFIG:-}"
 EXPECTED_VERSION="${DTDYNAMICS_EXPECTED_VERSION:-0.1.3}"
+
+if [[ -z "${INSTALL_LIBDIR}" || "${INSTALL_LIBDIR}" = /* || "${INSTALL_LIBDIR}" == *..* ]]; then
+    echo "DTDYNAMICS_INSTALL_LIBDIR must be a relative install layout without '..': ${INSTALL_LIBDIR}" >&2
+    exit 1
+fi
+if [[ -z "${INSTALL_DOCDIR}" || "${INSTALL_DOCDIR}" = /* || "${INSTALL_DOCDIR}" == *..* ]]; then
+    echo "DTDYNAMICS_INSTALL_DOCDIR must be a relative install layout without '..': ${INSTALL_DOCDIR}" >&2
+    exit 1
+fi
 
 if [[ ! -f "${DTMATH_INCLUDE_DIR}/dtMath/dtMath.h" ]]; then
     echo "dtMath headers not found at ${DTMATH_INCLUDE_DIR}" >&2
@@ -28,10 +41,12 @@ fi
 cmake --preset release -S "${DTDYNAMICS_ROOT}" -B "${BUILD_DIR}" \
     -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" \
     -DCMAKE_INSTALL_PREFIX="${INSTALL_PREFIX}" \
+    -DCMAKE_INSTALL_LIBDIR="${INSTALL_LIBDIR}" \
+    -DCMAKE_INSTALL_DOCDIR="${INSTALL_DOCDIR}" \
     -DDTDYNAMICS_DTMATH_INCLUDE_DIR="${DTMATH_INCLUDE_DIR}"
 cmake --build "${BUILD_DIR}" --target install -- -j2
 
-CONFIG_DIR="${INSTALL_PREFIX}/lib/cmake/dtDynamics"
+CONFIG_DIR="${INSTALL_PREFIX}/${INSTALL_LIBDIR}/cmake/dtDynamics"
 if [[ ! -f "${CONFIG_DIR}/dtDynamicsTargets.cmake" ]]; then
     echo "Installed dtDynamicsTargets.cmake was not found under ${CONFIG_DIR}" >&2
     exit 1
@@ -52,7 +67,7 @@ if grep -R -i -E "mujoco|pinocchio" "${CONFIG_DIR}" >/dev/null; then
     exit 1
 fi
 
-DOC_DIR="${INSTALL_PREFIX}/share/doc/dtDynamics"
+DOC_DIR="${INSTALL_PREFIX}/${INSTALL_DOCDIR}"
 if [[ ! -f "${DOC_DIR}/manual.md" ]]; then
     echo "Installed package manual was not found under ${DOC_DIR}" >&2
     exit 1
@@ -106,6 +121,9 @@ if mismatches:
     )
 PY
 
+python3 "${SCRIPT_DIR}/validate_installed_guide_provenance.py" --docs-root "${DOC_DIR}"
+echo "PASS: installed guide source/PDF provenance validated."
+
 mkdir -p "${CONSUMER_DIR}"
 cat > "${CONSUMER_DIR}/CMakeLists.txt" <<'CONSUMER_CMAKE'
 cmake_minimum_required(VERSION 3.16)
@@ -114,13 +132,87 @@ project(dtDynamicsInstallConsumer LANGUAGES CXX)
 if(NOT DEFINED DTDYNAMICS_EXPECTED_VERSION)
     message(FATAL_ERROR "DTDYNAMICS_EXPECTED_VERSION must be provided by the validation driver")
 endif()
-find_package(dtDynamics ${DTDYNAMICS_EXPECTED_VERSION} EXACT CONFIG REQUIRED)
-set(_DTDYNAMICS_FIRST_PACKAGE_DIR "${dtDynamics_DIR}")
-get_target_property(_DTDYNAMICS_FIRST_INTERFACE_INCLUDES dt::Dynamics INTERFACE_INCLUDE_DIRECTORIES)
+if(NOT DEFINED DTDYNAMICS_PACKAGE_DIR)
+    message(FATAL_ERROR "DTDYNAMICS_PACKAGE_DIR must be provided by the validation driver")
+endif()
+if(NOT DEFINED DTDYNAMICS_EXPECTED_PREFIX)
+    message(FATAL_ERROR "DTDYNAMICS_EXPECTED_PREFIX must be provided by the validation driver")
+endif()
+if(NOT DEFINED DTDYNAMICS_EXPECTED_LIBRARY_DIR)
+    message(FATAL_ERROR "DTDYNAMICS_EXPECTED_LIBRARY_DIR must be provided by the validation driver")
+endif()
+
+find_package(dtDynamics ${DTDYNAMICS_EXPECTED_VERSION} EXACT CONFIG REQUIRED
+    PATHS "${DTDYNAMICS_PACKAGE_DIR}" NO_DEFAULT_PATH)
+file(REAL_PATH "${DTDYNAMICS_PACKAGE_DIR}" _DTDYNAMICS_EXPECTED_PACKAGE_DIR)
+file(REAL_PATH "${dtDynamics_DIR}" _DTDYNAMICS_FIRST_PACKAGE_DIR)
+if(NOT "${_DTDYNAMICS_FIRST_PACKAGE_DIR}" STREQUAL
+       "${_DTDYNAMICS_EXPECTED_PACKAGE_DIR}")
+    message(FATAL_ERROR
+        "dtDynamics resolved outside the selected staged package: "
+        "${_DTDYNAMICS_FIRST_PACKAGE_DIR} != ${_DTDYNAMICS_EXPECTED_PACKAGE_DIR}")
+endif()
+file(REAL_PATH "${DTDYNAMICS_EXPECTED_PREFIX}" _DTDYNAMICS_EXPECTED_PREFIX)
+file(REAL_PATH "${DTDYNAMICS_EXPECTED_LIBRARY_DIR}" _DTDYNAMICS_EXPECTED_LIBRARY_DIR)
+function(_dtdynamics_require_within_selected_prefix path label)
+    file(REAL_PATH "${path}" _DTDYNAMICS_REAL_PATH)
+    file(RELATIVE_PATH _DTDYNAMICS_RELATIVE_PATH
+        "${_DTDYNAMICS_EXPECTED_PREFIX}" "${_DTDYNAMICS_REAL_PATH}")
+    if(_DTDYNAMICS_RELATIVE_PATH STREQUAL ".." OR
+       _DTDYNAMICS_RELATIVE_PATH MATCHES "^\\.\\./")
+        message(FATAL_ERROR
+            "${label} resolved outside the selected staged prefix: ${_DTDYNAMICS_REAL_PATH}")
+    endif()
+endfunction()
+function(_dtdynamics_require_within_selected_library_dir path label)
+    file(REAL_PATH "${path}" _DTDYNAMICS_REAL_PATH)
+    file(RELATIVE_PATH _DTDYNAMICS_RELATIVE_PATH
+        "${_DTDYNAMICS_EXPECTED_LIBRARY_DIR}" "${_DTDYNAMICS_REAL_PATH}")
+    if(_DTDYNAMICS_RELATIVE_PATH STREQUAL ".." OR
+       _DTDYNAMICS_RELATIVE_PATH MATCHES "^\\.\\./")
+        message(FATAL_ERROR
+            "${label} resolved outside the selected staged library layout: ${_DTDYNAMICS_REAL_PATH}")
+    endif()
+endfunction()
+_dtdynamics_require_within_selected_prefix("${dtDynamics_DIR}" "dtDynamics_DIR")
+
+get_target_property(_DTDYNAMICS_FIRST_INTERFACE_INCLUDES
+    dt::Dynamics INTERFACE_INCLUDE_DIRECTORIES)
+get_target_property(_DTDYNAMICS_IMPORTED_LOCATION
+    dt::Dynamics IMPORTED_LOCATION_RELEASE)
+if(NOT _DTDYNAMICS_IMPORTED_LOCATION OR
+   _DTDYNAMICS_IMPORTED_LOCATION STREQUAL "_DTDYNAMICS_IMPORTED_LOCATION-NOTFOUND")
+    get_target_property(_DTDYNAMICS_IMPORTED_LOCATION
+        dt::Dynamics IMPORTED_LOCATION_NOCONFIG)
+endif()
+if(NOT _DTDYNAMICS_IMPORTED_LOCATION OR
+   _DTDYNAMICS_IMPORTED_LOCATION STREQUAL "_DTDYNAMICS_IMPORTED_LOCATION-NOTFOUND")
+    message(FATAL_ERROR "dt::Dynamics did not expose an imported release location")
+endif()
+_dtdynamics_require_within_selected_library_dir(
+    "${_DTDYNAMICS_IMPORTED_LOCATION}" "dt::Dynamics imported location")
+
+file(REAL_PATH "${DTDYNAMICS_EXPECTED_PREFIX}/include" _DTDYNAMICS_EXPECTED_INCLUDE)
+set(_DTDYNAMICS_HAS_SELECTED_INCLUDE FALSE)
+foreach(_DTDYNAMICS_INCLUDE IN LISTS _DTDYNAMICS_FIRST_INTERFACE_INCLUDES)
+    file(REAL_PATH "${_DTDYNAMICS_INCLUDE}" _DTDYNAMICS_REAL_INCLUDE)
+    if("${_DTDYNAMICS_REAL_INCLUDE}" STREQUAL "${_DTDYNAMICS_EXPECTED_INCLUDE}")
+        set(_DTDYNAMICS_HAS_SELECTED_INCLUDE TRUE)
+    endif()
+endforeach()
+if(NOT _DTDYNAMICS_HAS_SELECTED_INCLUDE)
+    message(FATAL_ERROR
+        "dt::Dynamics does not expose the selected staged include directory: "
+        "${_DTDYNAMICS_EXPECTED_INCLUDE}")
+endif()
+
 # A consumer can resolve the package more than once; the package-owned target
 # marker must accept the already-imported target rather than treat it as a collision.
-find_package(dtDynamics ${DTDYNAMICS_EXPECTED_VERSION} EXACT CONFIG REQUIRED)
-if(NOT dtDynamics_DIR STREQUAL _DTDYNAMICS_FIRST_PACKAGE_DIR)
+find_package(dtDynamics ${DTDYNAMICS_EXPECTED_VERSION} EXACT CONFIG REQUIRED
+    PATHS "${DTDYNAMICS_PACKAGE_DIR}" NO_DEFAULT_PATH)
+file(REAL_PATH "${dtDynamics_DIR}" _DTDYNAMICS_SECOND_PACKAGE_DIR)
+if(NOT "${_DTDYNAMICS_SECOND_PACKAGE_DIR}" STREQUAL
+       "${_DTDYNAMICS_FIRST_PACKAGE_DIR}")
     message(FATAL_ERROR "Repeated dtDynamics lookup changed the resolved package directory")
 endif()
 get_target_property(_DTDYNAMICS_SECOND_INTERFACE_INCLUDES dt::Dynamics INTERFACE_INCLUDE_DIRECTORIES)
@@ -130,7 +222,7 @@ if(NOT "${_DTDYNAMICS_SECOND_INTERFACE_INCLUDES}" STREQUAL
         "Repeated dtDynamics lookup changed INTERFACE_INCLUDE_DIRECTORIES: "
         "${_DTDYNAMICS_FIRST_INTERFACE_INCLUDES} -> ${_DTDYNAMICS_SECOND_INTERFACE_INCLUDES}")
 endif()
-if(NOT dtDynamics_VERSION STREQUAL DTDYNAMICS_EXPECTED_VERSION)
+if(NOT "${dtDynamics_VERSION}" STREQUAL "${DTDYNAMICS_EXPECTED_VERSION}")
     message(FATAL_ERROR
         "Installed dtDynamics version ${dtDynamics_VERSION} does not equal ${DTDYNAMICS_EXPECTED_VERSION}")
 endif()
@@ -248,7 +340,9 @@ fi
 # First compile and run the installed in-memory DecodeXml path.
 cmake -S "${CONSUMER_DIR}" -B "${CONSUMER_BUILD_DIR}" \
     -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" \
-    -DCMAKE_PREFIX_PATH="${INSTALL_PREFIX}" \
+    -DDTDYNAMICS_PACKAGE_DIR="${CONFIG_DIR}" \
+    -DDTDYNAMICS_EXPECTED_PREFIX="${INSTALL_PREFIX}" \
+    -DDTDYNAMICS_EXPECTED_LIBRARY_DIR="${INSTALL_PREFIX}/${INSTALL_LIBDIR}" \
     -DDTDYNAMICS_DTMATH_INCLUDE_DIR="${DTMATH_INCLUDE_DIR}" \
     -DDTDYNAMICS_EXPECTED_VERSION="${EXPECTED_VERSION}"
 if [[ -n "${CONSUMER_PREINCLUDE_CONFIG}" ]]; then
@@ -262,7 +356,9 @@ echo "PASS: installed DecodeXml consumer executed."
 # Then independently compile and run the installed package-owned LoadXmlFile path.
 cmake -S "${CONSUMER_DIR}" -B "${CONSUMER_FILE_BUILD_DIR}" \
     -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" \
-    -DCMAKE_PREFIX_PATH="${INSTALL_PREFIX}" \
+    -DDTDYNAMICS_PACKAGE_DIR="${CONFIG_DIR}" \
+    -DDTDYNAMICS_EXPECTED_PREFIX="${INSTALL_PREFIX}" \
+    -DDTDYNAMICS_EXPECTED_LIBRARY_DIR="${INSTALL_PREFIX}/${INSTALL_LIBDIR}" \
     -DDTDYNAMICS_DTMATH_INCLUDE_DIR="${DTMATH_INCLUDE_DIR}" \
     -DDTDYNAMICS_EXPECTED_VERSION="${EXPECTED_VERSION}" \
     -DDTDYNAMICS_INSTALL_VALIDATE_XML_PATH="${CONSUMER_XML_PATH}"
@@ -281,13 +377,17 @@ cat > "${CONSUMER_COLLISION_DIR}/CMakeLists.txt" <<'CONSUMER_COLLISION_CMAKE'
 cmake_minimum_required(VERSION 3.16)
 project(dtDynamicsInstallTargetCollision LANGUAGES CXX)
 
+if(NOT DEFINED DTDYNAMICS_PACKAGE_DIR)
+    message(FATAL_ERROR "DTDYNAMICS_PACKAGE_DIR must be provided by the validation driver")
+endif()
 add_library(dt::Dynamics INTERFACE IMPORTED GLOBAL)
-find_package(dtDynamics ${DTDYNAMICS_EXPECTED_VERSION} EXACT CONFIG REQUIRED)
+find_package(dtDynamics ${DTDYNAMICS_EXPECTED_VERSION} EXACT CONFIG REQUIRED
+    PATHS "${DTDYNAMICS_PACKAGE_DIR}" NO_DEFAULT_PATH)
 message(FATAL_ERROR "dtDynamics package accepted a pre-existing dt::Dynamics target")
 CONSUMER_COLLISION_CMAKE
 if cmake -S "${CONSUMER_COLLISION_DIR}" -B "${CONSUMER_COLLISION_BUILD_DIR}" \
     -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" \
-    -DCMAKE_PREFIX_PATH="${INSTALL_PREFIX}" \
+    -DDTDYNAMICS_PACKAGE_DIR="${CONFIG_DIR}" \
     -DDTDYNAMICS_DTMATH_INCLUDE_DIR="${DTMATH_INCLUDE_DIR}" \
     -DDTDYNAMICS_EXPECTED_VERSION="${EXPECTED_VERSION}" \
     > "${WORK_ROOT}/consumer-collision.log" 2>&1; then
@@ -300,5 +400,30 @@ if ! grep -Fq "dtDynamics target collision" "${WORK_ROOT}/consumer-collision.log
 fi
 echo "PASS: installed dt::Dynamics target collision rejected."
 
+if [[ -e "${RELOCATED_PREFIX}" ]]; then
+    echo "Relocated validation prefix already exists: ${RELOCATED_PREFIX}" >&2
+    exit 1
+fi
+mv "${INSTALL_PREFIX}" "${RELOCATED_PREFIX}"
+RELOCATED_CONFIG_DIR="${RELOCATED_PREFIX}/${INSTALL_LIBDIR}/cmake/dtDynamics"
+RELOCATED_DOC_DIR="${RELOCATED_PREFIX}/${INSTALL_DOCDIR}"
+if [[ ! -f "${RELOCATED_CONFIG_DIR}/dtDynamicsTargets.cmake" ]]; then
+    echo "Relocated dtDynamicsTargets.cmake was not found under ${RELOCATED_CONFIG_DIR}" >&2
+    exit 1
+fi
+python3 "${SCRIPT_DIR}/validate_installed_guide_provenance.py" --docs-root "${RELOCATED_DOC_DIR}"
+echo "PASS: relocated guide source/PDF provenance validated."
+cmake -S "${CONSUMER_DIR}" -B "${CONSUMER_RELOCATED_BUILD_DIR}" \
+    -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" \
+    -DDTDYNAMICS_PACKAGE_DIR="${RELOCATED_CONFIG_DIR}" \
+    -DDTDYNAMICS_EXPECTED_PREFIX="${RELOCATED_PREFIX}" \
+    -DDTDYNAMICS_EXPECTED_LIBRARY_DIR="${RELOCATED_PREFIX}/${INSTALL_LIBDIR}" \
+    -DDTDYNAMICS_DTMATH_INCLUDE_DIR="${DTMATH_INCLUDE_DIR}" \
+    -DDTDYNAMICS_EXPECTED_VERSION="${EXPECTED_VERSION}"
+cmake --build "${CONSUMER_RELOCATED_BUILD_DIR}" -- -j2
+"${CONSUMER_RELOCATED_BUILD_DIR}/dtDynamicsInstallConsumer"
+echo "PASS: relocated installed consumer executed."
+
 echo "PASS: dtDynamics install/export validation succeeded."
-echo "Install prefix: ${INSTALL_PREFIX}"
+echo "Install libdir: ${INSTALL_LIBDIR}"
+echo "Relocated install prefix: ${RELOCATED_PREFIX}"

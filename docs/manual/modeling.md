@@ -52,6 +52,14 @@ catch (const dtDynXmlError &error)
 > fail-closed 거부 대상: invalid/overflow number, `NaN`/`Inf`, 잘못된 vector arity, malformed/misnested markup, duplicate name, unresolved reference, unsupported syntax·semantics (조용한 보정 없음).
 >
 > XML declaration 허용 조건: original input byte 0에서 한 번만.
+>
+> XML 문법 규칙:
+>
+> - self-closing 요소(`<body .../>`) 허용
+> - document 안의 `<compiler>`, `<worldbody>`, `<actuator>` 중복은 `MalformedSyntax`로 거부
+> - closing tag에 attribute나 suffix text 금지. `</x/>`도 금지
+> - `<mujoco>` root는 정확히 1개. 요소 밖 text 금지
+> - 오류 offset: 0부터 시작하는 byte offset
 
 ## 2-2. Checked compilation과 trusted compilation
 
@@ -67,7 +75,9 @@ const dtDynModel model = CompileSpecChecked(spec);
 ```
 
 - `dtDynValidationError`의 `code`, `object`, `index`: machine-readable 위치 제공
-- `CompileSpecChecked()` 동작: validation 후 기존 compiler 호출
+- `CompileSpecChecked()` 동작: `ValidateSpec` → `CompileSpec` → `ValidateModel` 순서로 실행
+- `CompileSpecChecked()` 실패: `std::runtime_error`(`CompileSpecChecked: ` + message). `dtDynXmlError`가 아님
+- code/object/index가 필요하면 `ValidateSpec(spec, &error)`를 먼저 호출
 - `CompileSpec()` 유지 목적: backward compatibility, 이미 검증된 trusted setup data 전용
 - validation scan 범위: dynamics hot loop 밖
 
@@ -93,7 +103,7 @@ if (body == DTDYN_INVALID_INDEX ||
 - `dtDynSpec` collection view: `Bodies()`, `Joints()`, `Sites()`, `Actuators()`는 immutable
 - setup-time property 수정: `EditBody`, `EditJoint`, `EditSite`, `EditActuator`가 item copy를 callback에 전달하고 정상 반환 시에만 commit
 - `Edit*` 실패 조건: invalid index는 `std::out_of_range`, callback 예외는 stored item을 변경하지 않고 전파
-- callback reentrancy 금지: 같은 `dtDynSpec`의 `Edit*`, `Add*`, `Clear`, `swap` 호출은 `std::logic_error`; assignment는 active callback 밖에서만 사용
+- callback reentrancy 금지: 같은 `dtDynSpec`의 `Edit*`, `Add*`, `Clear`, assignment(copy/move), `swap` 호출은 `std::logic_error`. transaction은 abort되며, callback이 inner exception을 잡아도 바깥 `Edit*` 호출이 반환 시점에 `std::logic_error`를 던지고 edit는 commit되지 않는다
 - spec 교환: `using std::swap; swap(left, right);`로 ADL `dt::Dynamics::swap`을 사용하며, active edit 중 교환은 양쪽 transaction을 abort
 - lookup은 setup-time linear scan이므로 committed edit를 즉시 반영하며 stale persistent map을 만들지 않음
 - compiled `dtDynModel`의 lookup 방식: setup boundary가 통제되므로 rebuilt map 사용

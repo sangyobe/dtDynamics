@@ -1,5 +1,2 @@
-# Local guide sources and rebuild notes are intentionally not published in GitLab.
+# Local guide notes that are not published in GitLab.
 README.md
-model_guide/mjcf-xml-dtdynspec-dtdynmodel-guide.md
-usage_guide/dtdynamics-usage-migration-guide.md
-themes/

@@ -24,13 +24,13 @@ bool DenseMatrixHasSize(const dtDynDenseMatrix &matrix,
                         const dtDynIndex rows,
                         const dtDynIndex cols)
 {
-    return matrix.GetRowSize() == ToDtMathDim(rows) &&
-           matrix.GetColSize() == ToDtMathDim(cols);
+    return (matrix.GetRowSize() == ToDtMathDim(rows)) &&
+           (matrix.GetColSize() == ToDtMathDim(cols));
 }
 
 void SetDenseMatrixZeroIfAllocated(dtDynDenseMatrix &matrix)
 {
-    if (matrix.GetRowSize() > 0 && matrix.GetColSize() > 0)
+    if ((matrix.GetRowSize() > 0) && (matrix.GetColSize() > 0))
     {
         matrix.SetZero();
     }
@@ -63,7 +63,7 @@ bool DenseMatrixArrayHasSize(const dtArray<dtDynDenseMatrix> &array,
     return true;
 }
 
-} // namespace
+} // end of anonymous namespace
 
 void dtDynData::Resize(const dtDynModel &model)
 {
@@ -92,26 +92,26 @@ void dtDynData::Resize(const dtDynModel &model)
 
     for (dtDynIndex bodyId = 0; bodyId < model.nbody; ++bodyId)
     {
-        ResizeDenseMatrix(body_jacp[bodyId], 3, model.nv);
-        ResizeDenseMatrix(body_jacr[bodyId], 3, model.nv);
-        ResizeDenseMatrix(body_jacp_dot[bodyId], 3, model.nv);
-        ResizeDenseMatrix(body_jacr_dot[bodyId], 3, model.nv);
-        SetDenseMatrixZeroIfAllocated(body_jacp[bodyId]);
-        SetDenseMatrixZeroIfAllocated(body_jacr[bodyId]);
-        SetDenseMatrixZeroIfAllocated(body_jacp_dot[bodyId]);
-        SetDenseMatrixZeroIfAllocated(body_jacr_dot[bodyId]);
+        ResizeDenseMatrix(body_jacp[static_cast<std::size_t>(bodyId)], 3, model.nv);
+        ResizeDenseMatrix(body_jacr[static_cast<std::size_t>(bodyId)], 3, model.nv);
+        ResizeDenseMatrix(body_jacp_dot[static_cast<std::size_t>(bodyId)], 3, model.nv);
+        ResizeDenseMatrix(body_jacr_dot[static_cast<std::size_t>(bodyId)], 3, model.nv);
+        SetDenseMatrixZeroIfAllocated(body_jacp[static_cast<std::size_t>(bodyId)]);
+        SetDenseMatrixZeroIfAllocated(body_jacr[static_cast<std::size_t>(bodyId)]);
+        SetDenseMatrixZeroIfAllocated(body_jacp_dot[static_cast<std::size_t>(bodyId)]);
+        SetDenseMatrixZeroIfAllocated(body_jacr_dot[static_cast<std::size_t>(bodyId)]);
     }
 
     for (dtDynIndex siteId = 0; siteId < model.nsite; ++siteId)
     {
-        ResizeDenseMatrix(site_jacp[siteId], 3, model.nv);
-        ResizeDenseMatrix(site_jacr[siteId], 3, model.nv);
-        ResizeDenseMatrix(site_jacp_dot[siteId], 3, model.nv);
-        ResizeDenseMatrix(site_jacr_dot[siteId], 3, model.nv);
-        SetDenseMatrixZeroIfAllocated(site_jacp[siteId]);
-        SetDenseMatrixZeroIfAllocated(site_jacr[siteId]);
-        SetDenseMatrixZeroIfAllocated(site_jacp_dot[siteId]);
-        SetDenseMatrixZeroIfAllocated(site_jacr_dot[siteId]);
+        ResizeDenseMatrix(site_jacp[static_cast<std::size_t>(siteId)], 3, model.nv);
+        ResizeDenseMatrix(site_jacr[static_cast<std::size_t>(siteId)], 3, model.nv);
+        ResizeDenseMatrix(site_jacp_dot[static_cast<std::size_t>(siteId)], 3, model.nv);
+        ResizeDenseMatrix(site_jacr_dot[static_cast<std::size_t>(siteId)], 3, model.nv);
+        SetDenseMatrixZeroIfAllocated(site_jacp[static_cast<std::size_t>(siteId)]);
+        SetDenseMatrixZeroIfAllocated(site_jacr[static_cast<std::size_t>(siteId)]);
+        SetDenseMatrixZeroIfAllocated(site_jacp_dot[static_cast<std::size_t>(siteId)]);
+        SetDenseMatrixZeroIfAllocated(site_jacr_dot[static_cast<std::size_t>(siteId)]);
     }
 
     cdof.resize(model.nv);
@@ -141,7 +141,7 @@ void dtDynData::Resize(const dtDynModel &model)
     ResizeDenseVector(coriolisTorq, model.nv);
     ResizeDenseVector(nonlinTorq, model.nv);
 
-    const dtDynIndex rootCount = model.nroot > 0 ? model.nroot : 1;
+    const dtDynIndex rootCount = (model.nroot > 0) ? model.nroot : 1;
     ResizeDenseMatrix(comJmat, 3 * rootCount, model.nv);
     ResizeDenseMatrix(comJmatDot, 3 * rootCount, model.nv);
     ResizeDenseMatrix(cmAmat, 6 * rootCount, model.nv);
@@ -153,54 +153,193 @@ void dtDynData::Resize(const dtDynModel &model)
 
 bool dtDynData::IsCompatible(const dtDynModel &model) const
 {
-    const dtDynIndex rootCount = model.nroot > 0 ? model.nroot : 1;
+    dtDynIndex rootCount = 1;
+    if (model.nroot > 0)
+    {
+        rootCount = model.nroot;
+    }
 
-    return DenseVectorHasSize(qpos, model.nq) &&
-           DenseVectorHasSize(qvel, model.nv) &&
-           ArrayHasSize(xpos, model.nbody) &&
-           ArrayHasSize(xquat, model.nbody) &&
-           ArrayHasSize(xmat, model.nbody) &&
-           ArrayHasSize(xipos, model.nbody) &&
-           ArrayHasSize(ximat, model.nbody) &&
-           ArrayHasSize(subtree_com, model.nbody) &&
-           ArrayHasSize(xanchor, model.njnt) &&
-           ArrayHasSize(xaxis, model.njnt) &&
-           ArrayHasSize(site_xpos, model.nsite) &&
-           ArrayHasSize(site_xmat, model.nsite) &&
-           DenseMatrixArrayHasSize(body_jacp, model.nbody, 3, model.nv) &&
-           DenseMatrixArrayHasSize(body_jacr, model.nbody, 3, model.nv) &&
-           DenseMatrixArrayHasSize(body_jacp_dot, model.nbody, 3, model.nv) &&
-           DenseMatrixArrayHasSize(body_jacr_dot, model.nbody, 3, model.nv) &&
-           DenseMatrixArrayHasSize(site_jacp, model.nsite, 3, model.nv) &&
-           DenseMatrixArrayHasSize(site_jacr, model.nsite, 3, model.nv) &&
-           DenseMatrixArrayHasSize(site_jacp_dot, model.nsite, 3, model.nv) &&
-           DenseMatrixArrayHasSize(site_jacr_dot, model.nsite, 3, model.nv) &&
-           ArrayHasSize(cdof, model.nv) &&
-           ArrayHasSize(cdof_dot, model.nv) &&
-           ArrayHasSize(cvel, model.nbody) &&
-           ArrayHasSize(cinert, model.nbody) &&
-           ArrayHasSize(crb, model.nbody) &&
-           ArrayHasSize(BmatComp, model.nbody) &&
-           ArrayHasSize(BmatCompNonzero, model.nbody) &&
-           ArrayHasSize(f1, model.nv) &&
-           ArrayHasSize(f2, model.nv) &&
-           ArrayHasSize(f3, model.nv) &&
-           ArrayHasSize(cacc, model.nbody) &&
-           ArrayHasSize(cfrc, model.nbody) &&
-           ArrayHasSize(scratch_weightedCom, model.nbody) &&
-           DenseMatrixHasSize(Mmat, model.nv, model.nv) &&
-           DenseMatrixHasSize(MmatDot, model.nv, model.nv) &&
-           DenseMatrixHasSize(Cmat, model.nv, model.nv) &&
-           DenseVectorHasSize(gravityTorq, model.nv) &&
-           DenseVectorHasSize(coriolisTorq, model.nv) &&
-           DenseVectorHasSize(nonlinTorq, model.nv) &&
-           DenseMatrixHasSize(comJmat, 3 * rootCount, model.nv) &&
-           DenseMatrixHasSize(comJmatDot, 3 * rootCount, model.nv) &&
-           DenseMatrixHasSize(cmAmat, 6 * rootCount, model.nv) &&
-           DenseMatrixHasSize(cmAmatDot, 6 * rootCount, model.nv) &&
-           DenseVectorHasSize(centMom, 6 * rootCount) &&
-           DenseVectorHasSize(comPos, 3 * rootCount) &&
-           DenseVectorHasSize(comVel, 3 * rootCount);
+    if (!DenseVectorHasSize(qpos, model.nq))
+    {
+        return false;
+    }
+    if (!DenseVectorHasSize(qvel, model.nv))
+    {
+        return false;
+    }
+    if (!ArrayHasSize(xpos, model.nbody))
+    {
+        return false;
+    }
+    if (!ArrayHasSize(xquat, model.nbody))
+    {
+        return false;
+    }
+    if (!ArrayHasSize(xmat, model.nbody))
+    {
+        return false;
+    }
+    if (!ArrayHasSize(xipos, model.nbody))
+    {
+        return false;
+    }
+    if (!ArrayHasSize(ximat, model.nbody))
+    {
+        return false;
+    }
+    if (!ArrayHasSize(subtree_com, model.nbody))
+    {
+        return false;
+    }
+    if (!ArrayHasSize(xanchor, model.njnt))
+    {
+        return false;
+    }
+    if (!ArrayHasSize(xaxis, model.njnt))
+    {
+        return false;
+    }
+    if (!ArrayHasSize(site_xpos, model.nsite))
+    {
+        return false;
+    }
+    if (!ArrayHasSize(site_xmat, model.nsite))
+    {
+        return false;
+    }
+    if (!DenseMatrixArrayHasSize(body_jacp, model.nbody, 3, model.nv))
+    {
+        return false;
+    }
+    if (!DenseMatrixArrayHasSize(body_jacr, model.nbody, 3, model.nv))
+    {
+        return false;
+    }
+    if (!DenseMatrixArrayHasSize(body_jacp_dot, model.nbody, 3, model.nv))
+    {
+        return false;
+    }
+    if (!DenseMatrixArrayHasSize(body_jacr_dot, model.nbody, 3, model.nv))
+    {
+        return false;
+    }
+    if (!DenseMatrixArrayHasSize(site_jacp, model.nsite, 3, model.nv))
+    {
+        return false;
+    }
+    if (!DenseMatrixArrayHasSize(site_jacr, model.nsite, 3, model.nv))
+    {
+        return false;
+    }
+    if (!DenseMatrixArrayHasSize(site_jacp_dot, model.nsite, 3, model.nv))
+    {
+        return false;
+    }
+    if (!DenseMatrixArrayHasSize(site_jacr_dot, model.nsite, 3, model.nv))
+    {
+        return false;
+    }
+    if (!ArrayHasSize(cdof, model.nv))
+    {
+        return false;
+    }
+    if (!ArrayHasSize(cdof_dot, model.nv))
+    {
+        return false;
+    }
+    if (!ArrayHasSize(cvel, model.nbody))
+    {
+        return false;
+    }
+    if (!ArrayHasSize(cinert, model.nbody))
+    {
+        return false;
+    }
+    if (!ArrayHasSize(crb, model.nbody))
+    {
+        return false;
+    }
+    if (!ArrayHasSize(BmatComp, model.nbody))
+    {
+        return false;
+    }
+    if (!ArrayHasSize(BmatCompNonzero, model.nbody))
+    {
+        return false;
+    }
+    if (!ArrayHasSize(f1, model.nv))
+    {
+        return false;
+    }
+    if (!ArrayHasSize(f2, model.nv))
+    {
+        return false;
+    }
+    if (!ArrayHasSize(f3, model.nv))
+    {
+        return false;
+    }
+    if (!ArrayHasSize(cacc, model.nbody))
+    {
+        return false;
+    }
+    if (!ArrayHasSize(cfrc, model.nbody))
+    {
+        return false;
+    }
+    if (!ArrayHasSize(scratch_weightedCom, model.nbody))
+    {
+        return false;
+    }
+    if (!DenseMatrixHasSize(Mmat, model.nv, model.nv))
+    {
+        return false;
+    }
+    if (!DenseMatrixHasSize(MmatDot, model.nv, model.nv))
+    {
+        return false;
+    }
+    if (!DenseMatrixHasSize(Cmat, model.nv, model.nv))
+    {
+        return false;
+    }
+    if (!DenseVectorHasSize(gravityTorq, model.nv))
+    {
+        return false;
+    }
+    if (!DenseVectorHasSize(coriolisTorq, model.nv))
+    {
+        return false;
+    }
+    if (!DenseVectorHasSize(nonlinTorq, model.nv))
+    {
+        return false;
+    }
+    if (!DenseMatrixHasSize(comJmat, 3 * rootCount, model.nv))
+    {
+        return false;
+    }
+    if (!DenseMatrixHasSize(comJmatDot, 3 * rootCount, model.nv))
+    {
+        return false;
+    }
+    if (!DenseMatrixHasSize(cmAmat, 6 * rootCount, model.nv))
+    {
+        return false;
+    }
+    if (!DenseMatrixHasSize(cmAmatDot, 6 * rootCount, model.nv))
+    {
+        return false;
+    }
+    if (!DenseVectorHasSize(centMom, 6 * rootCount))
+    {
+        return false;
+    }
+    if (!DenseVectorHasSize(comPos, 3 * rootCount))
+    {
+        return false;
+    }
+    return DenseVectorHasSize(comVel, 3 * rootCount);
 }
 
-} // namespace dt::Dynamics
+} // end of namespace dt::Dynamics

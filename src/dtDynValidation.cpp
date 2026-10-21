@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <limits>
 #include <unordered_map>
 
@@ -46,6 +47,130 @@ bool Fail(dtDynValidationError *error,
     return false;
 }
 
+bool RequireModelArraySize(const char *name,
+                           const std::size_t actual,
+                           const dtDynIndex expected,
+                           dtDynValidationError *error)
+{
+    if (actual == static_cast<std::size_t>(expected))
+    {
+        return true;
+    }
+    return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body,
+                DTDYN_INVALID_INDEX, std::string("model array ") + name + " has size " + std::to_string(actual) + ", expected " + std::to_string(expected));
+}
+
+bool RequireModelDenseSize(const char *name,
+                           const dtDynDenseVector &vector,
+                           const dtDynIndex expected,
+                           dtDynValidationError *error)
+{
+    return RequireModelArraySize(name, static_cast<std::size_t>(vector.GetDim()), expected, error);
+}
+
+bool FailNonFiniteBody(dtDynValidationError *error, const dtDynIndex bodyId)
+{
+    return Fail(error, dtDynValidationCode::NonFiniteValue, dtDynObjectType::Body, bodyId,
+                "compiled body[" + std::to_string(bodyId) + "] contains a non-finite value");
+}
+
+bool FailInvalidBodyPhysicalOrFrame(dtDynValidationError *error, const dtDynIndex bodyId)
+{
+    return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body, bodyId,
+                "compiled body has invalid physical or frame-pair values");
+}
+
+bool FailInvalidJointSpecProvenance(dtDynValidationError *error, const dtDynIndex jointId)
+{
+    return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Joint, jointId,
+                "compiled joint specification provenance is invalid");
+}
+
+bool FailNonFiniteJoint(dtDynValidationError *error, const dtDynIndex jointId)
+{
+    return Fail(error, dtDynValidationCode::NonFiniteValue, dtDynObjectType::Joint, jointId,
+                "compiled joint contains a non-finite value");
+}
+
+bool FailInvalidSlideHingeAxis(dtDynValidationError *error, const dtDynIndex jointId)
+{
+    return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Joint, jointId,
+                "compiled slide/hinge joint axis must be unit length");
+}
+
+bool FailNonFiniteSite(dtDynValidationError *error, const dtDynIndex siteId)
+{
+    return Fail(error, dtDynValidationCode::NonFiniteValue, dtDynObjectType::Site, siteId,
+                "compiled site contains a non-finite value");
+}
+
+bool FailInvalidSiteFramePair(dtDynValidationError *error, const dtDynIndex siteId)
+{
+    return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Site, siteId,
+                "compiled site quaternion/matrix frame pair is invalid");
+}
+
+bool FailInvalidBodyJointSegment(dtDynValidationError *error, const dtDynIndex bodyId)
+{
+    return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body, bodyId,
+                "compiled body joint segments overlap or contain another body's joint");
+}
+
+bool FailInvalidBodyDofSegment(dtDynValidationError *error, const dtDynIndex bodyId)
+{
+    return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body, bodyId,
+                "compiled body DOF segments overlap or contain another body's DOF");
+}
+
+bool FailInvalidJointDofSpanOwnership(dtDynValidationError *error, const dtDynIndex jointId)
+{
+    return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Joint, jointId,
+                "compiled joint DOF span ownership is inconsistent");
+}
+
+bool FailNonFiniteSpecBody(dtDynValidationError *error, const dtDynIndex bodyId)
+{
+    return Fail(error, dtDynValidationCode::NonFiniteValue, dtDynObjectType::Body, bodyId,
+                "body[" + std::to_string(bodyId) + "] contains a non-finite value");
+}
+
+bool FailInvalidSpecBodyPhysicalInertia(dtDynValidationError *error, const dtDynIndex bodyId)
+{
+    return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body, bodyId,
+                "body[" + std::to_string(bodyId) +
+                    "] has a negative mass or physically invalid principal inertia");
+}
+
+bool FailInvalidSpecBodyQuaternion(dtDynValidationError *error, const dtDynIndex bodyId)
+{
+    return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body, bodyId,
+                "body[" + std::to_string(bodyId) + "] has a non-unit body or inertial quaternion");
+}
+
+bool FailNonFiniteSpecJoint(dtDynValidationError *error, const dtDynIndex jointId)
+{
+    return Fail(error, dtDynValidationCode::NonFiniteValue, dtDynObjectType::Joint, jointId,
+                "joint[" + std::to_string(jointId) + "] contains a non-finite value");
+}
+
+bool FailInvalidSpecSlideHingeAxis(dtDynValidationError *error, const dtDynIndex jointId)
+{
+    return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Joint, jointId,
+                "joint axis must be unit length for slide/hinge joints");
+}
+
+bool FailNegativeSpecJointArmature(dtDynValidationError *error, const dtDynIndex jointId)
+{
+    return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Joint, jointId,
+                "joint armature must be nonnegative");
+}
+
+bool FailNonFiniteSpecSite(dtDynValidationError *error, const dtDynIndex siteId)
+{
+    return Fail(error, dtDynValidationCode::NonFiniteValue, dtDynObjectType::Site, siteId,
+                "site[" + std::to_string(siteId) + "] contains a non-finite value");
+}
+
 template <typename Object>
 bool ValidateUniqueNames(const dtArray<Object> &objects,
                          const dtDynObjectType objectType,
@@ -54,7 +179,8 @@ bool ValidateUniqueNames(const dtArray<Object> &objects,
 {
     std::unordered_map<std::string, dtDynIndex> seen;
     seen.reserve(objects.size());
-    for (std::size_t index = 0; index < objects.size(); ++index)
+    const std::size_t objectCount = objects.size();
+    for (std::size_t index = 0; index < objectCount; ++index)
     {
         const dtDynIndex objectIndex = static_cast<dtDynIndex>(index);
         const auto inserted = seen.emplace(objects[index].name, objectIndex);
@@ -68,21 +194,22 @@ bool ValidateUniqueNames(const dtArray<Object> &objects,
     return true;
 }
 
-bool ValidateUniqueNames(const dtArray<std::string> &names,
+bool ValidateUniqueNames(const dtArray<std::string> &objects,
                          const dtDynObjectType objectType,
                          const char *label,
                          dtDynValidationError *error)
 {
     std::unordered_map<std::string, dtDynIndex> seen;
-    seen.reserve(names.size());
-    for (std::size_t index = 0; index < names.size(); ++index)
+    seen.reserve(objects.size());
+    const std::size_t nameCount = objects.size();
+    for (std::size_t index = 0; index < nameCount; ++index)
     {
         const dtDynIndex objectIndex = static_cast<dtDynIndex>(index);
-        if (!seen.emplace(names[index], objectIndex).second)
+        if (!seen.emplace(objects[index], objectIndex).second)
         {
             return Fail(error, dtDynValidationCode::DuplicateName, objectType, objectIndex,
                         std::string(label) + "[" + std::to_string(index) +
-                            "] duplicates name '" + names[index] + "'");
+                            "] duplicates name '" + objects[index] + "'");
         }
     }
     return true;
@@ -105,7 +232,7 @@ bool IsFinite(const dt::Math::Matrix3<dtDynReal> &value)
     {
         for (dtDynIndex column = 0; column < 3; ++column)
         {
-            if (!std::isfinite(value(row, column)))
+            if (!std::isfinite(value(static_cast<std::uint16_t>(row), static_cast<std::uint16_t>(column))))
             {
                 return false;
             }
@@ -119,39 +246,60 @@ bool NearlyEqual(const dtDynReal lhs, const dtDynReal rhs)
     const dtDynReal scale = std::max(static_cast<dtDynReal>(1.0),
                                      std::max(std::fabs(lhs), std::fabs(rhs)));
     return std::fabs(lhs - rhs) <=
-           static_cast<dtDynReal>(64.0) * std::numeric_limits<dtDynReal>::epsilon() * scale;
+           ((static_cast<dtDynReal>(64.0) * std::numeric_limits<dtDynReal>::epsilon()) * scale);
 }
 
 bool NearlyEqualInput(const dtDynReal lhs, const dtDynReal rhs)
 {
     const dtDynReal scale = std::max(static_cast<dtDynReal>(1.0),
                                      std::max(std::fabs(lhs), std::fabs(rhs)));
-    return std::fabs(lhs - rhs) <= std::sqrt(std::numeric_limits<dtDynReal>::epsilon()) * scale;
+    return std::fabs(lhs - rhs) <=
+           (std::sqrt(std::numeric_limits<dtDynReal>::epsilon()) * scale);
 }
 
 bool IsUnitVector(const dt::Math::Vector3<dtDynReal> &value)
 {
-    const dtDynReal squaredNorm = value(0) * value(0) + value(1) * value(1) +
-                                  value(2) * value(2);
+    const dtDynReal squaredNorm = ((value(0) * value(0)) + (value(1) * value(1))) +
+                                  (value(2) * value(2));
     return NearlyEqualInput(squaredNorm, static_cast<dtDynReal>(1.0));
 }
 
 bool IsUnitQuaternion(const dt::Math::Vector4<dtDynReal> &value)
 {
-    const dtDynReal squaredNorm = value(0) * value(0) + value(1) * value(1) +
-                                  value(2) * value(2) + value(3) * value(3);
+    const dtDynReal squaredNorm = (((value(0) * value(0)) + (value(1) * value(1))) +
+                                   (value(2) * value(2))) +
+                                  (value(3) * value(3));
     return NearlyEqualInput(squaredNorm, static_cast<dtDynReal>(1.0));
 }
 
 bool IsPhysicalInertia(const dt::Math::Vector3<dtDynReal> &value)
 {
-    if (value(0) < 0.0 || value(1) < 0.0 || value(2) < 0.0)
+    if ((value(0) < 0.0) || (value(1) < 0.0) || (value(2) < 0.0))
     {
         return false;
     }
-    return (value(0) <= value(1) + value(2) || NearlyEqual(value(0), value(1) + value(2))) &&
-           (value(1) <= value(0) + value(2) || NearlyEqual(value(1), value(0) + value(2))) &&
-           (value(2) <= value(0) + value(1) || NearlyEqual(value(2), value(0) + value(1)));
+    if (!(value(0) <= (value(1) + value(2))))
+    {
+        if (!NearlyEqual(value(0), value(1) + value(2)))
+        {
+            return false;
+        }
+    }
+    if (!(value(1) <= (value(0) + value(2))))
+    {
+        if (!NearlyEqual(value(1), value(0) + value(2)))
+        {
+            return false;
+        }
+    }
+    if (!(value(2) <= (value(0) + value(1))))
+    {
+        if (!NearlyEqual(value(2), value(0) + value(1)))
+        {
+            return false;
+        }
+    }
+    return true;
 }
 
 bool IsProperRotation(const dt::Math::Matrix3<dtDynReal> &value)
@@ -163,9 +311,9 @@ bool IsProperRotation(const dt::Math::Matrix3<dtDynReal> &value)
             dtDynReal dot = 0.0;
             for (dtDynIndex index = 0; index < 3; ++index)
             {
-                dot += value(index, row) * value(index, column);
+                dot += value(static_cast<std::uint16_t>(index), static_cast<std::uint16_t>(row)) * value(static_cast<std::uint16_t>(index), static_cast<std::uint16_t>(column));
             }
-            const dtDynReal expected = row == column ? 1.0 : 0.0;
+            const dtDynReal expected = (row == column) ? 1.0 : 0.0;
             if (!NearlyEqualInput(dot, expected))
             {
                 return false;
@@ -173,9 +321,9 @@ bool IsProperRotation(const dt::Math::Matrix3<dtDynReal> &value)
         }
     }
     const dtDynReal determinant =
-        value(0, 0) * (value(1, 1) * value(2, 2) - value(1, 2) * value(2, 1)) -
-        value(0, 1) * (value(1, 0) * value(2, 2) - value(1, 2) * value(2, 0)) +
-        value(0, 2) * (value(1, 0) * value(2, 1) - value(1, 1) * value(2, 0));
+        ((value(0, 0) * ((value(1, 1) * value(2, 2)) - (value(1, 2) * value(2, 1)))) -
+         (value(0, 1) * ((value(1, 0) * value(2, 2)) - (value(1, 2) * value(2, 0))))) +
+        (value(0, 2) * ((value(1, 0) * value(2, 1)) - (value(1, 1) * value(2, 0))));
     return NearlyEqualInput(determinant, static_cast<dtDynReal>(1.0));
 }
 
@@ -191,7 +339,7 @@ bool MatrixMatchesQuaternion(const dt::Math::Matrix3<dtDynReal> &matrix,
     {
         for (dtDynIndex column = 0; column < 3; ++column)
         {
-            if (!NearlyEqualInput(matrix(row, column), expected(row, column)))
+            if (!NearlyEqualInput(matrix(static_cast<std::uint16_t>(row), static_cast<std::uint16_t>(column)), expected(static_cast<std::uint16_t>(row), static_cast<std::uint16_t>(column))))
             {
                 return false;
             }
@@ -200,7 +348,7 @@ bool MatrixMatchesQuaternion(const dt::Math::Matrix3<dtDynReal> &matrix,
     return true;
 }
 
-} // namespace
+} // end of anonymous namespace
 
 bool ValidateSpec(const dtDynSpec &spec, dtDynValidationError *error)
 {
@@ -216,70 +364,98 @@ bool ValidateSpec(const dtDynSpec &spec, dtDynValidationError *error)
         return Fail(error, dtDynValidationCode::InvalidWorld, dtDynObjectType::Body, 0,
                     "body[0] world must have an invalid parent");
     }
-    for (std::size_t bodyIndex = 1; bodyIndex < bodies.size(); ++bodyIndex)
+    const std::size_t parentBodyCount = bodies.size();
+    for (std::size_t bodyIndex = 1; bodyIndex < parentBodyCount; ++bodyIndex)
     {
         const dtDynIndex bodyId = static_cast<dtDynIndex>(bodyIndex);
         const dtDynIndex parent = bodies[bodyIndex].parent;
-        if (parent < 0 || parent >= bodyId)
+        if ((parent < 0) || (parent >= bodyId))
         {
             return Fail(error, dtDynValidationCode::InvalidParent, dtDynObjectType::Body, bodyId,
                         "body[" + std::to_string(bodyId) + "] '" + bodies[bodyIndex].name +
                             "' has invalid parent " + std::to_string(parent));
         }
     }
-    for (std::size_t bodyIndex = 0; bodyIndex < bodies.size(); ++bodyIndex)
+    const std::size_t finiteBodyCount = bodies.size();
+    for (std::size_t bodyIndex = 0; bodyIndex < finiteBodyCount; ++bodyIndex)
     {
         const dtDynBodySpec &body = bodies[bodyIndex];
-        if (!IsFinite(body.pos) || !IsFinite(body.quat) ||
-            !std::isfinite(body.inertial.mass) || !IsFinite(body.inertial.pos) ||
-            !IsFinite(body.inertial.quat) || !IsFinite(body.inertial.inertia))
+        const dtDynIndex bodyId = static_cast<dtDynIndex>(bodyIndex);
+        if (!IsFinite(body.pos))
         {
-            return Fail(error, dtDynValidationCode::NonFiniteValue, dtDynObjectType::Body,
-                        static_cast<dtDynIndex>(bodyIndex), "body[" + std::to_string(bodyIndex) + "] contains a non-finite value");
+            return FailNonFiniteSpecBody(error, bodyId);
         }
-        if (body.inertial.mass < 0.0 || !IsPhysicalInertia(body.inertial.inertia))
+        if (!IsFinite(body.quat))
         {
-            return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body,
-                        static_cast<dtDynIndex>(bodyIndex), "body[" + std::to_string(bodyIndex) + "] has a negative mass or physically invalid principal inertia");
+            return FailNonFiniteSpecBody(error, bodyId);
         }
-        if (!IsUnitQuaternion(body.quat) || !IsUnitQuaternion(body.inertial.quat))
+        if (!std::isfinite(body.inertial.mass))
         {
-            return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body,
-                        static_cast<dtDynIndex>(bodyIndex), "body[" + std::to_string(bodyIndex) + "] has a non-unit body or inertial quaternion");
+            return FailNonFiniteSpecBody(error, bodyId);
+        }
+        if (!IsFinite(body.inertial.pos))
+        {
+            return FailNonFiniteSpecBody(error, bodyId);
+        }
+        if (!IsFinite(body.inertial.quat))
+        {
+            return FailNonFiniteSpecBody(error, bodyId);
+        }
+        if (!IsFinite(body.inertial.inertia))
+        {
+            return FailNonFiniteSpecBody(error, bodyId);
+        }
+        if (body.inertial.mass < 0.0)
+        {
+            return FailInvalidSpecBodyPhysicalInertia(error, bodyId);
+        }
+        if (!IsPhysicalInertia(body.inertial.inertia))
+        {
+            return FailInvalidSpecBodyPhysicalInertia(error, bodyId);
+        }
+        if (!IsUnitQuaternion(body.quat))
+        {
+            return FailInvalidSpecBodyQuaternion(error, bodyId);
+        }
+        if (!IsUnitQuaternion(body.inertial.quat))
+        {
+            return FailInvalidSpecBodyQuaternion(error, bodyId);
         }
     }
 
     const long long maximum = std::numeric_limits<uint16_t>::max();
-    if (bodies.size() > static_cast<std::size_t>(maximum) ||
-        spec.Joints().size() > static_cast<std::size_t>(maximum) ||
-        spec.Sites().size() > static_cast<std::size_t>(maximum) ||
-        spec.Actuators().size() > static_cast<std::size_t>(maximum))
+    if ((bodies.size() > static_cast<std::size_t>(maximum)) ||
+        (spec.Joints().size() > static_cast<std::size_t>(maximum)) ||
+        (spec.Sites().size() > static_cast<std::size_t>(maximum)) ||
+        (spec.Actuators().size() > static_cast<std::size_t>(maximum)))
     {
         return Fail(error, dtDynValidationCode::DimensionOverflow, dtDynObjectType::Body,
                     DTDYN_INVALID_INDEX, "spec object count exceeds UINT16_MAX");
     }
     long long nq = 0;
     long long nv = 0;
-    for (std::size_t jointIndex = 0; jointIndex < spec.Joints().size(); ++jointIndex)
+    const std::size_t dofJointCount = spec.Joints().size();
+    for (std::size_t jointIndex = 0; jointIndex < dofJointCount; ++jointIndex)
     {
         const dtDynJointDofSize size = GetJointDofSize(spec.Joints()[jointIndex].type);
-        nq += size.qposSize;
-        nv += size.qvelSize;
-        if (nq > maximum || nv > maximum)
+        nq += static_cast<decltype(nq)>(size.qposSize);
+        nv += static_cast<decltype(nv)>(size.qvelSize);
+        if ((nq > maximum) || nv > maximum)
         {
             return Fail(error, dtDynValidationCode::DimensionOverflow, dtDynObjectType::Joint,
                         static_cast<dtDynIndex>(jointIndex), "joint[" + std::to_string(jointIndex) + "] makes nq/nv exceed UINT16_MAX");
         }
     }
     long long nroot = 0;
-    for (std::size_t bodyIndex = 1; bodyIndex < bodies.size(); ++bodyIndex)
+    const std::size_t rootBodyCount = bodies.size();
+    for (std::size_t bodyIndex = 1; bodyIndex < rootBodyCount; ++bodyIndex)
     {
         if (bodies[bodyIndex].parent == 0)
         {
             ++nroot;
         }
     }
-    if (6LL * nroot > maximum)
+    if ((6LL * nroot) > maximum)
     {
         return Fail(error, dtDynValidationCode::DimensionOverflow, dtDynObjectType::Body,
                     DTDYN_INVALID_INDEX, "root-stacked dimension 6*nroot exceeds UINT16_MAX");
@@ -287,19 +463,20 @@ bool ValidateSpec(const dtDynSpec &spec, dtDynValidationError *error)
 
     dtArray<dtDynIndex> childSeen;
     childSeen.assign(bodies.size(), 0);
-    for (std::size_t parentIndex = 0; parentIndex < bodies.size(); ++parentIndex)
+    const std::size_t childListBodyCount = bodies.size();
+    for (std::size_t parentIndex = 0; parentIndex < childListBodyCount; ++parentIndex)
     {
         const dtDynIndex parentId = static_cast<dtDynIndex>(parentIndex);
         dtDynIndex child = bodies[parentIndex].firstChild;
         std::size_t steps = 0;
         while (child != DTDYN_INVALID_INDEX)
         {
-            if (child <= 0 || static_cast<std::size_t>(child) >= bodies.size())
+            if ((child <= 0) || (static_cast<std::size_t>(child) >= bodies.size()))
             {
                 return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body,
                             parentId, "body[" + std::to_string(parentId) + "] child list contains invalid body " + std::to_string(child));
             }
-            if (++steps > bodies.size() || childSeen[static_cast<std::size_t>(child)] != 0)
+            if (++steps > bodies.size() || (childSeen[static_cast<std::size_t>(child)] != 0))
             {
                 return Fail(error, dtDynValidationCode::TopologyCycle, dtDynObjectType::Body, child,
                             "body[" + std::to_string(child) + "] appears repeatedly in child lists");
@@ -314,7 +491,8 @@ bool ValidateSpec(const dtDynSpec &spec, dtDynValidationError *error)
             child = bodies[static_cast<std::size_t>(child)].nextSibling;
         }
     }
-    for (std::size_t bodyIndex = 1; bodyIndex < bodies.size(); ++bodyIndex)
+    const std::size_t childSeenBodyCount = bodies.size();
+    for (std::size_t bodyIndex = 1; bodyIndex < childSeenBodyCount; ++bodyIndex)
     {
         if (childSeen[bodyIndex] != 1)
         {
@@ -329,14 +507,16 @@ bool ValidateSpec(const dtDynSpec &spec, dtDynValidationError *error)
     dtArray<dtDynIndex> siteBacklinks;
     jointBacklinks.assign(joints.size(), 0);
     siteBacklinks.assign(sites.size(), 0);
-    for (std::size_t bodyIndex = 0; bodyIndex < bodies.size(); ++bodyIndex)
+    const std::size_t backlinkBodyCount = bodies.size();
+    for (std::size_t bodyIndex = 0; bodyIndex < backlinkBodyCount; ++bodyIndex)
     {
         const dtDynIndex bodyId = static_cast<dtDynIndex>(bodyIndex);
         const dtDynBodySpec &body = bodies[bodyIndex];
-        for (std::size_t localIndex = 0; localIndex < body.joints.size(); ++localIndex)
+        const std::size_t bodyJointListCount = body.joints.size();
+        for (std::size_t localIndex = 0; localIndex < bodyJointListCount; ++localIndex)
         {
             const dtDynIndex jointId = body.joints[localIndex];
-            if (jointId < 0 || static_cast<std::size_t>(jointId) >= joints.size())
+            if ((jointId < 0) || (static_cast<std::size_t>(jointId) >= joints.size()))
             {
                 return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body,
                             bodyId, "body[" + std::to_string(bodyId) + "] contains invalid joint " + std::to_string(jointId));
@@ -348,10 +528,11 @@ bool ValidateSpec(const dtDynSpec &spec, dtDynValidationError *error)
             }
             ++jointBacklinks[static_cast<std::size_t>(jointId)];
         }
-        for (std::size_t localIndex = 0; localIndex < body.sites.size(); ++localIndex)
+        const std::size_t bodySiteListCount = body.sites.size();
+        for (std::size_t localIndex = 0; localIndex < bodySiteListCount; ++localIndex)
         {
             const dtDynIndex siteId = body.sites[localIndex];
-            if (siteId < 0 || static_cast<std::size_t>(siteId) >= sites.size())
+            if ((siteId < 0) || (static_cast<std::size_t>(siteId) >= sites.size()))
             {
                 return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body,
                             bodyId, "body[" + std::to_string(bodyId) + "] contains invalid site " + std::to_string(siteId));
@@ -365,26 +546,40 @@ bool ValidateSpec(const dtDynSpec &spec, dtDynValidationError *error)
         }
     }
 
-    for (std::size_t jointIndex = 0; jointIndex < joints.size(); ++jointIndex)
+    const std::size_t specJointCount = joints.size();
+    for (std::size_t jointIndex = 0; jointIndex < specJointCount; ++jointIndex)
     {
         const dtDynIndex jointId = static_cast<dtDynIndex>(jointIndex);
         const dtDynJointSpec &joint = joints[jointIndex];
         const dtDynIndex type = static_cast<dtDynIndex>(joint.type);
-        if (type < static_cast<dtDynIndex>(dtDynJointType::Free) ||
-            type > static_cast<dtDynIndex>(dtDynJointType::Hinge))
+        if ((type < static_cast<dtDynIndex>(dtDynJointType::Free)) ||
+            (type > static_cast<dtDynIndex>(dtDynJointType::Hinge)))
         {
             return Fail(error, dtDynValidationCode::UnsupportedJoint, dtDynObjectType::Joint, jointId,
                         "joint[" + std::to_string(jointId) + "] '" + joint.name +
                             "' has an unsupported joint type");
         }
-        if (!IsFinite(joint.pos) || !IsFinite(joint.axis) ||
-            !std::isfinite(joint.rangeMin) || !std::isfinite(joint.rangeMax) ||
-            !std::isfinite(joint.armature))
+        if (!IsFinite(joint.pos))
         {
-            return Fail(error, dtDynValidationCode::NonFiniteValue, dtDynObjectType::Joint, jointId,
-                        "joint[" + std::to_string(jointId) + "] contains a non-finite value");
+            return FailNonFiniteSpecJoint(error, jointId);
         }
-        if (joint.body <= 0 || static_cast<std::size_t>(joint.body) >= bodies.size())
+        if (!IsFinite(joint.axis))
+        {
+            return FailNonFiniteSpecJoint(error, jointId);
+        }
+        if (!std::isfinite(joint.rangeMin))
+        {
+            return FailNonFiniteSpecJoint(error, jointId);
+        }
+        if (!std::isfinite(joint.rangeMax))
+        {
+            return FailNonFiniteSpecJoint(error, jointId);
+        }
+        if (!std::isfinite(joint.armature))
+        {
+            return FailNonFiniteSpecJoint(error, jointId);
+        }
+        if ((joint.body <= 0) || (static_cast<std::size_t>(joint.body) >= bodies.size()))
         {
             return Fail(error, dtDynValidationCode::DetachedObject, dtDynObjectType::Joint, jointId,
                         "joint[" + std::to_string(jointId) + "] '" + joint.name +
@@ -396,34 +591,55 @@ bool ValidateSpec(const dtDynSpec &spec, dtDynValidationError *error)
                         "joint[" + std::to_string(jointId) + "] '" + joint.name +
                             "' does not have exactly one owning-body backlink");
         }
-        if ((joint.type == dtDynJointType::Slide || joint.type == dtDynJointType::Hinge) &&
-            !IsUnitVector(joint.axis))
+        if (joint.type == dtDynJointType::Slide)
         {
-            return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Joint,
-                        jointId, "joint axis must be unit length for slide/hinge joints");
+            if (!IsUnitVector(joint.axis))
+            {
+                return FailInvalidSpecSlideHingeAxis(error, jointId);
+            }
+            if (joint.armature < 0.0)
+            {
+                return FailNegativeSpecJointArmature(error, jointId);
+            }
+            continue;
+        }
+        if (joint.type == dtDynJointType::Hinge)
+        {
+            if (!IsUnitVector(joint.axis))
+            {
+                return FailInvalidSpecSlideHingeAxis(error, jointId);
+            }
+            if (joint.armature < 0.0)
+            {
+                return FailNegativeSpecJointArmature(error, jointId);
+            }
+            continue;
         }
         if (joint.armature < 0.0)
         {
-            return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Joint,
-                        jointId, "joint armature must be nonnegative");
+            return FailNegativeSpecJointArmature(error, jointId);
         }
     }
 
-    for (std::size_t siteIndex = 0; siteIndex < sites.size(); ++siteIndex)
+    const std::size_t specSiteCount = sites.size();
+    for (std::size_t siteIndex = 0; siteIndex < specSiteCount; ++siteIndex)
     {
         const dtDynIndex siteId = static_cast<dtDynIndex>(siteIndex);
         const dtDynSiteSpec &site = sites[siteIndex];
-        if (!IsFinite(site.pos) || !IsFinite(site.quat))
+        if (!IsFinite(site.pos))
         {
-            return Fail(error, dtDynValidationCode::NonFiniteValue, dtDynObjectType::Site, siteId,
-                        "site[" + std::to_string(siteId) + "] contains a non-finite value");
+            return FailNonFiniteSpecSite(error, siteId);
+        }
+        if (!IsFinite(site.quat))
+        {
+            return FailNonFiniteSpecSite(error, siteId);
         }
         if (!IsUnitQuaternion(site.quat))
         {
             return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Site,
                         siteId, "site quaternion must be unit length");
         }
-        if (site.body <= 0 || static_cast<std::size_t>(site.body) >= bodies.size())
+        if ((site.body <= 0) || (static_cast<std::size_t>(site.body) >= bodies.size()))
         {
             return Fail(error, dtDynValidationCode::DetachedObject, dtDynObjectType::Site, siteId,
                         "site[" + std::to_string(siteId) + "] '" + site.name +
@@ -438,7 +654,8 @@ bool ValidateSpec(const dtDynSpec &spec, dtDynValidationError *error)
     }
 
     const dtArray<dtDynActuatorSpec> &actuators = spec.Actuators();
-    for (std::size_t actuatorIndex = 0; actuatorIndex < actuators.size(); ++actuatorIndex)
+    const std::size_t specActuatorCount = actuators.size();
+    for (std::size_t actuatorIndex = 0; actuatorIndex < specActuatorCount; ++actuatorIndex)
     {
         const dtDynIndex actuatorId = static_cast<dtDynIndex>(actuatorIndex);
         const dtDynActuatorSpec &actuator = actuators[actuatorIndex];
@@ -447,16 +664,26 @@ bool ValidateSpec(const dtDynSpec &spec, dtDynValidationError *error)
             return Fail(error, dtDynValidationCode::NonFiniteValue, dtDynObjectType::Actuator,
                         actuatorId, "actuator[" + std::to_string(actuatorId) + "] contains a non-finite value");
         }
-        if (actuator.joint < 0 || static_cast<std::size_t>(actuator.joint) >= joints.size())
+        if ((actuator.joint < 0) ||
+            (static_cast<std::size_t>(actuator.joint) >= joints.size()))
         {
             return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Actuator,
                         actuatorId, "actuator[" + std::to_string(actuatorId) + "] '" + actuator.name + "' references invalid joint " + std::to_string(actuator.joint));
         }
     }
-    return ValidateUniqueNames(bodies, dtDynObjectType::Body, "body", error) &&
-           ValidateUniqueNames(joints, dtDynObjectType::Joint, "joint", error) &&
-           ValidateUniqueNames(sites, dtDynObjectType::Site, "site", error) &&
-           ValidateUniqueNames(actuators, dtDynObjectType::Actuator, "actuator", error);
+    if (!ValidateUniqueNames(bodies, dtDynObjectType::Body, "body", error))
+    {
+        return false;
+    }
+    if (!ValidateUniqueNames(joints, dtDynObjectType::Joint, "joint", error))
+    {
+        return false;
+    }
+    if (!ValidateUniqueNames(sites, dtDynObjectType::Site, "site", error))
+    {
+        return false;
+    }
+    return ValidateUniqueNames(actuators, dtDynObjectType::Actuator, "actuator", error);
 }
 
 bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
@@ -472,7 +699,7 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
         {"nq", model.nq}, {"nv", model.nv}, {"nbody", model.nbody}, {"njnt", model.njnt}, {"nsite", model.nsite}, {"nu", model.nu}, {"nroot", model.nroot}, {"3*nroot", 3LL * model.nroot}, {"6*nroot", 6LL * model.nroot}};
     for (const NamedDimension &dimension : dimensions)
     {
-        if (dimension.value < 0 || dimension.value > maximum)
+        if ((dimension.value < 0) || (dimension.value > maximum))
         {
             return Fail(error, dtDynValidationCode::DimensionOverflow, dtDynObjectType::Body,
                         DTDYN_INVALID_INDEX, std::string("model dimension ") + dimension.name + "=" + std::to_string(dimension.value) + " is outside [0, UINT16_MAX]");
@@ -484,84 +711,196 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
                     DTDYN_INVALID_INDEX, "compiled model has no world body[0]");
     }
 
-    const auto requireSize = [error](const char *name, const std::size_t actual,
-                                     const dtDynIndex expected) -> bool
+    if (!RequireModelArraySize("body_names", model.body_names.size(), model.nbody, error))
     {
-        if (actual == static_cast<std::size_t>(expected))
-        {
-            return true;
-        }
-        return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body,
-                    DTDYN_INVALID_INDEX, std::string("model array ") + name + " has size " + std::to_string(actual) + ", expected " + std::to_string(expected));
-    };
-    const auto requireDense = [&requireSize](const char *name, const dtDynDenseVector &vector,
-                                             const dtDynIndex expected) -> bool
+        return false;
+    }
+    if (!RequireModelArraySize("body_parentid", model.body_parentid.size(), model.nbody, error))
     {
-        return requireSize(name, static_cast<std::size_t>(vector.GetDim()), expected);
-    };
+        return false;
+    }
+    if (!RequireModelArraySize("body_rootid", model.body_rootid.size(), model.nbody, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("body_rootidx", model.body_rootidx.size(), model.nbody, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("body_jntnum", model.body_jntnum.size(), model.nbody, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("body_jntadr", model.body_jntadr.size(), model.nbody, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("body_dofnum", model.body_dofnum.size(), model.nbody, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("body_dofadr", model.body_dofadr.size(), model.nbody, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("body_weldid", model.body_weldid.size(), model.nbody, error))
+    {
+        return false;
+    }
+    if (!RequireModelDenseSize("body_mass", model.body_mass, model.nbody, error))
+    {
+        return false;
+    }
+    if (!RequireModelDenseSize("body_subtreemass", model.body_subtreemass, model.nbody, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("body_pos", model.body_pos.size(), model.nbody, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("body_quat", model.body_quat.size(), model.nbody, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("body_mat", model.body_mat.size(), model.nbody, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("body_ipos", model.body_ipos.size(), model.nbody, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("body_iquat", model.body_iquat.size(), model.nbody, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("body_imat", model.body_imat.size(), model.nbody, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("body_inertia", model.body_inertia.size(), model.nbody, error))
+    {
+        return false;
+    }
 
-#define DTDYN_REQUIRE_ARRAY(member, count)                       \
-    if (!requireSize(#member, model.member.size(), model.count)) \
-    return false
-#define DTDYN_REQUIRE_DENSE(member, count)                 \
-    if (!requireDense(#member, model.member, model.count)) \
-    return false
+    if (!RequireModelArraySize("joint_names", model.joint_names.size(), model.njnt, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("jnt_type", model.jnt_type.size(), model.njnt, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("jnt_bodyid", model.jnt_bodyid.size(), model.njnt, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("jnt_specid", model.jnt_specid.size(), model.njnt, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("jnt_qposadr", model.jnt_qposadr.size(), model.njnt, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("jnt_dofadr", model.jnt_dofadr.size(), model.njnt, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("jnt_limited", model.jnt_limited.size(), model.njnt, error))
+    {
+        return false;
+    }
+    if (!RequireModelDenseSize("jnt_range_min", model.jnt_range_min, model.njnt, error))
+    {
+        return false;
+    }
+    if (!RequireModelDenseSize("jnt_range_max", model.jnt_range_max, model.njnt, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("jnt_pos", model.jnt_pos.size(), model.njnt, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("jnt_axis", model.jnt_axis.size(), model.njnt, error))
+    {
+        return false;
+    }
 
-    DTDYN_REQUIRE_ARRAY(body_names, nbody);
-    DTDYN_REQUIRE_ARRAY(body_parentid, nbody);
-    DTDYN_REQUIRE_ARRAY(body_rootid, nbody);
-    DTDYN_REQUIRE_ARRAY(body_rootidx, nbody);
-    DTDYN_REQUIRE_ARRAY(body_jntnum, nbody);
-    DTDYN_REQUIRE_ARRAY(body_jntadr, nbody);
-    DTDYN_REQUIRE_ARRAY(body_dofnum, nbody);
-    DTDYN_REQUIRE_ARRAY(body_dofadr, nbody);
-    DTDYN_REQUIRE_ARRAY(body_weldid, nbody);
-    DTDYN_REQUIRE_DENSE(body_mass, nbody);
-    DTDYN_REQUIRE_DENSE(body_subtreemass, nbody);
-    DTDYN_REQUIRE_ARRAY(body_pos, nbody);
-    DTDYN_REQUIRE_ARRAY(body_quat, nbody);
-    DTDYN_REQUIRE_ARRAY(body_mat, nbody);
-    DTDYN_REQUIRE_ARRAY(body_ipos, nbody);
-    DTDYN_REQUIRE_ARRAY(body_iquat, nbody);
-    DTDYN_REQUIRE_ARRAY(body_imat, nbody);
-    DTDYN_REQUIRE_ARRAY(body_inertia, nbody);
+    if (!RequireModelArraySize("dof_bodyid", model.dof_bodyid.size(), model.nv, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("dof_parentid", model.dof_parentid.size(), model.nv, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("dof_jntid", model.dof_jntid.size(), model.nv, error))
+    {
+        return false;
+    }
+    if (!RequireModelDenseSize("dof_armature", model.dof_armature, model.nv, error))
+    {
+        return false;
+    }
 
-    DTDYN_REQUIRE_ARRAY(joint_names, njnt);
-    DTDYN_REQUIRE_ARRAY(jnt_type, njnt);
-    DTDYN_REQUIRE_ARRAY(jnt_bodyid, njnt);
-    DTDYN_REQUIRE_ARRAY(jnt_specid, njnt);
-    DTDYN_REQUIRE_ARRAY(jnt_qposadr, njnt);
-    DTDYN_REQUIRE_ARRAY(jnt_dofadr, njnt);
-    DTDYN_REQUIRE_ARRAY(jnt_limited, njnt);
-    DTDYN_REQUIRE_DENSE(jnt_range_min, njnt);
-    DTDYN_REQUIRE_DENSE(jnt_range_max, njnt);
-    DTDYN_REQUIRE_ARRAY(jnt_pos, njnt);
-    DTDYN_REQUIRE_ARRAY(jnt_axis, njnt);
+    if (!RequireModelArraySize("site_names", model.site_names.size(), model.nsite, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("site_bodyid", model.site_bodyid.size(), model.nsite, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("site_pos", model.site_pos.size(), model.nsite, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("site_quat", model.site_quat.size(), model.nsite, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("site_mat", model.site_mat.size(), model.nsite, error))
+    {
+        return false;
+    }
 
-    DTDYN_REQUIRE_ARRAY(dof_bodyid, nv);
-    DTDYN_REQUIRE_ARRAY(dof_parentid, nv);
-    DTDYN_REQUIRE_ARRAY(dof_jntid, nv);
-    DTDYN_REQUIRE_DENSE(dof_armature, nv);
+    if (!RequireModelArraySize("actuator_names", model.actuator_names.size(), model.nu, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("actuator_jointid", model.actuator_jointid.size(), model.nu, error))
+    {
+        return false;
+    }
+    if (!RequireModelDenseSize("actuator_gear", model.actuator_gear, model.nu, error))
+    {
+        return false;
+    }
+    if (!RequireModelArraySize("root_bodyid", model.root_bodyid.size(), model.nroot, error))
+    {
+        return false;
+    }
+    if (!RequireModelDenseSize("root_mass", model.root_mass, model.nroot, error))
+    {
+        return false;
+    }
 
-    DTDYN_REQUIRE_ARRAY(site_names, nsite);
-    DTDYN_REQUIRE_ARRAY(site_bodyid, nsite);
-    DTDYN_REQUIRE_ARRAY(site_pos, nsite);
-    DTDYN_REQUIRE_ARRAY(site_quat, nsite);
-    DTDYN_REQUIRE_ARRAY(site_mat, nsite);
-
-    DTDYN_REQUIRE_ARRAY(actuator_names, nu);
-    DTDYN_REQUIRE_ARRAY(actuator_jointid, nu);
-    DTDYN_REQUIRE_DENSE(actuator_gear, nu);
-    DTDYN_REQUIRE_ARRAY(root_bodyid, nroot);
-    DTDYN_REQUIRE_DENSE(root_mass, nroot);
-
-#undef DTDYN_REQUIRE_DENSE
-#undef DTDYN_REQUIRE_ARRAY
-
-    if (!ValidateUniqueNames(model.body_names, dtDynObjectType::Body, "body", error) ||
-        !ValidateUniqueNames(model.joint_names, dtDynObjectType::Joint, "joint", error) ||
-        !ValidateUniqueNames(model.site_names, dtDynObjectType::Site, "site", error) ||
-        !ValidateUniqueNames(model.actuator_names, dtDynObjectType::Actuator, "actuator", error))
+    if (!ValidateUniqueNames(model.body_names, dtDynObjectType::Body, "body", error))
+    {
+        return false;
+    }
+    if (!ValidateUniqueNames(model.joint_names, dtDynObjectType::Joint, "joint", error))
+    {
+        return false;
+    }
+    if (!ValidateUniqueNames(model.site_names, dtDynObjectType::Site, "site", error))
+    {
+        return false;
+    }
+    if (!ValidateUniqueNames(model.actuator_names, dtDynObjectType::Actuator, "actuator", error))
     {
         return false;
     }
@@ -569,24 +908,65 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
     for (dtDynIndex bodyId = 0; bodyId < model.nbody; ++bodyId)
     {
         const std::size_t index = static_cast<std::size_t>(bodyId);
-        if (!std::isfinite(model.body_mass(bodyId)) ||
-            !std::isfinite(model.body_subtreemass(bodyId)) || !IsFinite(model.body_pos[index]) ||
-            !IsFinite(model.body_quat[index]) || !IsFinite(model.body_mat[index]) ||
-            !IsFinite(model.body_ipos[index]) || !IsFinite(model.body_iquat[index]) ||
-            !IsFinite(model.body_imat[index]) || !IsFinite(model.body_inertia[index]))
+        if (!std::isfinite(model.body_mass(static_cast<std::uint16_t>(bodyId))))
         {
-            return Fail(error, dtDynValidationCode::NonFiniteValue, dtDynObjectType::Body, bodyId,
-                        "compiled body[" + std::to_string(bodyId) +
-                            "] contains a non-finite value");
+            return FailNonFiniteBody(error, bodyId);
         }
-        if (model.body_mass(bodyId) < 0.0 || !IsPhysicalInertia(model.body_inertia[index]) ||
-            !IsProperRotation(model.body_mat[index]) ||
-            !IsProperRotation(model.body_imat[index]) ||
-            !MatrixMatchesQuaternion(model.body_mat[index], model.body_quat[index]) ||
-            !MatrixMatchesQuaternion(model.body_imat[index], model.body_iquat[index]))
+        if (!std::isfinite(model.body_subtreemass(static_cast<std::uint16_t>(bodyId))))
         {
-            return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body,
-                        bodyId, "compiled body has invalid physical or frame-pair values");
+            return FailNonFiniteBody(error, bodyId);
+        }
+        if (!IsFinite(model.body_pos[index]))
+        {
+            return FailNonFiniteBody(error, bodyId);
+        }
+        if (!IsFinite(model.body_quat[index]))
+        {
+            return FailNonFiniteBody(error, bodyId);
+        }
+        if (!IsFinite(model.body_mat[index]))
+        {
+            return FailNonFiniteBody(error, bodyId);
+        }
+        if (!IsFinite(model.body_ipos[index]))
+        {
+            return FailNonFiniteBody(error, bodyId);
+        }
+        if (!IsFinite(model.body_iquat[index]))
+        {
+            return FailNonFiniteBody(error, bodyId);
+        }
+        if (!IsFinite(model.body_imat[index]))
+        {
+            return FailNonFiniteBody(error, bodyId);
+        }
+        if (!IsFinite(model.body_inertia[index]))
+        {
+            return FailNonFiniteBody(error, bodyId);
+        }
+        if (model.body_mass(static_cast<std::uint16_t>(bodyId)) < 0.0)
+        {
+            return FailInvalidBodyPhysicalOrFrame(error, bodyId);
+        }
+        if (!IsPhysicalInertia(model.body_inertia[index]))
+        {
+            return FailInvalidBodyPhysicalOrFrame(error, bodyId);
+        }
+        if (!IsProperRotation(model.body_mat[index]))
+        {
+            return FailInvalidBodyPhysicalOrFrame(error, bodyId);
+        }
+        if (!IsProperRotation(model.body_imat[index]))
+        {
+            return FailInvalidBodyPhysicalOrFrame(error, bodyId);
+        }
+        if (!MatrixMatchesQuaternion(model.body_mat[index], model.body_quat[index]))
+        {
+            return FailInvalidBodyPhysicalOrFrame(error, bodyId);
+        }
+        if (!MatrixMatchesQuaternion(model.body_imat[index], model.body_iquat[index]))
+        {
+            return FailInvalidBodyPhysicalOrFrame(error, bodyId);
         }
     }
     dtArray<dtDynIndex> jointSpecCoverage;
@@ -595,36 +975,60 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
     {
         const std::size_t index = static_cast<std::size_t>(jointId);
         const dtDynIndex specJointId = model.jnt_specid[index];
-        if (specJointId < 0 || specJointId >= model.njnt ||
-            ++jointSpecCoverage[static_cast<std::size_t>(specJointId)] != 1)
+        if (specJointId < 0)
         {
-            return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Joint,
-                        jointId, "compiled joint specification provenance is invalid");
+            return FailInvalidJointSpecProvenance(error, jointId);
         }
-        if (!std::isfinite(model.jnt_range_min(jointId)) ||
-            !std::isfinite(model.jnt_range_max(jointId)) || !IsFinite(model.jnt_pos[index]) ||
-            !IsFinite(model.jnt_axis[index]))
+        if (specJointId >= model.njnt)
         {
-            return Fail(error, dtDynValidationCode::NonFiniteValue, dtDynObjectType::Joint,
-                        jointId, "compiled joint contains a non-finite value");
+            return FailInvalidJointSpecProvenance(error, jointId);
+        }
+        if (++jointSpecCoverage[static_cast<std::size_t>(specJointId)] != 1)
+        {
+            return FailInvalidJointSpecProvenance(error, jointId);
+        }
+        if (!std::isfinite(model.jnt_range_min(static_cast<std::uint16_t>(jointId))))
+        {
+            return FailNonFiniteJoint(error, jointId);
+        }
+        if (!std::isfinite(model.jnt_range_max(static_cast<std::uint16_t>(jointId))))
+        {
+            return FailNonFiniteJoint(error, jointId);
+        }
+        if (!IsFinite(model.jnt_pos[index]))
+        {
+            return FailNonFiniteJoint(error, jointId);
+        }
+        if (!IsFinite(model.jnt_axis[index]))
+        {
+            return FailNonFiniteJoint(error, jointId);
         }
         const dtDynJointType jointType = static_cast<dtDynJointType>(model.jnt_type[index]);
-        if ((jointType == dtDynJointType::Slide || jointType == dtDynJointType::Hinge) &&
-            !IsUnitVector(model.jnt_axis[index]))
+        if (jointType == dtDynJointType::Slide)
         {
-            return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Joint,
-                        jointId, "compiled slide/hinge joint axis must be unit length");
+            if (!IsUnitVector(model.jnt_axis[index]))
+            {
+                return FailInvalidSlideHingeAxis(error, jointId);
+            }
+            continue;
+        }
+        if (jointType == dtDynJointType::Hinge)
+        {
+            if (!IsUnitVector(model.jnt_axis[index]))
+            {
+                return FailInvalidSlideHingeAxis(error, jointId);
+            }
         }
     }
     for (dtDynIndex dofId = 0; dofId < model.nv; ++dofId)
     {
-        if (!std::isfinite(model.dof_armature(dofId)))
+        if (!std::isfinite(model.dof_armature(static_cast<std::uint16_t>(dofId))))
         {
             return Fail(error, dtDynValidationCode::NonFiniteValue, dtDynObjectType::Joint,
                         model.dof_jntid[static_cast<std::size_t>(dofId)],
                         "compiled DOF armature is non-finite");
         }
-        if (model.dof_armature(dofId) < 0.0)
+        if (model.dof_armature(static_cast<std::uint16_t>(dofId)) < 0.0)
         {
             return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Joint,
                         model.dof_jntid[static_cast<std::size_t>(dofId)],
@@ -634,22 +1038,30 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
     for (dtDynIndex siteId = 0; siteId < model.nsite; ++siteId)
     {
         const std::size_t index = static_cast<std::size_t>(siteId);
-        if (!IsFinite(model.site_pos[index]) || !IsFinite(model.site_quat[index]) ||
-            !IsFinite(model.site_mat[index]))
+        if (!IsFinite(model.site_pos[index]))
         {
-            return Fail(error, dtDynValidationCode::NonFiniteValue, dtDynObjectType::Site, siteId,
-                        "compiled site contains a non-finite value");
+            return FailNonFiniteSite(error, siteId);
         }
-        if (!IsProperRotation(model.site_mat[index]) ||
-            !MatrixMatchesQuaternion(model.site_mat[index], model.site_quat[index]))
+        if (!IsFinite(model.site_quat[index]))
         {
-            return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Site,
-                        siteId, "compiled site quaternion/matrix frame pair is invalid");
+            return FailNonFiniteSite(error, siteId);
+        }
+        if (!IsFinite(model.site_mat[index]))
+        {
+            return FailNonFiniteSite(error, siteId);
+        }
+        if (!IsProperRotation(model.site_mat[index]))
+        {
+            return FailInvalidSiteFramePair(error, siteId);
+        }
+        if (!MatrixMatchesQuaternion(model.site_mat[index], model.site_quat[index]))
+        {
+            return FailInvalidSiteFramePair(error, siteId);
         }
     }
     for (dtDynIndex actuatorId = 0; actuatorId < model.nu; ++actuatorId)
     {
-        if (!std::isfinite(model.actuator_gear(actuatorId)))
+        if (!std::isfinite(model.actuator_gear(static_cast<std::uint16_t>(actuatorId))))
         {
             return Fail(error, dtDynValidationCode::NonFiniteValue, dtDynObjectType::Actuator,
                         actuatorId, "compiled actuator gear is non-finite");
@@ -657,7 +1069,7 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
     }
     for (dtDynIndex rootIndex = 0; rootIndex < model.nroot; ++rootIndex)
     {
-        if (!std::isfinite(model.root_mass(rootIndex)))
+        if (!std::isfinite(model.root_mass(static_cast<std::uint16_t>(rootIndex))))
         {
             return Fail(error, dtDynValidationCode::NonFiniteValue, dtDynObjectType::Body,
                         model.root_bodyid[static_cast<std::size_t>(rootIndex)],
@@ -665,7 +1077,7 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
         }
     }
 
-    if (model.nbody > 0 && model.body_parentid[0] != 0)
+    if ((model.nbody > 0) && (model.body_parentid[static_cast<std::size_t>(0)] != 0))
     {
         return Fail(error, dtDynValidationCode::InvalidWorld, dtDynObjectType::Body, 0,
                     "compiled body[0] world parent must be 0");
@@ -673,7 +1085,7 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
     for (dtDynIndex bodyId = 1; bodyId < model.nbody; ++bodyId)
     {
         const dtDynIndex parent = model.body_parentid[static_cast<std::size_t>(bodyId)];
-        if (parent < 0 || parent >= bodyId)
+        if ((parent < 0) || (parent >= bodyId))
         {
             return Fail(error, dtDynValidationCode::InvalidParent, dtDynObjectType::Body, bodyId,
                         "compiled body[" + std::to_string(bodyId) + "] has invalid parent " +
@@ -684,7 +1096,7 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
     expectedSubtreeMass.resize(model.nbody);
     for (dtDynIndex bodyId = 0; bodyId < model.nbody; ++bodyId)
     {
-        expectedSubtreeMass[static_cast<std::size_t>(bodyId)] = model.body_mass(bodyId);
+        expectedSubtreeMass[static_cast<std::size_t>(bodyId)] = model.body_mass(static_cast<std::uint16_t>(bodyId));
     }
     for (dtDynIndex bodyId = model.nbody - 1; bodyId > 0; --bodyId)
     {
@@ -694,14 +1106,14 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
     }
     for (dtDynIndex bodyId = 0; bodyId < model.nbody; ++bodyId)
     {
-        if (!NearlyEqual(model.body_subtreemass(bodyId),
+        if (!NearlyEqual(model.body_subtreemass(static_cast<std::uint16_t>(bodyId)),
                          expectedSubtreeMass[static_cast<std::size_t>(bodyId)]))
         {
             return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body,
                         bodyId, "compiled body subtree mass is inconsistent");
         }
     }
-    if (model.body_rootid[0] != 0 || model.body_rootidx[0] != DTDYN_INVALID_INDEX)
+    if ((model.body_rootid[static_cast<std::size_t>(0)] != 0) || (model.body_rootidx[static_cast<std::size_t>(0)] != DTDYN_INVALID_INDEX))
     {
         return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body, 0,
                     "compiled world root metadata is invalid");
@@ -724,10 +1136,10 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
     for (dtDynIndex rootIndex = 0; rootIndex < model.nroot; ++rootIndex)
     {
         const dtDynIndex rootBody = model.root_bodyid[static_cast<std::size_t>(rootIndex)];
-        if (rootBody <= 0 || rootBody >= model.nbody ||
-            model.body_parentid[static_cast<std::size_t>(rootBody)] != 0 ||
-            model.body_rootid[static_cast<std::size_t>(rootBody)] != rootBody ||
-            model.body_rootidx[static_cast<std::size_t>(rootBody)] != rootIndex)
+        if ((rootBody <= 0) || (rootBody >= model.nbody) ||
+            (model.body_parentid[static_cast<std::size_t>(rootBody)] != 0) ||
+            (model.body_rootid[static_cast<std::size_t>(rootBody)] != rootBody) ||
+            (model.body_rootidx[static_cast<std::size_t>(rootBody)] != rootIndex))
         {
             return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body,
                         rootBody, "compiled root table contains inconsistent metadata");
@@ -738,7 +1150,7 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
                         rootBody, "compiled root body appears more than once");
         }
         rootSeen[static_cast<std::size_t>(rootBody)] = 1;
-        if (!NearlyEqual(model.root_mass(rootIndex),
+        if (!NearlyEqual(model.root_mass(static_cast<std::uint16_t>(rootIndex)),
                          expectedSubtreeMass[static_cast<std::size_t>(rootBody)]))
         {
             return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body,
@@ -752,15 +1164,15 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
         const dtDynIndex rootBody = model.body_rootid[index];
         const dtDynIndex rootIndex = model.body_rootidx[index];
         const dtDynIndex expectedRoot =
-            parent == 0 ? bodyId : model.body_rootid[static_cast<std::size_t>(parent)];
-        if (rootBody != expectedRoot || rootIndex < 0 || rootIndex >= model.nroot ||
-            model.root_bodyid[static_cast<std::size_t>(rootIndex)] != rootBody)
+            (parent == 0) ? bodyId : model.body_rootid[static_cast<std::size_t>(parent)];
+        if ((rootBody != expectedRoot) || (rootIndex < 0) || (rootIndex >= model.nroot) ||
+            (model.root_bodyid[static_cast<std::size_t>(rootIndex)] != rootBody))
         {
             return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body,
                         bodyId, "compiled body root ID/slot is inconsistent");
         }
     }
-    if (model.body_weldid[0] != 0)
+    if (model.body_weldid[static_cast<std::size_t>(0)] != 0)
     {
         return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body, 0,
                     "compiled world weld ID must be 0");
@@ -769,9 +1181,9 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
     {
         const std::size_t index = static_cast<std::size_t>(bodyId);
         const dtDynIndex parent = model.body_parentid[index];
-        const dtDynIndex expectedWeld = model.body_jntnum[index] > 0
+        const dtDynIndex expectedWeld = (model.body_jntnum[index] > 0)
                                             ? bodyId
-                                            : (parent > 0
+                                            : ((parent > 0)
                                                    ? model.body_weldid[static_cast<std::size_t>(parent)]
                                                    : 0);
         if (model.body_weldid[index] != expectedWeld)
@@ -791,16 +1203,20 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
         const dtDynIndex jointCount = model.body_jntnum[index];
         const dtDynIndex dofAddress = model.body_dofadr[index];
         const dtDynIndex dofCount = model.body_dofnum[index];
-        if (jointCount < 0 || (jointCount == 0 && jointAddress != DTDYN_INVALID_INDEX) ||
-            (jointCount > 0 &&
-             (jointAddress < 0 || static_cast<long long>(jointAddress) + jointCount > model.njnt)))
+        if ((jointCount < 0) ||
+            ((jointCount == 0) && (jointAddress != DTDYN_INVALID_INDEX)) ||
+            ((jointCount > 0) &&
+             ((jointAddress < 0) ||
+              ((static_cast<long long>(jointAddress) + jointCount) > model.njnt))))
         {
             return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body, bodyId,
                         "compiled body joint segment is invalid");
         }
-        if (dofCount < 0 || (dofCount == 0 && dofAddress != DTDYN_INVALID_INDEX) ||
-            (dofCount > 0 &&
-             (dofAddress < 0 || static_cast<long long>(dofAddress) + dofCount > model.nv)))
+        if ((dofCount < 0) ||
+            ((dofCount == 0) && (dofAddress != DTDYN_INVALID_INDEX)) ||
+            ((dofCount > 0) &&
+             ((dofAddress < 0) ||
+              ((static_cast<long long>(dofAddress) + dofCount) > model.nv))))
         {
             return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body, bodyId,
                         "compiled body DOF segment is invalid");
@@ -808,21 +1224,25 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
         for (dtDynIndex offset = 0; offset < jointCount; ++offset)
         {
             const dtDynIndex jointId = jointAddress + offset;
-            if (model.jnt_bodyid[static_cast<std::size_t>(jointId)] != bodyId ||
-                ++jointBodyCoverage[static_cast<std::size_t>(jointId)] != 1)
+            if (model.jnt_bodyid[static_cast<std::size_t>(jointId)] != bodyId)
             {
-                return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body,
-                            bodyId, "compiled body joint segments overlap or contain another body's joint");
+                return FailInvalidBodyJointSegment(error, bodyId);
+            }
+            if (++jointBodyCoverage[static_cast<std::size_t>(jointId)] != 1)
+            {
+                return FailInvalidBodyJointSegment(error, bodyId);
             }
         }
         for (dtDynIndex offset = 0; offset < dofCount; ++offset)
         {
             const dtDynIndex dofId = dofAddress + offset;
-            if (model.dof_bodyid[static_cast<std::size_t>(dofId)] != bodyId ||
-                ++dofBodyCoverage[static_cast<std::size_t>(dofId)] != 1)
+            if (model.dof_bodyid[static_cast<std::size_t>(dofId)] != bodyId)
             {
-                return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body,
-                            bodyId, "compiled body DOF segments overlap or contain another body's DOF");
+                return FailInvalidBodyDofSegment(error, bodyId);
+            }
+            if (++dofBodyCoverage[static_cast<std::size_t>(dofId)] != 1)
+            {
+                return FailInvalidBodyDofSegment(error, bodyId);
             }
         }
     }
@@ -851,8 +1271,8 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
     {
         const std::size_t index = static_cast<std::size_t>(jointId);
         const dtDynIndex typeValue = model.jnt_type[index];
-        if (typeValue < static_cast<dtDynIndex>(dtDynJointType::Free) ||
-            typeValue > static_cast<dtDynIndex>(dtDynJointType::Hinge))
+        if ((typeValue < static_cast<dtDynIndex>(dtDynJointType::Free)) ||
+            (typeValue > static_cast<dtDynIndex>(dtDynJointType::Hinge)))
         {
             return Fail(error, dtDynValidationCode::UnsupportedJoint, dtDynObjectType::Joint,
                         jointId, "compiled joint has an unsupported type");
@@ -860,15 +1280,15 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
         const dtDynJointDofSize size = GetJointDofSize(static_cast<dtDynJointType>(typeValue));
         const dtDynIndex qposAddress = model.jnt_qposadr[index];
         const dtDynIndex dofAddress = model.jnt_dofadr[index];
-        if (qposAddress < 0 || dofAddress < 0 ||
-            static_cast<long long>(qposAddress) + size.qposSize > model.nq ||
-            static_cast<long long>(dofAddress) + size.qvelSize > model.nv)
+        if ((qposAddress < 0) || (dofAddress < 0) ||
+            ((static_cast<long long>(qposAddress) + size.qposSize) > model.nq) ||
+            ((static_cast<long long>(dofAddress) + size.qvelSize) > model.nv))
         {
             return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Joint,
                         jointId, "compiled joint qpos/DOF span is invalid");
         }
         const dtDynIndex bodyId = model.jnt_bodyid[index];
-        if (bodyId <= 0 || bodyId >= model.nbody)
+        if ((bodyId <= 0) || bodyId >= model.nbody)
         {
             return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Joint,
                         jointId, "compiled joint references an invalid body");
@@ -886,11 +1306,17 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
         {
             const dtDynIndex dofId = dofAddress + offset;
             const std::size_t dofIndex = static_cast<std::size_t>(dofId);
-            if (model.dof_jntid[dofIndex] != jointId || model.dof_bodyid[dofIndex] != bodyId ||
-                ++jointDofCoverage[dofIndex] != 1)
+            if (model.dof_jntid[dofIndex] != jointId)
             {
-                return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Joint,
-                            jointId, "compiled joint DOF span ownership is inconsistent");
+                return FailInvalidJointDofSpanOwnership(error, jointId);
+            }
+            if (model.dof_bodyid[dofIndex] != bodyId)
+            {
+                return FailInvalidJointDofSpanOwnership(error, jointId);
+            }
+            if (++jointDofCoverage[dofIndex] != 1)
+            {
+                return FailInvalidJointDofSpanOwnership(error, jointId);
             }
         }
     }
@@ -940,7 +1366,7 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
     {
         const std::size_t bodyIndex = static_cast<std::size_t>(bodyId);
         const dtDynIndex parentBody = model.body_parentid[bodyIndex];
-        dtDynIndex expectedParent = parentBody > 0
+        dtDynIndex expectedParent = (parentBody > 0)
                                         ? bodyLastDof[static_cast<std::size_t>(parentBody)]
                                         : DTDYN_INVALID_INDEX;
         const dtDynIndex jointAddress = model.body_jntadr[bodyIndex];
@@ -969,7 +1395,7 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
     for (dtDynIndex siteId = 0; siteId < model.nsite; ++siteId)
     {
         const dtDynIndex bodyId = model.site_bodyid[static_cast<std::size_t>(siteId)];
-        if (bodyId <= 0 || bodyId >= model.nbody)
+        if ((bodyId <= 0) || (bodyId >= model.nbody))
         {
             return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Site,
                         siteId, "compiled site references an invalid body");
@@ -978,7 +1404,7 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
     for (dtDynIndex actuatorId = 0; actuatorId < model.nu; ++actuatorId)
     {
         const dtDynIndex jointId = model.actuator_jointid[static_cast<std::size_t>(actuatorId)];
-        if (jointId < 0 || jointId >= model.njnt)
+        if ((jointId < 0) || (jointId >= model.njnt))
         {
             return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Actuator,
                         actuatorId, "compiled actuator references an invalid joint");
@@ -987,4 +1413,4 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
     return true;
 }
 
-} // namespace dt::Dynamics
+} // end of namespace dt::Dynamics

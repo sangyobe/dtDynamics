@@ -14,7 +14,8 @@
 
 # 시스템/표준 라이브러리 헤더(/usr/include, /usr/lib) 는 all-headers 범위에서 제외
 # /root/.local/ART_Framework 는 의존 라이브러리(dtMath 등) 설치 경로 — dtdynamics 자체 소스가 아니므로 제외
--do-not-generate-results-for custom=/usr/include,/usr/lib,/root/.local/ART_Framework
+# .ci/dtmath 는 CI가 고정 SHA로 job-local checkout 하는 dtMath 헤더 — dtdynamics 자체 소스가 아니므로 제외
+-do-not-generate-results-for custom=/usr/include,/usr/lib,/root/.local/ART_Framework,.ci/dtmath
 
 # 자동 생성 코드가 생기면 여기에 추가
 # 예: -do-not-generate-results-for custom=proto

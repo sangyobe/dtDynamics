@@ -28,7 +28,7 @@ std::size_t ToArraySize(const Size value)
 {
     if constexpr (std::is_signed<Size>::value)
     {
-        return value > 0 ? static_cast<std::size_t>(value) : static_cast<std::size_t>(0);
+        return (value > 0) ? static_cast<std::size_t>(value) : static_cast<std::size_t>(0);
     }
     else
     {
@@ -235,9 +235,9 @@ public:
     /*! \brief Return an immutable iterator/pointer to the first element. */
     const T *begin() const { return m_data; }
     /*! \brief Return a mutable one-past-end iterator/pointer, or nullptr when unallocated. */
-    T *end() { return m_data == nullptr ? nullptr : m_data + m_size; }
+    T *end() { return (m_data == nullptr) ? nullptr : (m_data + m_size); }
     /*! \brief Return an immutable one-past-end iterator/pointer, or nullptr when unallocated. */
-    const T *end() const { return m_data == nullptr ? nullptr : m_data + m_size; }
+    const T *end() const { return (m_data == nullptr) ? nullptr : (m_data + m_size); }
 
 private:
     /*! \brief Assign a captured value while preserving mutable-copy overload selection. */
@@ -251,7 +251,7 @@ private:
     {
         if (m_size == m_capacity)
         {
-            reserve(m_capacity == 0 ? 1 : 2 * m_capacity);
+            reserve((m_capacity == 0) ? 1 : (2 * m_capacity));
         }
         if constexpr (std::is_nothrow_move_constructible<T>::value)
         {

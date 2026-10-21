@@ -27,7 +27,7 @@ void AssignDenseVector(dtDynDenseVector &dst, const dtDynDenseVector &src)
     dst = src;
 }
 
-} // namespace
+} // end of anonymous namespace
 
 dtDynModel::dtDynModel(const dtDynModel &) = default;
 
@@ -106,38 +106,38 @@ dtDynModel &dtDynModel::operator=(const dtDynModel &other)
 dtDynIndex dtDynModel::BodyId(const std::string &name) const
 {
     const auto it = m_bodyNameToId.find(name);
-    return it == m_bodyNameToId.end() ? DTDYN_INVALID_INDEX : it->second;
+    return (it == m_bodyNameToId.end()) ? DTDYN_INVALID_INDEX : it->second;
 }
 
 dtDynIndex dtDynModel::JointId(const std::string &name) const
 {
     const auto it = m_jointNameToId.find(name);
-    return it == m_jointNameToId.end() ? DTDYN_INVALID_INDEX : it->second;
+    return (it == m_jointNameToId.end()) ? DTDYN_INVALID_INDEX : it->second;
 }
 
 dtDynIndex dtDynModel::SiteId(const std::string &name) const
 {
     const auto it = m_siteNameToId.find(name);
-    return it == m_siteNameToId.end() ? DTDYN_INVALID_INDEX : it->second;
+    return (it == m_siteNameToId.end()) ? DTDYN_INVALID_INDEX : it->second;
 }
 
 dtDynIndex dtDynModel::ActuatorId(const std::string &name) const
 {
     const auto it = m_actuatorNameToId.find(name);
-    return it == m_actuatorNameToId.end() ? DTDYN_INVALID_INDEX : it->second;
+    return (it == m_actuatorNameToId.end()) ? DTDYN_INVALID_INDEX : it->second;
 }
 
 bool dtDynModel::IsFixedBody(const dtDynIndex body) const
 {
-    if (body < 0 || body >= static_cast<dtDynIndex>(body_jntnum.size()))
+    if ((body < 0) || (body >= static_cast<dtDynIndex>(body_jntnum.size())))
     {
         return false;
     }
 
-    return body_jntnum[body] == 0 &&
-           body_jntadr[body] == DTDYN_INVALID_INDEX &&
-           body_dofnum[body] == 0 &&
-           body_dofadr[body] == DTDYN_INVALID_INDEX;
+    return (body_jntnum[static_cast<std::size_t>(body)] == 0) &&
+           (body_jntadr[static_cast<std::size_t>(body)] == DTDYN_INVALID_INDEX) &&
+           (body_dofnum[static_cast<std::size_t>(body)] == 0) &&
+           (body_dofadr[static_cast<std::size_t>(body)] == DTDYN_INVALID_INDEX);
 }
 
 void dtDynModel::RebuildNameMaps()
@@ -147,25 +147,29 @@ void dtDynModel::RebuildNameMaps()
     m_siteNameToId.clear();
     m_actuatorNameToId.clear();
 
-    for (dtDynIndex i = 0; i < static_cast<dtDynIndex>(body_names.size()); ++i)
+    const dtDynIndex bodyNameCount = static_cast<dtDynIndex>(body_names.size());
+    for (dtDynIndex i = 0; i < bodyNameCount; ++i)
     {
         m_bodyNameToId[body_names[static_cast<std::size_t>(i)]] = i;
     }
 
-    for (dtDynIndex i = 0; i < static_cast<dtDynIndex>(joint_names.size()); ++i)
+    const dtDynIndex jointNameCount = static_cast<dtDynIndex>(joint_names.size());
+    for (dtDynIndex i = 0; i < jointNameCount; ++i)
     {
         m_jointNameToId[joint_names[static_cast<std::size_t>(i)]] = i;
     }
 
-    for (dtDynIndex i = 0; i < static_cast<dtDynIndex>(site_names.size()); ++i)
+    const dtDynIndex siteNameCount = static_cast<dtDynIndex>(site_names.size());
+    for (dtDynIndex i = 0; i < siteNameCount; ++i)
     {
         m_siteNameToId[site_names[static_cast<std::size_t>(i)]] = i;
     }
 
-    for (dtDynIndex i = 0; i < static_cast<dtDynIndex>(actuator_names.size()); ++i)
+    const dtDynIndex actuatorNameCount = static_cast<dtDynIndex>(actuator_names.size());
+    for (dtDynIndex i = 0; i < actuatorNameCount; ++i)
     {
         m_actuatorNameToId[actuator_names[static_cast<std::size_t>(i)]] = i;
     }
 }
 
-} // namespace dt::Dynamics
+} // end of namespace dt::Dynamics

@@ -46,7 +46,7 @@ h_G = A_G(q) v,
 ```
 
 - `ComputeDynamicsCCRBA` 성격: control-oriented composite rigid-body path
-- 계산 항목: mass/bias basis, term mask에 따른 선택적 WBC term (`Cmat`, `MmatDot`, `cmAmat`, `cmAmatDot`, `comJmat`, `comJmatDot`, `centMom`, CoM quantity)
+- 계산 항목: mass/bias basis와 기본 출력 `Cmat`, term mask에 따른 선택적 WBC term (`MmatDot`, `cmAmat`, `cmAmatDot`, `comJmat`, `comJmatDot`, `centMom`, CoM quantity)
 
 - term mask 용도: realtime design tool
 - 원칙: controller tick이 소비하는 output만 요청 (예: LeoQuad는 reduced CCRBA mask 사용, indexed body/site Jacobian은 별도 계산)

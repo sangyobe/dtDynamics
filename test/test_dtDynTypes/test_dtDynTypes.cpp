@@ -16,6 +16,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -50,6 +51,9 @@ constexpr std::size_t kMaximumAllocationFailuresToTest = 64;
 std::size_t g_allocationsBeforeFailure = kNoAllocationFailure;
 std::size_t g_outstandingTestAllocations = 0;
 std::size_t g_totalTestAllocations = 0;
+// Direct C allocator calls (dtMath dense storage uses malloc/calloc/realloc, not operator new).
+// Counted only when the test target links with -Wl,--wrap for these functions.
+std::size_t g_rawCAllocatorCalls = 0;
 
 bool IsDtMathNear(const dtDynReal actual,
                   const dtDynReal expected,
@@ -244,7 +248,42 @@ struct OverloadedCopyAssignment
 
 static_assert(std::is_copy_assignable<OverloadedCopyAssignment>::value);
 
+// dtDynSpec::SpecStorage declares its defaulted moves noexcept; that declaration is only
+// valid while every dtArray member (body, joint, site, actuator) moves without throwing.
+static_assert(std::is_nothrow_move_constructible<dtArray<dtDynBodySpec>>::value);
+static_assert(std::is_nothrow_move_assignable<dtArray<dtDynBodySpec>>::value);
+static_assert(std::is_nothrow_move_constructible<dtArray<dtDynJointSpec>>::value);
+static_assert(std::is_nothrow_move_assignable<dtArray<dtDynJointSpec>>::value);
+static_assert(std::is_nothrow_move_constructible<dtArray<dtDynSiteSpec>>::value);
+static_assert(std::is_nothrow_move_assignable<dtArray<dtDynSiteSpec>>::value);
+static_assert(std::is_nothrow_move_constructible<dtArray<dtDynActuatorSpec>>::value);
+static_assert(std::is_nothrow_move_assignable<dtArray<dtDynActuatorSpec>>::value);
+
 } // namespace
+
+#ifdef DTDYN_TEST_WRAP_C_ALLOCATOR
+extern "C" void *__real_malloc(std::size_t size);
+extern "C" void *__real_calloc(std::size_t count, std::size_t size);
+extern "C" void *__real_realloc(void *pointer, std::size_t size);
+
+extern "C" void *__wrap_malloc(std::size_t size)
+{
+    ++g_rawCAllocatorCalls;
+    return __real_malloc(size);
+}
+
+extern "C" void *__wrap_calloc(std::size_t count, std::size_t size)
+{
+    ++g_rawCAllocatorCalls;
+    return __real_calloc(count, size);
+}
+
+extern "C" void *__wrap_realloc(void *pointer, std::size_t size)
+{
+    ++g_rawCAllocatorCalls;
+    return __real_realloc(pointer, size);
+}
+#endif
 
 void *operator new(const std::size_t size)
 {
@@ -303,16 +342,132 @@ std::filesystem::path UniqueTempPath(const std::string &stem)
            (stem + "_" + std::to_string(ticks) + "_" + std::to_string(sequence++));
 }
 
-void TestCheckedCompileAcceptsValidSpec()
+dtDynSpec MakeValidNormalSpec()
 {
     dtDynSpec spec;
-    const dtDynIndex body = spec.AddBody("base", 0);
-    spec.AddJoint(body, "hinge", dtDynJointType::Hinge);
+    const dtDynIndex base = spec.AddBody("base", 0);
+    const dtDynIndex hinge = spec.AddJoint(base, "hinge", dtDynJointType::Hinge);
+    assert(base == 1);
+    assert(hinge == 0);
 
     dtDynValidationError error;
     assert(ValidateSpec(spec, &error));
     assert(error.code == dtDynValidationCode::None);
 
+    const dtDynModel checked = CompileSpecChecked(spec);
+    assert(checked.nbody == 2);
+    assert(checked.njnt == 1);
+    return spec;
+}
+
+void AssertDetachedPublicBodyState(const dtDynSpec &spec,
+                                   const dtDynIndex base,
+                                   const dtDynIndex detached,
+                                   const dtDynIndex parent)
+{
+    assert(spec.Bodies().size() == 3);
+    assert(spec.Bodies()[0].firstChild == base);
+    assert(spec.Bodies()[base].parent == 0);
+    assert(spec.Bodies()[base].firstChild == DTDYN_INVALID_INDEX);
+    assert(spec.Bodies()[detached].parent == parent);
+    assert(spec.Bodies()[detached].firstChild == DTDYN_INVALID_INDEX);
+    assert(spec.Bodies()[detached].nextSibling == DTDYN_INVALID_INDEX);
+}
+
+void AssertInvalidParentDiagnostic(const dtDynSpec &spec,
+                                   const dtDynIndex body,
+                                   const std::string &expectedMessage)
+{
+    dtDynValidationError error;
+    assert(!ValidateSpec(spec, &error));
+    assert(error.code == dtDynValidationCode::InvalidParent);
+    assert(error.object == dtDynObjectType::Body);
+    assert(error.index == body);
+    assert(error.message == expectedMessage);
+}
+
+void AssertDetachedObjectDiagnostic(const dtDynSpec &spec,
+                                    const dtDynObjectType object,
+                                    const dtDynIndex index,
+                                    const std::string &expectedMessage)
+{
+    dtDynValidationError error;
+    assert(!ValidateSpec(spec, &error));
+    assert(error.code == dtDynValidationCode::DetachedObject);
+    assert(error.object == object);
+    assert(error.index == index);
+    assert(error.message == expectedMessage);
+}
+
+void AssertInconsistentRootTableMetadata(const dtDynModel &model,
+                                         const dtDynIndex expectedRootBody)
+{
+    dtDynValidationError error;
+    assert(!ValidateModel(model, &error));
+    assert(error.code == dtDynValidationCode::InvalidReference);
+    assert(error.object == dtDynObjectType::Body);
+    assert(error.index == expectedRootBody);
+    assert(error.message == "compiled root table contains inconsistent metadata");
+}
+
+void AssertWorldRootMetadataDiagnostic(const dtDynModel &model)
+{
+    dtDynValidationError error;
+    assert(!ValidateModel(model, &error));
+    assert(error.code == dtDynValidationCode::InvalidReference);
+    assert(error.object == dtDynObjectType::Body);
+    assert(error.index == 0);
+    assert(error.message == "compiled world root metadata is invalid");
+}
+
+void AssertCompiledParentValidationDiagnostic(const dtDynModel &model,
+                                              const dtDynValidationCode expectedCode,
+                                              const dtDynIndex expectedBody,
+                                              const std::string &expectedMessage)
+{
+    dtDynValidationError error;
+    assert(!ValidateModel(model, &error));
+    assert(error.code == expectedCode);
+    assert(error.object == dtDynObjectType::Body);
+    assert(error.index == expectedBody);
+    assert(error.message == expectedMessage);
+}
+
+void AssertBodyRootPropagationDiagnostic(const dtDynModel &model,
+                                         const dtDynIndex expectedBody)
+{
+    dtDynValidationError error;
+    assert(!ValidateModel(model, &error));
+    assert(error.code == dtDynValidationCode::InvalidReference);
+    assert(error.object == dtDynObjectType::Body);
+    assert(error.index == expectedBody);
+    assert(error.message == "compiled body root ID/slot is inconsistent");
+}
+
+void AssertWeldPropagationDiagnostic(const dtDynModel &model, const dtDynIndex expectedBody)
+{
+    dtDynValidationError error;
+    assert(!ValidateModel(model, &error));
+    assert(error.code == dtDynValidationCode::InvalidReference);
+    assert(error.object == dtDynObjectType::Body);
+    assert(error.index == expectedBody);
+    assert(error.message == "compiled body weld ID is inconsistent");
+}
+
+void AssertCompiledUnsupportedJointTypeDiagnostic(const dtDynModel &model,
+                                                  const dtDynIndex expectedJoint)
+{
+    dtDynValidationError error;
+    assert(!ValidateModel(model, &error));
+    assert(error.code == dtDynValidationCode::UnsupportedJoint);
+    assert(error.object == dtDynObjectType::Joint);
+    assert(error.index == expectedJoint);
+    assert(error.message == "compiled joint has an unsupported type");
+}
+
+void TestCheckedCompileAcceptsValidSpec()
+{
+    const dtDynSpec spec = MakeValidNormalSpec();
     const dtDynModel trusted = CompileSpec(spec);
     const dtDynModel checked = CompileSpecChecked(spec);
     assert(checked.nbody == trusted.nbody);
@@ -321,19 +476,16 @@ void TestCheckedCompileAcceptsValidSpec()
     assert(checked.nv == trusted.nv);
 }
 
+void ConfigureP56InvalidParentForCheckedCompile(dtDynBodySpec &draft)
+{
+    draft.parent = 99;
+}
+
 void TestCheckedCompileRejectsInvalidParent()
 {
-    dtDynSpec spec;
-    const dtDynIndex body = spec.AddBody("base", 0);
-    spec.EditBody(body, [&](dtDynBodySpec &draft)
-                  { draft.parent = 99; });
-
-    dtDynValidationError error;
-    assert(!ValidateSpec(spec, &error));
-    assert(error.code == dtDynValidationCode::InvalidParent);
-    assert(error.object == dtDynObjectType::Body);
-    assert(error.index == body);
-    assert(error.message.find("body[1]") != std::string::npos);
+    dtDynSpec spec = MakeValidNormalSpec();
+    const dtDynIndex body = spec.BodyId("base");
+    spec.EditBody(body, ConfigureP56InvalidParentForCheckedCompile);
 
     bool rejected = false;
     try
@@ -347,6 +499,31 @@ void TestCheckedCompileRejectsInvalidParent()
     assert(rejected);
 }
 
+void TestSpecValidationRejectsNegativeParentAddedPublicly()
+{
+    dtDynSpec spec = MakeValidNormalSpec();
+    const dtDynIndex base = spec.BodyId("base");
+    const dtDynIndex detached = spec.AddBody("negative_parent", DTDYN_INVALID_INDEX);
+    assert(detached == 2);
+
+    AssertDetachedPublicBodyState(spec, base, detached, DTDYN_INVALID_INDEX);
+    AssertInvalidParentDiagnostic(spec, detached,
+                                  "body[2] 'negative_parent' has invalid parent -1");
+}
+
+void TestSpecValidationRejectsForwardParentAddedPublicly()
+{
+    dtDynSpec spec = MakeValidNormalSpec();
+    const dtDynIndex base = spec.BodyId("base");
+    const dtDynIndex forwardParent = 3;
+    const dtDynIndex detached = spec.AddBody("forward_parent", forwardParent);
+    assert(detached == 2);
+
+    AssertDetachedPublicBodyState(spec, base, detached, forwardParent);
+    AssertInvalidParentDiagnostic(spec, detached,
+                                  "body[2] 'forward_parent' has invalid parent 3");
+}
+
 void TestSpecValidationRejectsDetachedJoint()
 {
     dtDynSpec spec;
@@ -358,6 +535,101 @@ void TestSpecValidationRejectsDetachedJoint()
     assert(error.object == dtDynObjectType::Joint);
     assert(error.index == joint);
     assert(error.message.find("joint[0]") != std::string::npos);
+}
+
+void AssertDetachedJointAddedPublicly(dtDynSpec &spec,
+                                      const dtDynIndex body,
+                                      const std::string &name,
+                                      const bool expectWorldAttachment)
+{
+    const dtDynIndex base = spec.BodyId("base");
+    const std::size_t bodyCount = spec.Bodies().size();
+    const std::size_t jointCount = spec.Joints().size();
+    const std::size_t worldJointCount = spec.Bodies()[0].joints.size();
+    const std::size_t baseJointCount = spec.Bodies()[base].joints.size();
+    const dtDynIndex joint = spec.AddJoint(body, name, dtDynJointType::Hinge);
+
+    assert(base == 1);
+    assert(spec.Bodies().size() == bodyCount);
+    assert(joint == static_cast<dtDynIndex>(jointCount));
+    assert(spec.Joints().size() == jointCount + 1);
+    assert(spec.Joints()[joint].body == body);
+    assert(spec.Joints()[joint].name == name);
+    assert(spec.Bodies()[base].joints.size() == baseJointCount);
+    assert(spec.Bodies()[base].joints[0] == 0);
+    if (expectWorldAttachment)
+    {
+        assert(body == 0);
+        assert(spec.Bodies()[0].joints.size() == worldJointCount + 1);
+        assert(spec.Bodies()[0].joints[worldJointCount] == joint);
+    }
+    else
+    {
+        assert(body == static_cast<dtDynIndex>(bodyCount));
+        assert(spec.Bodies()[0].joints.size() == worldJointCount);
+    }
+
+    AssertDetachedObjectDiagnostic(
+        spec, dtDynObjectType::Joint, joint,
+        "joint[" + std::to_string(joint) + "] '" + name +
+            "' is not attached to a non-world body");
+}
+
+void TestSpecValidationRejectsWorldJointAddedPublicly()
+{
+    dtDynSpec spec = MakeValidNormalSpec();
+    AssertDetachedJointAddedPublicly(spec, 0, "world_joint", true);
+}
+
+void TestSpecValidationRejectsOnePastEndJointAddedPublicly()
+{
+    dtDynSpec spec = MakeValidNormalSpec();
+    const dtDynIndex onePastEnd = static_cast<dtDynIndex>(spec.Bodies().size());
+    assert(onePastEnd == 2);
+    AssertDetachedJointAddedPublicly(spec, onePastEnd, "one_past_joint", false);
+}
+
+void AssertUnsupportedJointTypeAddedPublicly(const dtDynJointType type,
+                                             const std::string &name,
+                                             const std::string &expectedMessage)
+{
+    dtDynSpec spec;
+    const dtDynIndex base = spec.AddBody("base", 0);
+    const dtDynIndex joint = spec.AddJoint(base, name, type);
+
+    assert(base == 1);
+    assert(joint == 0);
+    assert(spec.Bodies().size() == 2);
+    assert(spec.Joints().size() == 1);
+    assert(spec.Bodies()[0].firstChild == base);
+    assert(spec.Bodies()[base].parent == 0);
+    assert(spec.Bodies()[base].joints.size() == 1);
+    assert(spec.Bodies()[base].joints[0] == joint);
+    assert(spec.Joints()[joint].name == name);
+    assert(spec.Joints()[joint].body == base);
+    assert(spec.Joints()[joint].type == type);
+    assert(spec.JointId(name) == joint);
+
+    dtDynValidationError error;
+    assert(!ValidateSpec(spec, &error));
+    assert(error.code == dtDynValidationCode::UnsupportedJoint);
+    assert(error.object == dtDynObjectType::Joint);
+    assert(error.index == joint);
+    assert(error.message == expectedMessage);
+}
+
+void TestSpecValidationRejectsJointTypeBelowFreeAddedPublicly()
+{
+    AssertUnsupportedJointTypeAddedPublicly(
+        static_cast<dtDynJointType>(-1), "below_free",
+        "joint[0] 'below_free' has an unsupported joint type");
+}
+
+void TestSpecValidationRejectsJointTypeAboveHingeAddedPublicly()
+{
+    AssertUnsupportedJointTypeAddedPublicly(
+        static_cast<dtDynJointType>(4), "above_hinge",
+        "joint[0] 'above_hinge' has an unsupported joint type");
 }
 
 void TestSpecValidationRejectsSiblingCycle()
@@ -386,6 +658,57 @@ void TestSpecValidationRejectsDetachedSite()
     assert(error.code == dtDynValidationCode::DetachedObject);
     assert(error.object == dtDynObjectType::Site);
     assert(error.index == site);
+}
+
+void AssertDetachedSiteAddedPublicly(dtDynSpec &spec,
+                                     const dtDynIndex body,
+                                     const std::string &name,
+                                     const bool expectWorldAttachment)
+{
+    const dtDynIndex base = spec.BodyId("base");
+    const std::size_t bodyCount = spec.Bodies().size();
+    const std::size_t siteCount = spec.Sites().size();
+    const std::size_t worldSiteCount = spec.Bodies()[0].sites.size();
+    const std::size_t baseSiteCount = spec.Bodies()[base].sites.size();
+    const dtDynIndex site = spec.AddSite(body, name);
+
+    assert(base == 1);
+    assert(spec.Bodies().size() == bodyCount);
+    assert(site == static_cast<dtDynIndex>(siteCount));
+    assert(spec.Sites().size() == siteCount + 1);
+    assert(spec.Sites()[site].body == body);
+    assert(spec.Sites()[site].name == name);
+    assert(spec.Bodies()[base].sites.size() == baseSiteCount);
+    if (expectWorldAttachment)
+    {
+        assert(body == 0);
+        assert(spec.Bodies()[0].sites.size() == worldSiteCount + 1);
+        assert(spec.Bodies()[0].sites[worldSiteCount] == site);
+    }
+    else
+    {
+        assert(body == static_cast<dtDynIndex>(bodyCount));
+        assert(spec.Bodies()[0].sites.size() == worldSiteCount);
+    }
+
+    AssertDetachedObjectDiagnostic(
+        spec, dtDynObjectType::Site, site,
+        "site[" + std::to_string(site) + "] '" + name +
+            "' is not attached to a non-world body");
+}
+
+void TestSpecValidationRejectsWorldSiteAddedPublicly()
+{
+    dtDynSpec spec = MakeValidNormalSpec();
+    AssertDetachedSiteAddedPublicly(spec, 0, "world_site", true);
+}
+
+void TestSpecValidationRejectsOnePastEndSiteAddedPublicly()
+{
+    dtDynSpec spec = MakeValidNormalSpec();
+    const dtDynIndex onePastEnd = static_cast<dtDynIndex>(spec.Bodies().size());
+    assert(onePastEnd == 2);
+    AssertDetachedSiteAddedPublicly(spec, onePastEnd, "one_past_site", false);
 }
 
 void TestSpecValidationRejectsInvalidActuatorReference()
@@ -456,15 +779,30 @@ void TestSpecValidationRejectsNonFiniteValues()
     assert(error.index == body);
 }
 
-void TestModelValidationRejectsDimensionOverflow()
+void AssertModelNqDimensionOverflow(const dtDynIndex nq, const std::string &expectedMessage)
 {
     dtDynModel model;
-    model.nq = static_cast<dtDynIndex>(std::numeric_limits<uint16_t>::max()) + 1;
+    model.nq = nq;
 
     dtDynValidationError error;
     assert(!ValidateModel(model, &error));
     assert(error.code == dtDynValidationCode::DimensionOverflow);
-    assert(error.message.find("nq") != std::string::npos);
+    assert(error.object == dtDynObjectType::Body);
+    assert(error.index == DTDYN_INVALID_INDEX);
+    assert(error.message == expectedMessage);
+}
+
+void TestModelValidationRejectsNegativeDimension()
+{
+    AssertModelNqDimensionOverflow(-1,
+                                   "model dimension nq=-1 is outside [0, UINT16_MAX]");
+}
+
+void TestModelValidationRejectsDimensionOverflow()
+{
+    AssertModelNqDimensionOverflow(
+        static_cast<dtDynIndex>(std::numeric_limits<uint16_t>::max()) + 1,
+        "model dimension nq=65536 is outside [0, UINT16_MAX]");
 }
 
 void TestSpecValidationRejectsDimensionOverflowBeforeCompile()
@@ -480,6 +818,169 @@ void TestSpecValidationRejectsDimensionOverflowBeforeCompile()
     assert(!ValidateSpec(spec, &error));
     assert(error.code == dtDynValidationCode::DimensionOverflow);
     assert(error.object == dtDynObjectType::Joint);
+}
+
+std::string P75ObjectName(const char *const kind, const std::size_t index)
+{
+    return std::string("p75_") + kind + "_" + std::to_string(index);
+}
+
+void AddP75BodyObjects(dtDynSpec &spec, const std::size_t count)
+{
+    assert(count >= 1U);
+    assert(spec.Bodies().size() == 1U);
+
+    dtDynIndex parent = 0;
+    for (std::size_t index = 1U; index < count; ++index)
+    {
+        const dtDynIndex body = spec.AddBody(P75ObjectName("body", index), parent);
+        assert(body == static_cast<dtDynIndex>(index));
+        parent = body;
+    }
+    assert(spec.Bodies().size() == count);
+}
+
+void AddP75JointObjects(dtDynSpec &spec, const std::size_t count)
+{
+    const dtDynIndex body = spec.AddBody("p75_joint_body", 0);
+    assert(body == 1);
+    for (std::size_t index = 0U; index < count; ++index)
+    {
+        const dtDynIndex joint =
+            spec.AddJoint(body, P75ObjectName("joint", index), dtDynJointType::Hinge);
+        assert(joint == static_cast<dtDynIndex>(index));
+    }
+    assert(spec.Joints().size() == count);
+}
+
+void AddP75SiteObjects(dtDynSpec &spec, const std::size_t count)
+{
+    const dtDynIndex body = spec.AddBody("p75_site_body", 0);
+    assert(body == 1);
+    for (std::size_t index = 0U; index < count; ++index)
+    {
+        const dtDynIndex site = spec.AddSite(body, P75ObjectName("site", index));
+        assert(site == static_cast<dtDynIndex>(index));
+    }
+    assert(spec.Sites().size() == count);
+}
+
+void AddP75ActuatorObjects(dtDynSpec &spec, const std::size_t count)
+{
+    const dtDynIndex body = spec.AddBody("p75_actuator_body", 0);
+    const dtDynIndex joint = spec.AddJoint(body, "p75_actuator_joint", dtDynJointType::Hinge);
+    assert(body == 1);
+    assert(joint == 0);
+    for (std::size_t index = 0U; index < count; ++index)
+    {
+        const dtDynIndex actuator = spec.AddActuator(joint, P75ObjectName("actuator", index));
+        assert(actuator == static_cast<dtDynIndex>(index));
+    }
+    assert(spec.Actuators().size() == count);
+}
+
+void AssertP75ObjectCountBaseline(const dtDynSpec &spec)
+{
+    dtDynValidationError error;
+    assert(ValidateSpec(spec, &error));
+    assert(error.code == dtDynValidationCode::None);
+}
+
+void AssertP75ObjectCountOverflow(const dtDynSpec &spec)
+{
+    dtDynValidationError error;
+    assert(!ValidateSpec(spec, &error));
+    assert(error.code == dtDynValidationCode::DimensionOverflow);
+    assert(error.object == dtDynObjectType::Body);
+    assert(error.index == DTDYN_INVALID_INDEX);
+    assert(error.message == "spec object count exceeds UINT16_MAX");
+}
+
+void TestSpecValidationPreservesPublicObjectCountBoundaries()
+{
+    constexpr std::size_t maximum = static_cast<std::size_t>(std::numeric_limits<uint16_t>::max());
+    constexpr std::size_t overflow = maximum + 1U;
+    assert(maximum == 65535U);
+    assert(overflow == 65536U);
+
+    {
+        dtDynSpec spec;
+        AddP75BodyObjects(spec, maximum);
+        AssertP75ObjectCountBaseline(spec);
+    }
+    {
+        dtDynSpec spec;
+        AddP75BodyObjects(spec, overflow);
+        AssertP75ObjectCountOverflow(spec);
+    }
+    {
+        dtDynSpec spec;
+        AddP75JointObjects(spec, maximum);
+        AssertP75ObjectCountBaseline(spec);
+    }
+    {
+        dtDynSpec spec;
+        AddP75JointObjects(spec, overflow);
+        AssertP75ObjectCountOverflow(spec);
+    }
+    {
+        dtDynSpec spec;
+        AddP75SiteObjects(spec, maximum);
+        AssertP75ObjectCountBaseline(spec);
+    }
+    {
+        dtDynSpec spec;
+        AddP75SiteObjects(spec, overflow);
+        AssertP75ObjectCountOverflow(spec);
+    }
+    {
+        dtDynSpec spec;
+        AddP75ActuatorObjects(spec, maximum);
+        AssertP75ObjectCountBaseline(spec);
+    }
+    {
+        dtDynSpec spec;
+        AddP75ActuatorObjects(spec, overflow);
+        AssertP75ObjectCountOverflow(spec);
+    }
+}
+
+void AddRootStackedBodies(dtDynSpec &spec, const dtDynIndex rootCount)
+{
+    for (dtDynIndex rootIndex = 0; rootIndex < rootCount; ++rootIndex)
+    {
+        const dtDynIndex body = spec.AddBody("root_stacked_" + std::to_string(rootIndex), 0);
+        assert(body == rootIndex + 1);
+    }
+    assert(spec.Bodies().size() == static_cast<std::size_t>(rootCount) + 1U);
+}
+
+void TestSpecValidationPreservesRootStackedDimensionBoundary()
+{
+    constexpr dtDynIndex maximumRootCount =
+        static_cast<dtDynIndex>(std::numeric_limits<uint16_t>::max() / 6U);
+    constexpr dtDynIndex overflowRootCount = maximumRootCount + 1;
+    assert(maximumRootCount == 10922);
+    assert(overflowRootCount == 10923);
+
+    {
+        dtDynSpec validSpec;
+        AddRootStackedBodies(validSpec, maximumRootCount);
+
+        dtDynValidationError error;
+        assert(ValidateSpec(validSpec, &error));
+        assert(error.code == dtDynValidationCode::None);
+    }
+
+    dtDynSpec overflowSpec;
+    AddRootStackedBodies(overflowSpec, overflowRootCount);
+
+    dtDynValidationError error;
+    assert(!ValidateSpec(overflowSpec, &error));
+    assert(error.code == dtDynValidationCode::DimensionOverflow);
+    assert(error.object == dtDynObjectType::Body);
+    assert(error.index == DTDYN_INVALID_INDEX);
+    assert(error.message == "root-stacked dimension 6*nroot exceeds UINT16_MAX");
 }
 
 void TestModelValidationRejectsArrayShapeMismatch()
@@ -501,6 +1002,48 @@ void TestModelValidationRejectsMissingWorld()
     dtDynValidationError error;
     assert(!ValidateModel(model, &error));
     assert(error.code == dtDynValidationCode::InvalidWorld);
+}
+
+void TestModelValidationRejectsCompiledWorldAndNonWorldParents()
+{
+    dtDynSpec spec;
+    const dtDynIndex root = spec.AddBody("compiled_parent_root", 0);
+    const dtDynIndex child = spec.AddBody("compiled_parent_child", root);
+    const dtDynModel valid = CompileSpecChecked(spec);
+
+    assert(valid.nbody == 3);
+    assert(valid.body_parentid[0] == 0);
+    assert(valid.body_parentid[static_cast<std::size_t>(root)] == 0);
+    assert(valid.body_parentid[static_cast<std::size_t>(child)] == root);
+    dtDynValidationError validError;
+    assert(ValidateModel(valid, &validError));
+    assert(validError.code == dtDynValidationCode::None);
+
+    dtDynModel nonzeroWorldParent = valid;
+    nonzeroWorldParent.body_parentid[0] = root;
+    AssertCompiledParentValidationDiagnostic(
+        nonzeroWorldParent, dtDynValidationCode::InvalidWorld, 0,
+        "compiled body[0] world parent must be 0");
+
+    dtDynModel selfParent = valid;
+    selfParent.body_parentid[static_cast<std::size_t>(child)] = child;
+    AssertCompiledParentValidationDiagnostic(
+        selfParent, dtDynValidationCode::InvalidParent, child,
+        "compiled body[" + std::to_string(child) + "] has invalid parent " +
+            std::to_string(child));
+
+    dtDynModel forwardParent = valid;
+    forwardParent.body_parentid[static_cast<std::size_t>(root)] = child;
+    AssertCompiledParentValidationDiagnostic(
+        forwardParent, dtDynValidationCode::InvalidParent, root,
+        "compiled body[" + std::to_string(root) + "] has invalid parent " +
+            std::to_string(child));
+
+    dtDynModel negativeParent = valid;
+    negativeParent.body_parentid[static_cast<std::size_t>(child)] = DTDYN_INVALID_INDEX;
+    AssertCompiledParentValidationDiagnostic(
+        negativeParent, dtDynValidationCode::InvalidParent, child,
+        "compiled body[" + std::to_string(child) + "] has invalid parent -1");
 }
 
 void TestModelValidationRejectsNonFiniteValues()
@@ -570,6 +1113,32 @@ void TestModelValidationRejectsInvalidAddressSegments()
     assert(!ValidateModel(badType, &error));
 }
 
+void TestModelValidationRejectsCompiledJointTypesOutsideRange()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("compiled_joint_type_body", 0);
+    const dtDynIndex joint =
+        spec.AddJoint(body, "compiled_joint_type", dtDynJointType::Hinge);
+    const dtDynModel valid = CompileSpecChecked(spec);
+
+    assert(body == 1);
+    assert(joint == 0);
+    assert(valid.njnt == 1);
+    dtDynValidationError validError;
+    assert(ValidateModel(valid, &validError));
+    assert(validError.code == dtDynValidationCode::None);
+
+    dtDynModel belowFree = valid;
+    belowFree.jnt_type[static_cast<std::size_t>(joint)] =
+        static_cast<dtDynIndex>(dtDynJointType::Free) - 1;
+    AssertCompiledUnsupportedJointTypeDiagnostic(belowFree, joint);
+
+    dtDynModel aboveHinge = valid;
+    aboveHinge.jnt_type[static_cast<std::size_t>(joint)] =
+        static_cast<dtDynIndex>(dtDynJointType::Hinge) + 1;
+    AssertCompiledUnsupportedJointTypeDiagnostic(aboveHinge, joint);
+}
+
 void TestModelValidationRejectsInvalidJointSpecProvenance()
 {
     dtDynSpec spec;
@@ -605,6 +1174,94 @@ void TestModelValidationRejectsInvalidRootMetadata()
     dtDynModel badRootSlot = valid;
     badRootSlot.body_rootidx[1] = 99;
     assert(!ValidateModel(badRootSlot, &error));
+}
+
+void TestModelValidationRejectsInconsistentRootTableMetadata()
+{
+    dtDynSpec spec;
+    const dtDynIndex firstRoot = spec.AddBody("first_root", 0);
+    const dtDynIndex child = spec.AddBody("child", firstRoot);
+    const dtDynIndex secondRoot = spec.AddBody("second_root", 0);
+    const dtDynModel valid = CompileSpecChecked(spec);
+
+    assert(valid.nroot == 2);
+    assert(valid.root_bodyid[0] == firstRoot);
+    assert(valid.root_bodyid[1] == secondRoot);
+    assert(valid.body_parentid[child] == firstRoot);
+    assert(valid.body_rootid[firstRoot] == firstRoot);
+    assert(valid.body_rootidx[firstRoot] == 0);
+    assert(valid.body_rootidx[secondRoot] == 1);
+
+    dtDynModel nonpositiveRootBody = valid;
+    nonpositiveRootBody.root_bodyid[0] = 0;
+    AssertInconsistentRootTableMetadata(nonpositiveRootBody, 0);
+
+    dtDynModel onePastRootBody = valid;
+    onePastRootBody.root_bodyid[0] = onePastRootBody.nbody;
+    AssertInconsistentRootTableMetadata(onePastRootBody, onePastRootBody.nbody);
+
+    dtDynModel nonRootBody = valid;
+    nonRootBody.root_bodyid[0] = child;
+    nonRootBody.body_rootid[child] = child;
+    AssertInconsistentRootTableMetadata(nonRootBody, child);
+
+    dtDynModel wrongRootId = valid;
+    wrongRootId.body_rootid[firstRoot] = secondRoot;
+    AssertInconsistentRootTableMetadata(wrongRootId, firstRoot);
+
+    dtDynModel wrongRootIndex = valid;
+    wrongRootIndex.body_rootidx[firstRoot] = 1;
+    AssertInconsistentRootTableMetadata(wrongRootIndex, firstRoot);
+}
+
+void TestModelValidationPreservesWorldRootPropagation()
+{
+    dtDynSpec spec;
+    const dtDynIndex firstRoot = spec.AddBody("propagation_first_root", 0);
+    const dtDynIndex child = spec.AddBody("propagation_child", firstRoot);
+    const dtDynIndex secondRoot = spec.AddBody("propagation_second_root", 0);
+    const dtDynModel valid = CompileSpecChecked(spec);
+
+    assert(valid.nbody == 4);
+    assert(valid.nroot == 2);
+    assert(valid.body_parentid[firstRoot] == 0);
+    assert(valid.body_parentid[child] == firstRoot);
+    assert(valid.body_parentid[secondRoot] == 0);
+    assert(valid.body_rootid[firstRoot] == firstRoot);
+    assert(valid.body_rootid[child] == firstRoot);
+    assert(valid.body_rootid[secondRoot] == secondRoot);
+    assert(valid.body_rootidx[firstRoot] == 0);
+    assert(valid.body_rootidx[child] == 0);
+    assert(valid.body_rootidx[secondRoot] == 1);
+
+    dtDynValidationError validError;
+    assert(ValidateModel(valid, &validError));
+    assert(validError.code == dtDynValidationCode::None);
+
+    dtDynModel wrongWorldRootId = valid;
+    wrongWorldRootId.body_rootid[0] = firstRoot;
+    AssertWorldRootMetadataDiagnostic(wrongWorldRootId);
+
+    dtDynModel wrongWorldRootIndex = valid;
+    wrongWorldRootIndex.body_rootidx[0] = 0;
+    AssertWorldRootMetadataDiagnostic(wrongWorldRootIndex);
+
+    dtDynModel wrongChildRootId = valid;
+    wrongChildRootId.body_rootid[child] = secondRoot;
+    wrongChildRootId.body_rootidx[child] = wrongChildRootId.body_rootidx[secondRoot];
+    AssertBodyRootPropagationDiagnostic(wrongChildRootId, child);
+
+    dtDynModel negativeChildRootIndex = valid;
+    negativeChildRootIndex.body_rootidx[child] = DTDYN_INVALID_INDEX;
+    AssertBodyRootPropagationDiagnostic(negativeChildRootIndex, child);
+
+    dtDynModel onePastChildRootIndex = valid;
+    onePastChildRootIndex.body_rootidx[child] = onePastChildRootIndex.nroot;
+    AssertBodyRootPropagationDiagnostic(onePastChildRootIndex, child);
+
+    dtDynModel otherRootChildIndex = valid;
+    otherRootChildIndex.body_rootidx[child] = otherRootChildIndex.body_rootidx[secondRoot];
+    AssertBodyRootPropagationDiagnostic(otherRootChildIndex, child);
 }
 
 void TestModelValidationRejectsDuplicateNames()
@@ -692,29 +1349,96 @@ void TestModelValidationRejectsInvalidWeldId()
     assert(error.index == fixed);
 }
 
+void TestModelValidationPreservesWeldPropagation()
+{
+    dtDynSpec spec;
+    const dtDynIndex fixedRoot = spec.AddBody("weld_fixed_root", 0);
+    const dtDynIndex jointedChild = spec.AddBody("weld_jointed_child", fixedRoot);
+    const dtDynIndex fixedGrandchild = spec.AddBody("weld_fixed_grandchild", jointedChild);
+    const dtDynIndex joint = spec.AddJoint(jointedChild, "weld_hinge", dtDynJointType::Hinge);
+    const dtDynModel valid = CompileSpecChecked(spec);
+
+    assert(valid.nbody == 4);
+    assert(valid.njnt == 1);
+    assert(joint == 0);
+    assert(valid.body_parentid[fixedRoot] == 0);
+    assert(valid.body_parentid[jointedChild] == fixedRoot);
+    assert(valid.body_parentid[fixedGrandchild] == jointedChild);
+    assert(valid.body_jntnum[fixedRoot] == 0);
+    assert(valid.body_jntnum[jointedChild] == 1);
+    assert(valid.body_jntnum[fixedGrandchild] == 0);
+    assert(valid.body_weldid[fixedRoot] == 0);
+    assert(valid.body_weldid[jointedChild] == jointedChild);
+    assert(valid.body_weldid[fixedGrandchild] == jointedChild);
+
+    dtDynValidationError validError;
+    assert(ValidateModel(valid, &validError));
+    assert(validError.code == dtDynValidationCode::None);
+
+    dtDynModel wrongFixedRoot = valid;
+    wrongFixedRoot.body_weldid[fixedRoot] = fixedRoot;
+    AssertWeldPropagationDiagnostic(wrongFixedRoot, fixedRoot);
+
+    dtDynModel wrongJointedChild = valid;
+    wrongJointedChild.body_weldid[jointedChild] = 0;
+    AssertWeldPropagationDiagnostic(wrongJointedChild, jointedChild);
+
+    dtDynModel wrongFixedGrandchild = valid;
+    wrongFixedGrandchild.body_weldid[fixedGrandchild] = 0;
+    AssertWeldPropagationDiagnostic(wrongFixedGrandchild, fixedGrandchild);
+}
+
 void TestModelValidationRejectsIncorrectDofParentTopology()
 {
     dtDynSpec multiRoot;
     const dtDynIndex rootA = multiRoot.AddBody("root_a", 0);
     multiRoot.AddJoint(rootA, "joint_a", dtDynJointType::Hinge);
     const dtDynIndex rootB = multiRoot.AddBody("root_b", 0);
-    multiRoot.AddJoint(rootB, "joint_b", dtDynJointType::Hinge);
-    dtDynModel crossRoot = CompileSpec(multiRoot);
-    crossRoot.dof_parentid[1] = 0;
+    const dtDynIndex rootBJoint =
+        multiRoot.AddJoint(rootB, "joint_b", dtDynJointType::Hinge);
+    const dtDynModel validMultiRoot = CompileSpecChecked(multiRoot);
+    const dtDynIndex rootBDof =
+        validMultiRoot.jnt_dofadr[static_cast<std::size_t>(rootBJoint)];
     dtDynValidationError error;
+
+    assert(validMultiRoot.nroot == 2);
+    assert(validMultiRoot.dof_parentid[static_cast<std::size_t>(rootBDof)] ==
+           DTDYN_INVALID_INDEX);
+    assert(ValidateModel(validMultiRoot, &error));
+    assert(error.code == dtDynValidationCode::None);
+
+    dtDynModel crossRoot = validMultiRoot;
+    crossRoot.dof_parentid[static_cast<std::size_t>(rootBDof)] = 0;
     assert(!ValidateModel(crossRoot, &error));
     assert(error.code == dtDynValidationCode::InvalidReference);
+    assert(error.object == dtDynObjectType::Joint);
+    assert(error.index == rootBJoint);
+    assert(error.message == "compiled DOF parent does not match the exact ancestor chain");
 
     dtDynSpec chain;
     const dtDynIndex parent = chain.AddBody("parent", 0);
-    chain.AddJoint(parent, "parent_joint", dtDynJointType::Hinge);
+    const dtDynIndex parentJoint =
+        chain.AddJoint(parent, "parent_joint", dtDynJointType::Hinge);
     const dtDynIndex child = chain.AddBody("child", parent);
-    chain.AddJoint(child, "child_joint", dtDynJointType::Hinge);
-    dtDynModel severed = CompileSpec(chain);
-    assert(severed.dof_parentid[1] == 0);
-    severed.dof_parentid[1] = DTDYN_INVALID_INDEX;
+    const dtDynIndex childJoint =
+        chain.AddJoint(child, "child_joint", dtDynJointType::Hinge);
+    const dtDynModel validChain = CompileSpecChecked(chain);
+    const dtDynIndex parentDof =
+        validChain.jnt_dofadr[static_cast<std::size_t>(parentJoint)];
+    const dtDynIndex childDof =
+        validChain.jnt_dofadr[static_cast<std::size_t>(childJoint)];
+
+    assert(validChain.dof_parentid[static_cast<std::size_t>(childDof)] == parentDof);
+    assert(ValidateModel(validChain, &error));
+    assert(error.code == dtDynValidationCode::None);
+
+    dtDynModel severed = validChain;
+    severed.dof_parentid[static_cast<std::size_t>(childDof)] = DTDYN_INVALID_INDEX;
     assert(!ValidateModel(severed, &error));
     assert(error.code == dtDynValidationCode::InvalidReference);
+    assert(error.object == dtDynObjectType::Joint);
+    assert(error.index == childJoint);
+    assert(error.message == "compiled DOF parent does not match the exact ancestor chain");
 }
 
 void TestModelValidationRejectsInconsistentDerivedMasses()
@@ -789,6 +1513,471 @@ void TestSpecValidationRejectsInvalidPhysicalValues()
     roundedAxis.EditJoint(roundedJoint, [&](dtDynJointSpec &draft)
                           { draft.axis(2) = 0.0; });
     assert(ValidateSpec(roundedAxis, &error));
+}
+
+void AssertSpecValidationFailure(const dtDynSpec &spec,
+                                 const dtDynValidationCode code,
+                                 const dtDynObjectType object,
+                                 const dtDynIndex index,
+                                 const std::string &message)
+{
+    dtDynValidationError error;
+    assert(!ValidateSpec(spec, &error));
+    assert(error.code == code);
+    assert(error.object == object);
+    assert(error.index == index);
+    assert(error.message == message);
+}
+
+void AddTerminalDofOverflowJoints(dtDynSpec &spec, const dtDynIndex body, const std::size_t count)
+{
+    for (std::size_t index = 0U; index < count; ++index)
+    {
+        const dtDynIndex joint =
+            spec.AddJoint(body, "terminal_dof_joint_" + std::to_string(index), dtDynJointType::Free);
+        assert(joint == static_cast<dtDynIndex>(index));
+    }
+    assert(spec.Joints().size() == count);
+}
+
+void TestSpecValidationRejectsTerminalJointDofOverflow()
+{
+    constexpr std::size_t freeQposSize = 7U;
+    constexpr std::size_t maximum = static_cast<std::size_t>(std::numeric_limits<uint16_t>::max());
+    constexpr std::size_t lastAcceptedCount = maximum / freeQposSize;
+    constexpr std::size_t terminalOverflowCount = lastAcceptedCount + 1U;
+    assert(lastAcceptedCount == 9362U);
+    assert((lastAcceptedCount * freeQposSize) <= maximum);
+    assert((terminalOverflowCount * freeQposSize) > maximum);
+
+    {
+        dtDynSpec spec;
+        const dtDynIndex body = spec.AddBody("terminal_dof_body", 0);
+        AddTerminalDofOverflowJoints(spec, body, lastAcceptedCount);
+        AssertP75ObjectCountBaseline(spec);
+    }
+    {
+        dtDynSpec spec;
+        const dtDynIndex body = spec.AddBody("terminal_dof_body", 0);
+        AddTerminalDofOverflowJoints(spec, body, terminalOverflowCount);
+        AssertSpecValidationFailure(spec, dtDynValidationCode::DimensionOverflow,
+                                    dtDynObjectType::Joint, static_cast<dtDynIndex>(lastAcceptedCount),
+                                    "joint[" + std::to_string(lastAcceptedCount) +
+                                        "] makes nq/nv exceed UINT16_MAX");
+    }
+}
+
+struct BodyJointReferenceEditor
+{
+    dtDynIndex reference;
+
+    void operator()(dtDynBodySpec &draft) const
+    {
+        draft.joints[0] = reference;
+    }
+};
+
+struct BodySiteReferenceEditor
+{
+    dtDynIndex reference;
+
+    void operator()(dtDynBodySpec &draft) const
+    {
+        draft.sites[0] = reference;
+    }
+};
+
+struct ActuatorJointReferenceEditor
+{
+    dtDynIndex reference;
+
+    void operator()(dtDynActuatorSpec &draft) const
+    {
+        draft.joint = reference;
+    }
+};
+
+void TestSpecValidationPreservesSignedReferenceBounds()
+{
+    {
+        dtDynSpec spec;
+        const dtDynIndex body = spec.AddBody("joint_body", 0);
+        spec.AddJoint(body, "joint", dtDynJointType::Hinge);
+        spec.EditBody(body, BodyJointReferenceEditor{DTDYN_INVALID_INDEX});
+        AssertSpecValidationFailure(spec, dtDynValidationCode::InvalidReference,
+                                    dtDynObjectType::Body, body,
+                                    "body[1] contains invalid joint -1");
+    }
+    {
+        dtDynSpec spec;
+        const dtDynIndex body = spec.AddBody("joint_body", 0);
+        spec.AddJoint(body, "joint", dtDynJointType::Hinge);
+        const dtDynIndex onePastEnd = static_cast<dtDynIndex>(spec.Joints().size());
+        spec.EditBody(body, BodyJointReferenceEditor{onePastEnd});
+        AssertSpecValidationFailure(spec, dtDynValidationCode::InvalidReference,
+                                    dtDynObjectType::Body, body,
+                                    "body[1] contains invalid joint 1");
+    }
+    {
+        dtDynSpec spec;
+        const dtDynIndex body = spec.AddBody("site_body", 0);
+        spec.AddSite(body, "site");
+        spec.EditBody(body, BodySiteReferenceEditor{DTDYN_INVALID_INDEX});
+        AssertSpecValidationFailure(spec, dtDynValidationCode::InvalidReference,
+                                    dtDynObjectType::Body, body,
+                                    "body[1] contains invalid site -1");
+    }
+    {
+        dtDynSpec spec;
+        const dtDynIndex body = spec.AddBody("site_body", 0);
+        spec.AddSite(body, "site");
+        const dtDynIndex onePastEnd = static_cast<dtDynIndex>(spec.Sites().size());
+        spec.EditBody(body, BodySiteReferenceEditor{onePastEnd});
+        AssertSpecValidationFailure(spec, dtDynValidationCode::InvalidReference,
+                                    dtDynObjectType::Body, body,
+                                    "body[1] contains invalid site 1");
+    }
+    {
+        dtDynSpec spec;
+        const dtDynIndex body = spec.AddBody("actuator_body", 0);
+        const dtDynIndex joint = spec.AddJoint(body, "joint", dtDynJointType::Hinge);
+        const dtDynIndex actuator = spec.AddActuator(joint, "motor");
+        spec.EditActuator(actuator, ActuatorJointReferenceEditor{DTDYN_INVALID_INDEX});
+        AssertSpecValidationFailure(spec, dtDynValidationCode::InvalidReference,
+                                    dtDynObjectType::Actuator, actuator,
+                                    "actuator[0] 'motor' references invalid joint -1");
+    }
+    {
+        dtDynSpec spec;
+        const dtDynIndex body = spec.AddBody("actuator_body", 0);
+        const dtDynIndex joint = spec.AddJoint(body, "joint", dtDynJointType::Hinge);
+        const dtDynIndex actuator = spec.AddActuator(joint, "motor");
+        const dtDynIndex onePastEnd = static_cast<dtDynIndex>(spec.Joints().size());
+        spec.EditActuator(actuator, ActuatorJointReferenceEditor{onePastEnd});
+        AssertSpecValidationFailure(spec, dtDynValidationCode::InvalidReference,
+                                    dtDynObjectType::Actuator, actuator,
+                                    "actuator[0] 'motor' references invalid joint 1");
+    }
+}
+
+struct FirstChildEditor
+{
+    dtDynIndex child;
+
+    void operator()(dtDynBodySpec &draft) const
+    {
+        draft.firstChild = child;
+    }
+};
+
+void AssertChildListRangeFailure(dtDynSpec &spec,
+                                 const dtDynIndex parent,
+                                 const dtDynIndex child)
+{
+    assert(parent == 1);
+    assert(spec.Bodies().size() == 2);
+    assert(spec.Bodies()[0].firstChild == parent);
+    assert(spec.Bodies()[static_cast<std::size_t>(parent)].parent == 0);
+    assert(spec.Bodies()[static_cast<std::size_t>(parent)].firstChild == DTDYN_INVALID_INDEX);
+
+    spec.EditBody(parent, FirstChildEditor{child});
+    assert(spec.Bodies()[static_cast<std::size_t>(parent)].firstChild == child);
+
+    AssertSpecValidationFailure(
+        spec, dtDynValidationCode::InvalidReference, dtDynObjectType::Body, parent,
+        "body[" + std::to_string(parent) + "] child list contains invalid body " +
+            std::to_string(child));
+}
+
+void TestSpecValidationRejectsChildListRange()
+{
+    {
+        dtDynSpec spec = MakeValidNormalSpec();
+        const dtDynIndex parent = spec.BodyId("base");
+        AssertChildListRangeFailure(spec, parent, 0);
+    }
+    {
+        dtDynSpec spec = MakeValidNormalSpec();
+        const dtDynIndex parent = spec.BodyId("base");
+        const dtDynIndex onePastEnd = static_cast<dtDynIndex>(spec.Bodies().size());
+        assert(onePastEnd > 0);
+        AssertChildListRangeFailure(spec, parent, onePastEnd);
+    }
+}
+
+void TestSpecValidationRejectsTerminalBodyAbsentFromChildList()
+{
+    dtDynSpec spec;
+    const dtDynIndex first = spec.AddBody("child_seen_first", 0);
+    const dtDynIndex terminal = spec.AddBody("child_seen_terminal", first);
+    assert(first == 1);
+    assert(terminal == 2);
+    assert(spec.Bodies()[static_cast<std::size_t>(first)].firstChild == terminal);
+    assert(spec.Bodies()[static_cast<std::size_t>(terminal)].parent == first);
+    AssertP75ObjectCountBaseline(spec);
+
+    spec.EditBody(first, FirstChildEditor{DTDYN_INVALID_INDEX});
+    assert(spec.Bodies()[static_cast<std::size_t>(first)].firstChild == DTDYN_INVALID_INDEX);
+    assert(spec.Bodies()[static_cast<std::size_t>(terminal)].parent == first);
+
+    AssertSpecValidationFailure(spec, dtDynValidationCode::InvalidOwner, dtDynObjectType::Body,
+                                terminal, "body[2] is absent from its parent's child list");
+}
+
+struct PhysicalInertiaEditor
+{
+    dtDynReal first;
+    dtDynReal second;
+    dtDynReal third;
+
+    void operator()(dtDynBodySpec &draft) const
+    {
+        draft.inertial.mass = 1.0;
+        draft.inertial.inertia(0) = first;
+        draft.inertial.inertia(1) = second;
+        draft.inertial.inertia(2) = third;
+    }
+};
+
+void AssertPhysicalInertiaRejectedByCheckedCompile(const dtDynReal first,
+                                                   const dtDynReal second,
+                                                   const dtDynReal third)
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("invalid_physical_inertia_body", 0);
+    spec.EditBody(body, PhysicalInertiaEditor{first, second, third});
+    AssertSpecValidationFailure(spec, dtDynValidationCode::InvalidReference,
+                                dtDynObjectType::Body, body,
+                                "body[1] has a negative mass or physically invalid principal inertia");
+
+    bool checkedCompileRejected = false;
+    try
+    {
+        (void)CompileSpecChecked(spec);
+    }
+    catch (const std::runtime_error &exception)
+    {
+        checkedCompileRejected =
+            std::string(exception.what()) ==
+            "CompileSpecChecked: body[1] has a negative mass or physically invalid principal inertia";
+    }
+    assert(checkedCompileRejected);
+}
+
+void AssertPhysicalInertiaAcceptedByCheckedCompile(const dtDynReal first,
+                                                   const dtDynReal second,
+                                                   const dtDynReal third)
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("valid_physical_inertia_body", 0);
+    spec.EditBody(body, PhysicalInertiaEditor{first, second, third});
+
+    const dtDynModel model = CompileSpecChecked(spec);
+    assert(model.nbody == 2);
+    assert(model.nroot == 1);
+    assert(model.body_mass(body) == 1.0);
+    assert(model.body_inertia[static_cast<std::size_t>(body)](0) == first);
+    assert(model.body_inertia[static_cast<std::size_t>(body)](1) == second);
+    assert(model.body_inertia[static_cast<std::size_t>(body)](2) == third);
+}
+
+void TestSpecValidationPreservesPhysicalInertiaTriangleInequalities()
+{
+    AssertPhysicalInertiaRejectedByCheckedCompile(-1.0, 1.0, 1.0);
+    AssertPhysicalInertiaRejectedByCheckedCompile(1.0, -1.0, 1.0);
+    AssertPhysicalInertiaRejectedByCheckedCompile(1.0, 1.0, -1.0);
+
+    AssertPhysicalInertiaRejectedByCheckedCompile(3.0, 1.0, 1.0);
+    AssertPhysicalInertiaRejectedByCheckedCompile(1.0, 3.0, 1.0);
+    AssertPhysicalInertiaRejectedByCheckedCompile(1.0, 1.0, 3.0);
+    AssertPhysicalInertiaAcceptedByCheckedCompile(2.0, 1.0, 1.0);
+}
+
+void TestSpecValidationPreservesOrderedPhysicalAndNameFailures()
+{
+    const dtDynReal nan = std::numeric_limits<dtDynReal>::quiet_NaN();
+
+    dtDynSpec nonFiniteBody;
+    const dtDynIndex nonFiniteBodyId = nonFiniteBody.AddBody("nonfinite_body", 0);
+    nonFiniteBody.EditBody(nonFiniteBodyId, [&](dtDynBodySpec &draft)
+                           { draft.pos(0) = nan; });
+    AssertSpecValidationFailure(nonFiniteBody, dtDynValidationCode::NonFiniteValue,
+                                dtDynObjectType::Body, nonFiniteBodyId,
+                                "body[1] contains a non-finite value");
+    bool checkedCompileRejected = false;
+    try
+    {
+        (void)CompileSpecChecked(nonFiniteBody);
+    }
+    catch (const std::runtime_error &exception)
+    {
+        checkedCompileRejected =
+            std::string(exception.what()) == "CompileSpecChecked: body[1] contains a non-finite value";
+    }
+    assert(checkedCompileRejected);
+
+    dtDynSpec negativeMass;
+    const dtDynIndex massBody = negativeMass.AddBody("negative_mass_body", 0);
+    negativeMass.EditBody(massBody, [&](dtDynBodySpec &draft)
+                          { draft.inertial.mass = -1.0; });
+    AssertSpecValidationFailure(negativeMass, dtDynValidationCode::InvalidReference,
+                                dtDynObjectType::Body, massBody,
+                                "body[1] has a negative mass or physically invalid principal inertia");
+
+    dtDynSpec invalidPrincipalInertia;
+    const dtDynIndex inertiaBody = invalidPrincipalInertia.AddBody("invalid_inertia_body", 0);
+    invalidPrincipalInertia.EditBody(inertiaBody, [&](dtDynBodySpec &draft)
+                                     {
+                                        draft.inertial.mass = 1.0;
+                                        draft.inertial.inertia(0) = 3.0;
+                                        draft.inertial.inertia(1) = 1.0;
+                                        draft.inertial.inertia(2) = 1.0; });
+    AssertSpecValidationFailure(invalidPrincipalInertia, dtDynValidationCode::InvalidReference,
+                                dtDynObjectType::Body, inertiaBody,
+                                "body[1] has a negative mass or physically invalid principal inertia");
+
+    dtDynSpec boundaryPrincipalInertia;
+    const dtDynIndex boundaryBody = boundaryPrincipalInertia.AddBody("boundary_inertia_body", 0);
+    boundaryPrincipalInertia.EditBody(boundaryBody, [&](dtDynBodySpec &draft)
+                                      {
+                                         draft.inertial.mass = 1.0;
+                                         draft.inertial.inertia(0) = 2.0;
+                                         draft.inertial.inertia(1) = 1.0;
+                                         draft.inertial.inertia(2) = 1.0; });
+    dtDynValidationError boundaryError;
+    assert(ValidateSpec(boundaryPrincipalInertia, &boundaryError));
+    assert(boundaryError.code == dtDynValidationCode::None);
+
+    dtDynSpec invalidQuaternion;
+    const dtDynIndex quaternionBody = invalidQuaternion.AddBody("invalid_quaternion_body", 0);
+    invalidQuaternion.EditBody(quaternionBody, [&](dtDynBodySpec &draft)
+                               { draft.quat.SetZero(); });
+    AssertSpecValidationFailure(invalidQuaternion, dtDynValidationCode::InvalidReference,
+                                dtDynObjectType::Body, quaternionBody,
+                                "body[1] has a non-unit body or inertial quaternion");
+
+    dtDynSpec nonFiniteJoint;
+    const dtDynIndex jointBody = nonFiniteJoint.AddBody("nonfinite_joint_body", 0);
+    const dtDynIndex nonFiniteJointId =
+        nonFiniteJoint.AddJoint(jointBody, "nonfinite_joint", dtDynJointType::Hinge);
+    nonFiniteJoint.EditJoint(nonFiniteJointId, [&](dtDynJointSpec &draft)
+                             { draft.rangeMin = nan; });
+    AssertSpecValidationFailure(nonFiniteJoint, dtDynValidationCode::NonFiniteValue,
+                                dtDynObjectType::Joint, nonFiniteJointId,
+                                "joint[0] contains a non-finite value");
+
+    dtDynSpec invalidSlideAxis;
+    const dtDynIndex slideBody = invalidSlideAxis.AddBody("slide_body", 0);
+    const dtDynIndex slideJoint =
+        invalidSlideAxis.AddJoint(slideBody, "slide_joint", dtDynJointType::Slide);
+    invalidSlideAxis.EditJoint(slideJoint, [&](dtDynJointSpec &draft)
+                               {
+                                   draft.axis.SetZero();
+                                   draft.armature = -1.0; });
+    AssertSpecValidationFailure(invalidSlideAxis, dtDynValidationCode::InvalidReference,
+                                dtDynObjectType::Joint, slideJoint,
+                                "joint axis must be unit length for slide/hinge joints");
+
+    dtDynSpec negativeSlideArmature;
+    const dtDynIndex negativeSlideBody = negativeSlideArmature.AddBody("negative_slide_body", 0);
+    const dtDynIndex negativeSlideJoint =
+        negativeSlideArmature.AddJoint(negativeSlideBody, "negative_slide", dtDynJointType::Slide);
+    negativeSlideArmature.EditJoint(negativeSlideJoint, [&](dtDynJointSpec &draft)
+                                    { draft.armature = -1.0; });
+    AssertSpecValidationFailure(negativeSlideArmature, dtDynValidationCode::InvalidReference,
+                                dtDynObjectType::Joint, negativeSlideJoint,
+                                "joint armature must be nonnegative");
+
+    dtDynSpec invalidHingeAxis;
+    const dtDynIndex hingeBody = invalidHingeAxis.AddBody("hinge_body", 0);
+    const dtDynIndex hingeJoint =
+        invalidHingeAxis.AddJoint(hingeBody, "hinge_joint", dtDynJointType::Hinge);
+    invalidHingeAxis.EditJoint(hingeJoint, [&](dtDynJointSpec &draft)
+                               { draft.axis.SetZero(); });
+    AssertSpecValidationFailure(invalidHingeAxis, dtDynValidationCode::InvalidReference,
+                                dtDynObjectType::Joint, hingeJoint,
+                                "joint axis must be unit length for slide/hinge joints");
+
+    dtDynSpec negativeHingeArmature;
+    const dtDynIndex negativeHingeBody = negativeHingeArmature.AddBody("negative_hinge_body", 0);
+    const dtDynIndex negativeHingeJoint =
+        negativeHingeArmature.AddJoint(negativeHingeBody, "negative_hinge", dtDynJointType::Hinge);
+    negativeHingeArmature.EditJoint(negativeHingeJoint, [&](dtDynJointSpec &draft)
+                                    { draft.armature = -1.0; });
+    AssertSpecValidationFailure(negativeHingeArmature, dtDynValidationCode::InvalidReference,
+                                dtDynObjectType::Joint, negativeHingeJoint,
+                                "joint armature must be nonnegative");
+
+    dtDynSpec validFreeAxis;
+    const dtDynIndex freeBody = validFreeAxis.AddBody("free_body", 0);
+    const dtDynIndex freeJoint = validFreeAxis.AddJoint(freeBody, "free_joint", dtDynJointType::Free);
+    validFreeAxis.EditJoint(freeJoint, [&](dtDynJointSpec &draft)
+                            { draft.axis.SetZero(); });
+    const dtDynModel freeModel = CompileSpecChecked(validFreeAxis);
+    assert(freeModel.njnt == 1);
+
+    dtDynSpec negativeFreeArmature = validFreeAxis;
+    negativeFreeArmature.EditJoint(freeJoint, [&](dtDynJointSpec &draft)
+                                   { draft.armature = -1.0; });
+    AssertSpecValidationFailure(negativeFreeArmature, dtDynValidationCode::InvalidReference,
+                                dtDynObjectType::Joint, freeJoint,
+                                "joint armature must be nonnegative");
+
+    dtDynSpec nonFiniteSite;
+    const dtDynIndex siteBody = nonFiniteSite.AddBody("site_body", 0);
+    const dtDynIndex site = nonFiniteSite.AddSite(siteBody, "nonfinite_site");
+    nonFiniteSite.EditSite(site, [&](dtDynSiteSpec &draft)
+                           { draft.quat(0) = nan; });
+    AssertSpecValidationFailure(nonFiniteSite, dtDynValidationCode::NonFiniteValue,
+                                dtDynObjectType::Site, site,
+                                "site[0] contains a non-finite value");
+
+    dtDynSpec named;
+    const dtDynIndex firstBody = named.AddBody("body_one", 0);
+    const dtDynIndex secondBody = named.AddBody("body_two", 0);
+    const dtDynIndex firstJoint = named.AddJoint(firstBody, "joint_one", dtDynJointType::Hinge);
+    const dtDynIndex secondJoint = named.AddJoint(secondBody, "joint_two", dtDynJointType::Hinge);
+    static_cast<void>(named.AddSite(firstBody, "site_one"));
+    const dtDynIndex secondSite = named.AddSite(secondBody, "site_two");
+    static_cast<void>(named.AddActuator(firstJoint, "actuator_one"));
+    const dtDynIndex secondActuator = named.AddActuator(secondJoint, "actuator_two");
+
+    dtDynSpec duplicateBody = named;
+    duplicateBody.EditBody(secondBody, [&](dtDynBodySpec &draft)
+                           { draft.name = "body_one"; });
+    AssertSpecValidationFailure(duplicateBody, dtDynValidationCode::DuplicateName,
+                                dtDynObjectType::Body, secondBody,
+                                "body[2] duplicates name 'body_one'");
+
+    dtDynSpec duplicateJoint = named;
+    duplicateJoint.EditJoint(secondJoint, [&](dtDynJointSpec &draft)
+                             { draft.name = "joint_one"; });
+    AssertSpecValidationFailure(duplicateJoint, dtDynValidationCode::DuplicateName,
+                                dtDynObjectType::Joint, secondJoint,
+                                "joint[1] duplicates name 'joint_one'");
+
+    dtDynSpec duplicateSite = named;
+    duplicateSite.EditSite(secondSite, [&](dtDynSiteSpec &draft)
+                           { draft.name = "site_one"; });
+    AssertSpecValidationFailure(duplicateSite, dtDynValidationCode::DuplicateName,
+                                dtDynObjectType::Site, secondSite,
+                                "site[1] duplicates name 'site_one'");
+
+    dtDynSpec duplicateActuator = named;
+    duplicateActuator.EditActuator(secondActuator, [&](dtDynActuatorSpec &draft)
+                                   { draft.name = "actuator_one"; });
+    AssertSpecValidationFailure(duplicateActuator, dtDynValidationCode::DuplicateName,
+                                dtDynObjectType::Actuator, secondActuator,
+                                "actuator[1] duplicates name 'actuator_one'");
+
+    dtDynSpec duplicateBodyAndActuator = named;
+    duplicateBodyAndActuator.EditBody(secondBody, [&](dtDynBodySpec &draft)
+                                      { draft.name = "body_one"; });
+    duplicateBodyAndActuator.EditActuator(secondActuator, [&](dtDynActuatorSpec &draft)
+                                          { draft.name = "actuator_one"; });
+    AssertSpecValidationFailure(duplicateBodyAndActuator, dtDynValidationCode::DuplicateName,
+                                dtDynObjectType::Body, secondBody,
+                                "body[2] duplicates name 'body_one'");
 }
 
 void TestModelValidationRejectsInvalidPhysicalValues()
@@ -878,6 +2067,639 @@ void TestModelValidationRejectsInvalidFramePairs()
     assert(!ValidateModel(mismatchedSiteFrame, &error));
 }
 
+void AssertModelValidationFailure(const dtDynModel &model,
+                                  const dtDynValidationCode code,
+                                  const dtDynObjectType object,
+                                  const dtDynIndex index,
+                                  const std::string &message)
+{
+    dtDynValidationError error;
+    assert(!ValidateModel(model, &error));
+    assert(error.code == code);
+    assert(error.object == object);
+    assert(error.index == index);
+    assert(error.message == message);
+}
+
+void TestValidationErrorResetsAfterSuccessfulCalls()
+{
+    dtDynSpec spec;
+    const dtDynIndex base = spec.AddBody("base", 0);
+    spec.AddJoint(base, "hinge", dtDynJointType::Hinge);
+    const dtDynModel model = CompileSpecChecked(spec);
+
+    dtDynSpec duplicateSpec;
+    duplicateSpec.AddBody("duplicate", 0);
+    const dtDynIndex duplicate = duplicateSpec.AddBody("duplicate", 0);
+
+    dtDynValidationError error;
+    assert(!ValidateSpec(duplicateSpec, &error));
+    assert(error.code == dtDynValidationCode::DuplicateName);
+    assert(error.index == duplicate);
+    assert(!error.message.empty());
+    assert(ValidateSpec(spec, &error));
+    assert(error.code == dtDynValidationCode::None);
+    assert(error.object == dtDynObjectType::Body);
+    assert(error.index == DTDYN_INVALID_INDEX);
+    assert(error.message.empty());
+
+    dtDynModel duplicateModel = model;
+    duplicateModel.body_names[1] = duplicateModel.body_names[0];
+    error.code = dtDynValidationCode::None;
+    assert(!ValidateModel(duplicateModel, &error));
+    assert(error.code == dtDynValidationCode::DuplicateName);
+    assert(error.object == dtDynObjectType::Body);
+    assert(error.index == 1);
+    assert(!error.message.empty());
+    assert(ValidateModel(model, &error));
+    assert(error.code == dtDynValidationCode::None);
+    assert(error.object == dtDynObjectType::Body);
+    assert(error.index == DTDYN_INVALID_INDEX);
+    assert(error.message.empty());
+}
+
+void TestModelValidationLabelsMismatchedArrayAndDenseSizes()
+{
+    dtDynSpec spec;
+    const dtDynIndex base = spec.AddBody("base", 0);
+    spec.AddJoint(base, "hinge", dtDynJointType::Hinge);
+    const dtDynModel model = CompileSpecChecked(spec);
+    dtDynValidationError error;
+    assert(ValidateModel(model, &error));
+
+    dtDynModel shortArray = model;
+    shortArray.body_names.resize(1);
+    AssertModelValidationFailure(shortArray, dtDynValidationCode::InvalidReference,
+                                 dtDynObjectType::Body, DTDYN_INVALID_INDEX,
+                                 "model array body_names has size 1, expected 2");
+
+    dtDynModel shortRootArray = model;
+    shortRootArray.root_bodyid.resize(0);
+    AssertModelValidationFailure(shortRootArray, dtDynValidationCode::InvalidReference,
+                                 dtDynObjectType::Body, DTDYN_INVALID_INDEX,
+                                 "model array root_bodyid has size 0, expected 1");
+
+    dtDynModel shortDense = model;
+    shortDense.dof_armature.ReSize(0);
+    AssertModelValidationFailure(shortDense, dtDynValidationCode::InvalidReference,
+                                 dtDynObjectType::Body, DTDYN_INVALID_INDEX,
+                                 "model array dof_armature has size 0, expected 1");
+
+    dtDynModel shortMass = model;
+    shortMass.body_mass.ReSize(1);
+    AssertModelValidationFailure(shortMass, dtDynValidationCode::InvalidReference,
+                                 dtDynObjectType::Body, DTDYN_INVALID_INDEX,
+                                 "model array body_mass has size 1, expected 2");
+}
+
+void AssertCompiledSiteBodyReferenceDiagnostic(const dtDynModel &model,
+                                               const dtDynIndex site)
+{
+    dtDynValidationError error;
+    assert(!ValidateModel(model, &error));
+    assert(error.code == dtDynValidationCode::InvalidReference);
+    assert(error.object == dtDynObjectType::Site);
+    assert(error.index == site);
+    assert(error.message == "compiled site references an invalid body");
+}
+
+void TestModelValidationRejectsCompiledSiteBodyBounds()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("site_body_bounds_body", 0);
+    const dtDynIndex site = spec.AddSite(body, "site_body_bounds_site");
+    const dtDynModel valid = CompileSpecChecked(spec);
+
+    assert(body == 1);
+    assert(site == 0);
+    assert(valid.nbody == 2);
+    assert(valid.nsite == 1);
+    assert(valid.site_bodyid[static_cast<std::size_t>(site)] == body);
+    dtDynValidationError validError;
+    assert(ValidateModel(valid, &validError));
+    assert(validError.code == dtDynValidationCode::None);
+
+    dtDynModel worldBody = valid;
+    worldBody.site_bodyid[static_cast<std::size_t>(site)] = 0;
+    AssertCompiledSiteBodyReferenceDiagnostic(worldBody, site);
+
+    dtDynModel onePastBody = valid;
+    onePastBody.site_bodyid[static_cast<std::size_t>(site)] = onePastBody.nbody;
+    AssertCompiledSiteBodyReferenceDiagnostic(onePastBody, site);
+}
+
+void AssertCompiledActuatorJointReferenceDiagnostic(const dtDynModel &model,
+                                                    const dtDynIndex actuator)
+{
+    dtDynValidationError error;
+    assert(!ValidateModel(model, &error));
+    assert(error.code == dtDynValidationCode::InvalidReference);
+    assert(error.object == dtDynObjectType::Actuator);
+    assert(error.index == actuator);
+    assert(error.message == "compiled actuator references an invalid joint");
+}
+
+void TestModelValidationRejectsCompiledActuatorJointBounds()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("actuator_joint_bounds_body", 0);
+    const dtDynIndex joint = spec.AddJoint(body, "actuator_joint_bounds_joint", dtDynJointType::Hinge);
+    const dtDynIndex actuator = spec.AddActuator(joint, "actuator_joint_bounds_actuator");
+    const dtDynModel valid = CompileSpecChecked(spec);
+
+    assert(body == 1);
+    assert(joint == 0);
+    assert(actuator == 0);
+    assert(valid.njnt == 1);
+    assert(valid.nu == 1);
+    assert(valid.actuator_jointid[static_cast<std::size_t>(actuator)] == joint);
+    dtDynValidationError validError;
+    assert(ValidateModel(valid, &validError));
+    assert(validError.code == dtDynValidationCode::None);
+
+    dtDynModel negativeJoint = valid;
+    negativeJoint.actuator_jointid[static_cast<std::size_t>(actuator)] = DTDYN_INVALID_INDEX;
+    AssertCompiledActuatorJointReferenceDiagnostic(negativeJoint, actuator);
+
+    dtDynModel onePastJoint = valid;
+    onePastJoint.actuator_jointid[static_cast<std::size_t>(actuator)] = onePastJoint.njnt;
+    AssertCompiledActuatorJointReferenceDiagnostic(onePastJoint, actuator);
+}
+
+void AssertCompiledJointQposDofSpanDiagnostic(const dtDynModel &model,
+                                              const dtDynIndex joint)
+{
+    dtDynValidationError error;
+    assert(!ValidateModel(model, &error));
+    assert(error.code == dtDynValidationCode::InvalidReference);
+    assert(error.object == dtDynObjectType::Joint);
+    assert(error.index == joint);
+    assert(error.message == "compiled joint qpos/DOF span is invalid");
+}
+
+void TestModelValidationRejectsCompiledJointQposDofSpanBounds()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("joint_span_bounds_body", 0);
+    const dtDynIndex joint = spec.AddJoint(body, "joint_span_bounds_joint", dtDynJointType::Hinge);
+    const dtDynModel valid = CompileSpecChecked(spec);
+
+    assert(body == 1);
+    assert(joint == 0);
+    assert(valid.njnt == 1);
+    assert(valid.nq == 1);
+    assert(valid.nv == 1);
+    assert(valid.jnt_qposadr[static_cast<std::size_t>(joint)] == 0);
+    assert(valid.jnt_dofadr[static_cast<std::size_t>(joint)] == 0);
+    dtDynValidationError validError;
+    assert(ValidateModel(valid, &validError));
+    assert(validError.code == dtDynValidationCode::None);
+
+    dtDynModel negativeQpos = valid;
+    negativeQpos.jnt_qposadr[static_cast<std::size_t>(joint)] = DTDYN_INVALID_INDEX;
+    AssertCompiledJointQposDofSpanDiagnostic(negativeQpos, joint);
+
+    dtDynModel negativeDof = valid;
+    negativeDof.jnt_dofadr[static_cast<std::size_t>(joint)] = DTDYN_INVALID_INDEX;
+    AssertCompiledJointQposDofSpanDiagnostic(negativeDof, joint);
+
+    dtDynModel onePastQpos = valid;
+    onePastQpos.jnt_qposadr[static_cast<std::size_t>(joint)] = onePastQpos.nq;
+    AssertCompiledJointQposDofSpanDiagnostic(onePastQpos, joint);
+
+    dtDynModel onePastDof = valid;
+    onePastDof.jnt_dofadr[static_cast<std::size_t>(joint)] = onePastDof.nv;
+    AssertCompiledJointQposDofSpanDiagnostic(onePastDof, joint);
+}
+
+void AssertCompiledJointInvalidBodyDiagnostic(const dtDynModel &model, const dtDynIndex joint)
+{
+    AssertModelValidationFailure(model, dtDynValidationCode::InvalidReference,
+                                 dtDynObjectType::Joint, joint,
+                                 "compiled joint references an invalid body");
+}
+
+void AssertCompiledBodyJointSegmentOwnerDiagnostic(const dtDynModel &model, const dtDynIndex body)
+{
+    AssertModelValidationFailure(
+        model, dtDynValidationCode::InvalidReference, dtDynObjectType::Body, body,
+        "compiled body joint segments overlap or contain another body's joint");
+}
+
+void TestModelValidationRejectsCompiledJointReferencingInvalidBody()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("joint_owner_body", 0);
+    const dtDynIndex joint = spec.AddJoint(body, "joint_owner_joint", dtDynJointType::Hinge);
+    const dtDynModel valid = CompileSpecChecked(spec);
+
+    assert(body == 1);
+    assert(joint == 0);
+    assert(valid.nbody == 2);
+    assert(valid.njnt == 1);
+    assert(valid.nv == 1);
+    assert(valid.jnt_bodyid[static_cast<std::size_t>(joint)] == body);
+    assert(valid.body_jntnum[0] == 0);
+    assert(valid.body_jntadr[0] == DTDYN_INVALID_INDEX);
+    assert(valid.body_jntnum[static_cast<std::size_t>(body)] == 1);
+    assert(valid.body_jntadr[static_cast<std::size_t>(body)] == joint);
+    assert(valid.body_dofnum[0] == 0);
+    assert(valid.body_dofadr[0] == DTDYN_INVALID_INDEX);
+    assert(valid.body_dofnum[static_cast<std::size_t>(body)] == 1);
+    assert(valid.body_dofadr[static_cast<std::size_t>(body)] == 0);
+    assert(valid.dof_bodyid[0] == body);
+    dtDynValidationError validError;
+    assert(ValidateModel(valid, &validError));
+    assert(validError.code == dtDynValidationCode::None);
+
+    // The body-ownership phase runs first, so a single out-of-range or world owner
+    // is rejected there; the joint-owner guard cannot be the first failure.
+    dtDynModel onePastBody = valid;
+    onePastBody.jnt_bodyid[static_cast<std::size_t>(joint)] = onePastBody.nbody;
+    AssertCompiledBodyJointSegmentOwnerDiagnostic(onePastBody, body);
+
+    dtDynModel negativeBody = valid;
+    negativeBody.jnt_bodyid[static_cast<std::size_t>(joint)] = DTDYN_INVALID_INDEX;
+    AssertCompiledBodyJointSegmentOwnerDiagnostic(negativeBody, body);
+
+    dtDynModel worldBodyOnly = valid;
+    worldBodyOnly.jnt_bodyid[static_cast<std::size_t>(joint)] = 0;
+    AssertCompiledBodyJointSegmentOwnerDiagnostic(worldBodyOnly, body);
+
+    // Move the joint and its DOF into the world body's ownership segments so every
+    // earlier ownership and weld phase is consistent with a world-owned joint.
+    dtDynModel worldOwned = valid;
+    worldOwned.jnt_bodyid[static_cast<std::size_t>(joint)] = 0;
+    worldOwned.body_jntnum[0] = 1;
+    worldOwned.body_jntadr[0] = joint;
+    worldOwned.body_jntnum[static_cast<std::size_t>(body)] = 0;
+    worldOwned.body_jntadr[static_cast<std::size_t>(body)] = DTDYN_INVALID_INDEX;
+    worldOwned.body_weldid[static_cast<std::size_t>(body)] = 0;
+    worldOwned.body_dofnum[0] = 1;
+    worldOwned.body_dofadr[0] = 0;
+    worldOwned.body_dofnum[static_cast<std::size_t>(body)] = 0;
+    worldOwned.body_dofadr[static_cast<std::size_t>(body)] = DTDYN_INVALID_INDEX;
+    worldOwned.dof_bodyid[0] = 0;
+    AssertCompiledJointInvalidBodyDiagnostic(worldOwned, joint);
+}
+
+void AssertCompiledBodySegmentDiagnostic(const dtDynModel &model,
+                                         const dtDynIndex body,
+                                         const std::string &expectedMessage)
+{
+    dtDynValidationError error;
+    assert(!ValidateModel(model, &error));
+    assert(error.code == dtDynValidationCode::InvalidReference);
+    assert(error.object == dtDynObjectType::Body);
+    assert(error.index == body);
+    assert(error.message == expectedMessage);
+}
+
+void TestModelValidationRejectsCompiledBodySegmentBounds()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("body_segment_bounds_body", 0);
+    const dtDynIndex joint =
+        spec.AddJoint(body, "body_segment_bounds_joint", dtDynJointType::Hinge);
+    const dtDynModel valid = CompileSpecChecked(spec);
+
+    assert(body == 1);
+    assert(joint == 0);
+    assert(valid.nbody == 2);
+    assert(valid.njnt == 1);
+    assert(valid.nv == 1);
+    assert(valid.body_jntnum[0] == 0);
+    assert(valid.body_jntadr[0] == DTDYN_INVALID_INDEX);
+    assert(valid.body_dofnum[0] == 0);
+    assert(valid.body_dofadr[0] == DTDYN_INVALID_INDEX);
+    assert(valid.body_jntnum[static_cast<std::size_t>(body)] == 1);
+    assert(valid.body_jntadr[static_cast<std::size_t>(body)] == 0);
+    assert(valid.body_dofnum[static_cast<std::size_t>(body)] == 1);
+    assert(valid.body_dofadr[static_cast<std::size_t>(body)] == 0);
+    dtDynValidationError validError;
+    assert(ValidateModel(valid, &validError));
+    assert(validError.code == dtDynValidationCode::None);
+
+    dtDynModel negativeWorldJointCount = valid;
+    negativeWorldJointCount.body_jntnum[0] = DTDYN_INVALID_INDEX;
+    AssertCompiledBodySegmentDiagnostic(negativeWorldJointCount, 0,
+                                        "compiled body joint segment is invalid");
+
+    dtDynModel zeroWorldJointAddress = valid;
+    zeroWorldJointAddress.body_jntadr[0] = 0;
+    AssertCompiledBodySegmentDiagnostic(zeroWorldJointAddress, 0,
+                                        "compiled body joint segment is invalid");
+
+    dtDynModel positiveWorldJointCount = valid;
+    positiveWorldJointCount.body_jntnum[0] = 1;
+    AssertCompiledBodySegmentDiagnostic(positiveWorldJointCount, 0,
+                                        "compiled body joint segment is invalid");
+
+    dtDynModel onePastBodyJointAddress = valid;
+    onePastBodyJointAddress.body_jntadr[static_cast<std::size_t>(body)] =
+        onePastBodyJointAddress.njnt;
+    AssertCompiledBodySegmentDiagnostic(onePastBodyJointAddress, body,
+                                        "compiled body joint segment is invalid");
+
+    dtDynModel negativeWorldDofCount = valid;
+    negativeWorldDofCount.body_dofnum[0] = DTDYN_INVALID_INDEX;
+    AssertCompiledBodySegmentDiagnostic(negativeWorldDofCount, 0,
+                                        "compiled body DOF segment is invalid");
+
+    dtDynModel zeroWorldDofAddress = valid;
+    zeroWorldDofAddress.body_dofadr[0] = 0;
+    AssertCompiledBodySegmentDiagnostic(zeroWorldDofAddress, 0,
+                                        "compiled body DOF segment is invalid");
+
+    dtDynModel positiveWorldDofCount = valid;
+    positiveWorldDofCount.body_dofnum[0] = 1;
+    AssertCompiledBodySegmentDiagnostic(positiveWorldDofCount, 0,
+                                        "compiled body DOF segment is invalid");
+
+    dtDynModel onePastBodyDofAddress = valid;
+    onePastBodyDofAddress.body_dofadr[static_cast<std::size_t>(body)] =
+        onePastBodyDofAddress.nv;
+    AssertCompiledBodySegmentDiagnostic(onePastBodyDofAddress, body,
+                                        "compiled body DOF segment is invalid");
+}
+
+void TestModelValidationPreservesUniqueNameValidationOrder()
+{
+    dtDynSpec spec;
+    const dtDynIndex firstBody = spec.AddBody("body_one", 0);
+    const dtDynIndex secondBody = spec.AddBody("body_two", 0);
+    const dtDynIndex firstJoint = spec.AddJoint(firstBody, "joint_one", dtDynJointType::Hinge);
+    const dtDynIndex secondJoint = spec.AddJoint(secondBody, "joint_two", dtDynJointType::Hinge);
+    const dtDynIndex firstSite = spec.AddSite(firstBody, "site_one");
+    const dtDynIndex secondSite = spec.AddSite(secondBody, "site_two");
+    const dtDynIndex firstActuator = spec.AddActuator(firstJoint, "actuator_one");
+    const dtDynIndex secondActuator = spec.AddActuator(secondJoint, "actuator_two");
+    const dtDynModel valid = CompileSpecChecked(spec);
+
+    dtDynModel duplicateBody = valid;
+    duplicateBody.body_names[static_cast<std::size_t>(secondBody)] =
+        duplicateBody.body_names[static_cast<std::size_t>(firstBody)];
+    AssertModelValidationFailure(duplicateBody, dtDynValidationCode::DuplicateName,
+                                 dtDynObjectType::Body, secondBody,
+                                 "body[2] duplicates name 'body_one'");
+
+    dtDynModel duplicateJoint = valid;
+    duplicateJoint.joint_names[static_cast<std::size_t>(secondJoint)] =
+        duplicateJoint.joint_names[static_cast<std::size_t>(firstJoint)];
+    AssertModelValidationFailure(duplicateJoint, dtDynValidationCode::DuplicateName,
+                                 dtDynObjectType::Joint, secondJoint,
+                                 "joint[1] duplicates name 'joint_one'");
+
+    dtDynModel duplicateSite = valid;
+    duplicateSite.site_names[static_cast<std::size_t>(secondSite)] =
+        duplicateSite.site_names[static_cast<std::size_t>(firstSite)];
+    AssertModelValidationFailure(duplicateSite, dtDynValidationCode::DuplicateName,
+                                 dtDynObjectType::Site, secondSite,
+                                 "site[1] duplicates name 'site_one'");
+
+    dtDynModel duplicateActuator = valid;
+    duplicateActuator.actuator_names[static_cast<std::size_t>(secondActuator)] =
+        duplicateActuator.actuator_names[static_cast<std::size_t>(firstActuator)];
+    AssertModelValidationFailure(duplicateActuator, dtDynValidationCode::DuplicateName,
+                                 dtDynObjectType::Actuator, secondActuator,
+                                 "actuator[1] duplicates name 'actuator_one'");
+
+    dtDynModel duplicateBodyAndActuator = duplicateBody;
+    duplicateBodyAndActuator.actuator_names[static_cast<std::size_t>(secondActuator)] =
+        duplicateBodyAndActuator.actuator_names[static_cast<std::size_t>(firstActuator)];
+    AssertModelValidationFailure(duplicateBodyAndActuator, dtDynValidationCode::DuplicateName,
+                                 dtDynObjectType::Body, secondBody,
+                                 "body[2] duplicates name 'body_one'");
+}
+
+void TestModelValidationPreservesJointAndSiteValidationFailures()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("validated_body", 0);
+    const dtDynIndex joint = spec.AddJoint(body, "validated_hinge", dtDynJointType::Hinge);
+    const dtDynIndex site = spec.AddSite(body, "validated_site");
+    const dtDynModel valid = CompileSpecChecked(spec);
+    const dtDynReal nan = std::numeric_limits<dtDynReal>::quiet_NaN();
+
+    dtDynModel negativeSpecId = valid;
+    negativeSpecId.jnt_specid[static_cast<std::size_t>(joint)] = DTDYN_INVALID_INDEX;
+    AssertModelValidationFailure(negativeSpecId, dtDynValidationCode::InvalidReference,
+                                 dtDynObjectType::Joint, joint,
+                                 "compiled joint specification provenance is invalid");
+
+    dtDynModel oversizedSpecId = valid;
+    oversizedSpecId.jnt_specid[static_cast<std::size_t>(joint)] = oversizedSpecId.njnt;
+    AssertModelValidationFailure(oversizedSpecId, dtDynValidationCode::InvalidReference,
+                                 dtDynObjectType::Joint, joint,
+                                 "compiled joint specification provenance is invalid");
+
+    dtDynModel badRangeMinimum = valid;
+    badRangeMinimum.jnt_range_min(joint) = nan;
+    AssertModelValidationFailure(badRangeMinimum, dtDynValidationCode::NonFiniteValue,
+                                 dtDynObjectType::Joint, joint,
+                                 "compiled joint contains a non-finite value");
+
+    dtDynModel badRangeMaximum = valid;
+    badRangeMaximum.jnt_range_max(joint) = nan;
+    AssertModelValidationFailure(badRangeMaximum, dtDynValidationCode::NonFiniteValue,
+                                 dtDynObjectType::Joint, joint,
+                                 "compiled joint contains a non-finite value");
+
+    dtDynModel badPosition = valid;
+    badPosition.jnt_pos[static_cast<std::size_t>(joint)](0) = nan;
+    AssertModelValidationFailure(badPosition, dtDynValidationCode::NonFiniteValue,
+                                 dtDynObjectType::Joint, joint,
+                                 "compiled joint contains a non-finite value");
+
+    dtDynModel badAxis = valid;
+    badAxis.jnt_axis[static_cast<std::size_t>(joint)](0) = nan;
+    AssertModelValidationFailure(badAxis, dtDynValidationCode::NonFiniteValue,
+                                 dtDynObjectType::Joint, joint,
+                                 "compiled joint contains a non-finite value");
+
+    dtDynModel nonUnitAxis = valid;
+    nonUnitAxis.jnt_axis[static_cast<std::size_t>(joint)].SetZero();
+    AssertModelValidationFailure(nonUnitAxis, dtDynValidationCode::InvalidReference,
+                                 dtDynObjectType::Joint, joint,
+                                 "compiled slide/hinge joint axis must be unit length");
+
+    dtDynSpec slideSpec;
+    const dtDynIndex slideBody = slideSpec.AddBody("slide_body", 0);
+    slideSpec.AddJoint(slideBody, "slide_joint", dtDynJointType::Slide);
+    const dtDynModel slideModel = CompileSpecChecked(slideSpec);
+    dtDynValidationError slideError;
+    assert(ValidateModel(slideModel, &slideError));
+    assert(slideError.code == dtDynValidationCode::None);
+
+    dtDynSpec freeSpec;
+    const dtDynIndex freeBody = freeSpec.AddBody("free_body", 0);
+    const dtDynIndex freeJoint = freeSpec.AddJoint(freeBody, "free_joint", dtDynJointType::Free);
+    dtDynModel freeModel = CompileSpecChecked(freeSpec);
+    freeModel.jnt_axis[static_cast<std::size_t>(freeJoint)].SetZero();
+    dtDynValidationError freeError;
+    assert(ValidateModel(freeModel, &freeError));
+    assert(freeError.code == dtDynValidationCode::None);
+
+    dtDynModel badSitePosition = valid;
+    badSitePosition.site_pos[static_cast<std::size_t>(site)](0) = nan;
+    AssertModelValidationFailure(badSitePosition, dtDynValidationCode::NonFiniteValue,
+                                 dtDynObjectType::Site, site,
+                                 "compiled site contains a non-finite value");
+
+    dtDynModel badSiteQuaternion = valid;
+    badSiteQuaternion.site_quat[static_cast<std::size_t>(site)](0) = nan;
+    AssertModelValidationFailure(badSiteQuaternion, dtDynValidationCode::NonFiniteValue,
+                                 dtDynObjectType::Site, site,
+                                 "compiled site contains a non-finite value");
+
+    dtDynModel badSiteMatrix = valid;
+    badSiteMatrix.site_mat[static_cast<std::size_t>(site)](0, 0) = nan;
+    AssertModelValidationFailure(badSiteMatrix, dtDynValidationCode::NonFiniteValue,
+                                 dtDynObjectType::Site, site,
+                                 "compiled site contains a non-finite value");
+
+    dtDynModel improperSiteRotation = valid;
+    improperSiteRotation.site_mat[static_cast<std::size_t>(site)].SetZero();
+    AssertModelValidationFailure(improperSiteRotation, dtDynValidationCode::InvalidReference,
+                                 dtDynObjectType::Site, site,
+                                 "compiled site quaternion/matrix frame pair is invalid");
+
+    dtDynModel mismatchedSiteFrame = valid;
+    mismatchedSiteFrame.site_quat[static_cast<std::size_t>(site)](0) = 0.0;
+    mismatchedSiteFrame.site_quat[static_cast<std::size_t>(site)](3) = 1.0;
+    AssertModelValidationFailure(mismatchedSiteFrame, dtDynValidationCode::InvalidReference,
+                                 dtDynObjectType::Site, site,
+                                 "compiled site quaternion/matrix frame pair is invalid");
+}
+
+void AssertBodyValidationFailure(const dtDynModel &model, dtDynValidationCode code,
+                                 const std::string &message)
+{
+    dtDynValidationError error;
+    assert(!ValidateModel(model, &error));
+    assert(error.code == code);
+    assert(error.object == dtDynObjectType::Body);
+    assert(error.index == 1);
+    assert(error.message == message);
+}
+
+void TestModelValidationPreservesEveryBodyNonFiniteFailure()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("validated_body", 0);
+    const dtDynModel valid = CompileSpecChecked(spec);
+    assert(valid.nbody == 2);
+    assert(valid.nroot == 1);
+
+    const auto assertNonFinite = [&](const dtDynModel &candidate)
+    {
+        AssertBodyValidationFailure(candidate, dtDynValidationCode::NonFiniteValue,
+                                    "compiled body[1] contains a non-finite value");
+    };
+    const dtDynReal nan = std::numeric_limits<dtDynReal>::quiet_NaN();
+
+    dtDynModel badMass = valid;
+    badMass.body_mass(body) = nan;
+    assertNonFinite(badMass);
+
+    dtDynModel badSubtreeMass = valid;
+    badSubtreeMass.body_subtreemass(body) = nan;
+    assertNonFinite(badSubtreeMass);
+
+    dtDynModel badPosition = valid;
+    badPosition.body_pos[static_cast<std::size_t>(body)](0) = nan;
+    assertNonFinite(badPosition);
+
+    dtDynModel badQuaternion = valid;
+    badQuaternion.body_quat[static_cast<std::size_t>(body)](0) = nan;
+    assertNonFinite(badQuaternion);
+
+    dtDynModel badRotation = valid;
+    badRotation.body_mat[static_cast<std::size_t>(body)](0, 0) = nan;
+    assertNonFinite(badRotation);
+
+    dtDynModel badInertialPosition = valid;
+    badInertialPosition.body_ipos[static_cast<std::size_t>(body)](0) = nan;
+    assertNonFinite(badInertialPosition);
+
+    dtDynModel badInertialQuaternion = valid;
+    badInertialQuaternion.body_iquat[static_cast<std::size_t>(body)](0) = nan;
+    assertNonFinite(badInertialQuaternion);
+
+    dtDynModel badInertialRotation = valid;
+    badInertialRotation.body_imat[static_cast<std::size_t>(body)](0, 0) = nan;
+    assertNonFinite(badInertialRotation);
+
+    dtDynModel badInertia = valid;
+    badInertia.body_inertia[static_cast<std::size_t>(body)](0) = nan;
+    assertNonFinite(badInertia);
+}
+
+void TestModelValidationPreservesEveryBodyPhysicalOrFrameFailure()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("validated_body", 0);
+    const dtDynModel valid = CompileSpecChecked(spec);
+    assert(valid.nbody == 2);
+    assert(valid.nroot == 1);
+
+    const auto assertInvalidReference = [&](const dtDynModel &candidate)
+    {
+        AssertBodyValidationFailure(candidate, dtDynValidationCode::InvalidReference,
+                                    "compiled body has invalid physical or frame-pair values");
+    };
+
+    dtDynModel negativeMass = valid;
+    negativeMass.body_mass(body) = -1.0;
+    assertInvalidReference(negativeMass);
+
+    dtDynModel invalidInertia = valid;
+    invalidInertia.body_inertia[static_cast<std::size_t>(body)](0) = 3.0;
+    invalidInertia.body_inertia[static_cast<std::size_t>(body)](1) = 1.0;
+    invalidInertia.body_inertia[static_cast<std::size_t>(body)](2) = 1.0;
+    assertInvalidReference(invalidInertia);
+
+    dtDynModel invalidBodyRotation = valid;
+    invalidBodyRotation.body_mat[static_cast<std::size_t>(body)].SetZero();
+    assertInvalidReference(invalidBodyRotation);
+
+    dtDynModel invalidInertialRotation = valid;
+    invalidInertialRotation.body_imat[static_cast<std::size_t>(body)].SetZero();
+    assertInvalidReference(invalidInertialRotation);
+
+    dtDynModel mismatchedBodyFrame = valid;
+    mismatchedBodyFrame.body_quat[static_cast<std::size_t>(body)](0) = 0.0;
+    mismatchedBodyFrame.body_quat[static_cast<std::size_t>(body)](3) = 1.0;
+    assertInvalidReference(mismatchedBodyFrame);
+
+    dtDynModel mismatchedInertialFrame = valid;
+    mismatchedInertialFrame.body_iquat[static_cast<std::size_t>(body)](0) = 0.0;
+    mismatchedInertialFrame.body_iquat[static_cast<std::size_t>(body)](3) = 1.0;
+    assertInvalidReference(mismatchedInertialFrame);
+}
+
+void TestModelValidationPreservesBodyValidationPhasePrecedence()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("validated_body", 0);
+    const dtDynModel valid = CompileSpecChecked(spec);
+    assert(valid.nbody == 2);
+    assert(valid.nroot == 1);
+
+    dtDynModel nonFiniteBeforePhysical = valid;
+    nonFiniteBeforePhysical.body_inertia[static_cast<std::size_t>(body)](0) =
+        std::numeric_limits<dtDynReal>::quiet_NaN();
+    nonFiniteBeforePhysical.body_mass(body) = -1.0;
+    AssertBodyValidationFailure(nonFiniteBeforePhysical, dtDynValidationCode::NonFiniteValue,
+                                "compiled body[1] contains a non-finite value");
+
+    dtDynModel physicalBeforeTopology = valid;
+    physicalBeforeTopology.body_mass(body) = -1.0;
+    physicalBeforeTopology.body_parentid[static_cast<std::size_t>(body)] = body;
+    AssertBodyValidationFailure(physicalBeforeTopology, dtDynValidationCode::InvalidReference,
+                                "compiled body has invalid physical or frame-pair values");
+}
+
 void TestCompileSpecSupportsMaximumRootMappingWithoutNestedLookup()
 {
     constexpr dtDynIndex rootCount = 10922;
@@ -928,6 +2750,13 @@ void TestDtArrayDirectHeader()
 
     assert(values[1] == 2);
     assert(copied[1] == 20);
+
+    values.resize(static_cast<dtDynIndex>(3));
+    assert(values.size() == 3);
+    values.assign(static_cast<dtDynIndex>(0), 0);
+    assert(values.size() == 0);
+    values.assign(static_cast<dtDynIndex>(-1), 0);
+    assert(values.size() == 0);
 }
 
 void TestDtArrayCopyConstructorReleasesFailedPartialCopy()
@@ -1144,6 +2973,197 @@ void TestDtArrayReserveSupportsMoveOnlyElements()
     assert(values.size() == 2);
     assert(values[0] != nullptr);
     assert(*values[0] == 7);
+}
+
+void TestDtArrayEndPointerContract()
+{
+    dtArray<int> unallocated;
+    const dtArray<int> &constUnallocated = unallocated;
+    assert(unallocated.data() == nullptr);
+    assert(unallocated.end() == nullptr);
+    assert(constUnallocated.end() == nullptr);
+    assert(unallocated.begin() == unallocated.end());
+    assert(constUnallocated.begin() == constUnallocated.end());
+
+    dtArray<int> allocated;
+    const dtArray<int> &constAllocated = allocated;
+    allocated.resize(4);
+    allocated.resize(0);
+    assert(allocated.data() != nullptr);
+    assert(allocated.size() == 0);
+    assert(allocated.end() == allocated.begin());
+    assert(constAllocated.end() == constAllocated.begin());
+    assert(allocated.end() != nullptr);
+    assert(constAllocated.end() != nullptr);
+
+    allocated.push_back(5);
+    allocated.push_back(6);
+    allocated.push_back(7);
+    assert(allocated.size() == 3);
+    assert(allocated.end() == allocated.begin() + 3);
+    assert(constAllocated.end() == constAllocated.begin() + 3);
+    assert(allocated.end() == allocated.data() + allocated.size());
+    assert(static_cast<std::size_t>(allocated.end() - allocated.begin()) == allocated.size());
+
+    allocated.clear();
+    assert(allocated.end() == nullptr);
+    assert(constAllocated.end() == nullptr);
+    assert(allocated.begin() == allocated.end());
+}
+
+void TestDtArrayAppendGrowthSequence()
+{
+    const std::size_t baseline = g_totalTestAllocations;
+    dtArray<int> values;
+    assert(g_totalTestAllocations == baseline);
+    assert(values.data() == nullptr);
+
+    static const std::size_t kExpectedAllocations[9] = {1, 2, 3, 3, 4, 4, 4, 4, 5};
+    const int *previousData = nullptr;
+    for (std::size_t i = 0; i < 9; ++i)
+    {
+        values.push_back(static_cast<int>(10 + i));
+        assert(values.size() == i + 1);
+        assert(g_totalTestAllocations - baseline == kExpectedAllocations[i]);
+        assert(values.data() != nullptr);
+        if (i == 3 || (i >= 5 && i <= 7))
+        {
+            assert(values.data() == previousData);
+        }
+        previousData = values.data();
+        for (std::size_t j = 0; j <= i; ++j)
+        {
+            assert(values[j] == static_cast<int>(10 + j));
+        }
+    }
+
+    // Capacity after nine pushes is 16; resizing inside it must not allocate, beyond it must.
+    const std::size_t afterAppend = g_totalTestAllocations;
+    values.resize(16);
+    assert(g_totalTestAllocations == afterAppend);
+    values.resize(17);
+    assert(g_totalTestAllocations == afterAppend + 1);
+
+    dtArray<int> fourCapacity;
+    fourCapacity.push_back(1);
+    fourCapacity.push_back(2);
+    fourCapacity.push_back(3);
+    const std::size_t afterThree = g_totalTestAllocations;
+    fourCapacity.resize(4);
+    assert(g_totalTestAllocations == afterThree);
+    fourCapacity.resize(5);
+    assert(g_totalTestAllocations == afterThree + 1);
+}
+
+template <typename Item>
+struct RenameItemEditor
+{
+    int *calls;
+
+    void operator()(Item &draft) const
+    {
+        ++*calls;
+        draft.name = "p108_edited";
+    }
+};
+
+void AssertEditItemIndexRejected(const dtDynIndex index, const char *const expectedMessage, dtDynSpec &spec, const int family)
+{
+    int calls = 0;
+    bool rejected = false;
+    try
+    {
+        if (family == 0)
+        {
+            spec.EditBody(index, RenameItemEditor<dtDynBodySpec>{&calls});
+        }
+        else if (family == 1)
+        {
+            spec.EditJoint(index, RenameItemEditor<dtDynJointSpec>{&calls});
+        }
+        else if (family == 2)
+        {
+            spec.EditSite(index, RenameItemEditor<dtDynSiteSpec>{&calls});
+        }
+        else
+        {
+            spec.EditActuator(index, RenameItemEditor<dtDynActuatorSpec>{&calls});
+        }
+    }
+    catch (const std::out_of_range &error)
+    {
+        rejected = true;
+        assert(std::string(error.what()) == expectedMessage);
+    }
+    assert(rejected);
+    assert(calls == 0);
+}
+
+void TestSpecEditItemRejectsSignedIndexBounds()
+{
+    // Three entries per family leave spare dtArray capacity, so a one-past-end
+    // mutant fails the assertion instead of reading beyond the allocation.
+    dtDynSpec spec;
+    const dtDynIndex bodyA = spec.AddBody("body_a", 0);
+    const dtDynIndex bodyB = spec.AddBody("body_b", bodyA);
+    const dtDynIndex jointA = spec.AddJoint(bodyA, "joint_a", dtDynJointType::Hinge);
+    const dtDynIndex jointB = spec.AddJoint(bodyB, "joint_b", dtDynJointType::Hinge);
+    const dtDynIndex jointC = spec.AddJoint(bodyB, "joint_c", dtDynJointType::Hinge);
+    const dtDynIndex siteA = spec.AddSite(bodyA, "site_a");
+    const dtDynIndex siteB = spec.AddSite(bodyA, "site_b");
+    const dtDynIndex siteC = spec.AddSite(bodyB, "site_c");
+    const dtDynIndex actuatorA = spec.AddActuator(jointA, "actuator_a");
+    const dtDynIndex actuatorB = spec.AddActuator(jointB, "actuator_b");
+    const dtDynIndex actuatorC = spec.AddActuator(jointC, "actuator_c");
+    assert(spec.Bodies().size() == 3);
+    assert(spec.Joints().size() == 3);
+    assert(spec.Sites().size() == 3);
+    assert(spec.Actuators().size() == 3);
+    assert(siteA == 0 && siteB == 1 && siteC == 2);
+    assert(actuatorA == 0 && actuatorB == 1 && actuatorC == 2);
+
+    AssertEditItemIndexRejected(-1, "dtDynSpec: invalid body index", spec, 0);
+    AssertEditItemIndexRejected(3, "dtDynSpec: invalid body index", spec, 0);
+    AssertEditItemIndexRejected(-1, "dtDynSpec: invalid joint index", spec, 1);
+    AssertEditItemIndexRejected(3, "dtDynSpec: invalid joint index", spec, 1);
+    AssertEditItemIndexRejected(-1, "dtDynSpec: invalid site index", spec, 2);
+    AssertEditItemIndexRejected(3, "dtDynSpec: invalid site index", spec, 2);
+    AssertEditItemIndexRejected(-1, "dtDynSpec: invalid actuator index", spec, 3);
+    AssertEditItemIndexRejected(3, "dtDynSpec: invalid actuator index", spec, 3);
+    AssertEditItemIndexRejected(std::numeric_limits<dtDynIndex>::min(), "dtDynSpec: invalid body index", spec, 0);
+    AssertEditItemIndexRejected(std::numeric_limits<dtDynIndex>::max(), "dtDynSpec: invalid body index", spec, 0);
+
+    // Rejected edits leave every entry untouched.
+    assert(spec.Bodies()[0].name == "world");
+    assert(spec.Bodies()[bodyA].name == "body_a");
+    assert(spec.Bodies()[bodyB].name == "body_b");
+    assert(spec.Joints()[jointC].name == "joint_c");
+    assert(spec.Sites()[siteC].name == "site_c");
+    assert(spec.Actuators()[actuatorC].name == "actuator_c");
+
+    // First and last valid ids succeed for every family.
+    int calls = 0;
+    spec.EditBody(0, RenameItemEditor<dtDynBodySpec>{&calls});
+    spec.EditBody(bodyB, RenameItemEditor<dtDynBodySpec>{&calls});
+    spec.EditJoint(0, RenameItemEditor<dtDynJointSpec>{&calls});
+    spec.EditJoint(jointC, RenameItemEditor<dtDynJointSpec>{&calls});
+    spec.EditSite(0, RenameItemEditor<dtDynSiteSpec>{&calls});
+    spec.EditSite(siteC, RenameItemEditor<dtDynSiteSpec>{&calls});
+    spec.EditActuator(0, RenameItemEditor<dtDynActuatorSpec>{&calls});
+    spec.EditActuator(actuatorC, RenameItemEditor<dtDynActuatorSpec>{&calls});
+    assert(calls == 8);
+    assert(spec.Bodies()[0].name == "p108_edited");
+    assert(spec.Bodies()[bodyA].name == "body_a");
+    assert(spec.Bodies()[bodyB].name == "p108_edited");
+    assert(spec.Joints()[0].name == "p108_edited");
+    assert(spec.Joints()[jointB].name == "joint_b");
+    assert(spec.Joints()[jointC].name == "p108_edited");
+    assert(spec.Sites()[0].name == "p108_edited");
+    assert(spec.Sites()[siteB].name == "site_b");
+    assert(spec.Sites()[siteC].name == "p108_edited");
+    assert(spec.Actuators()[0].name == "p108_edited");
+    assert(spec.Actuators()[actuatorB].name == "actuator_b");
+    assert(spec.Actuators()[actuatorC].name == "p108_edited");
 }
 
 void TestSpecWorldAndFixedBody()
@@ -2048,10 +4068,17 @@ void TestModelActuatorNameLookupUsesRebuiltCache()
     dtDynSpec spec;
     const dtDynIndex body = spec.AddBody("body", 0);
     const dtDynIndex joint = spec.AddJoint(body, "joint", dtDynJointType::Hinge);
+    const dtDynIndex site = spec.AddSite(body, "site");
     const dtDynIndex actuator = spec.AddActuator(joint, "actuator");
     dtDynModel model = CompileSpecChecked(spec);
 
+    assert(model.BodyId("body") == body);
+    assert(model.JointId("joint") == joint);
+    assert(model.SiteId("site") == site);
     assert(model.ActuatorId("actuator") == actuator);
+    assert(model.BodyId("missing") == DTDYN_INVALID_INDEX);
+    assert(model.JointId("missing") == DTDYN_INVALID_INDEX);
+    assert(model.SiteId("missing") == DTDYN_INVALID_INDEX);
     assert(model.ActuatorId("missing") == DTDYN_INVALID_INDEX);
 
     const dtDynModel copied = model;
@@ -2096,6 +4123,68 @@ void TestSpecXmlReportsTypedNumericErrors()
     expectError("1junk", dtDynXmlErrorCode::InvalidNumber, "junk");
     expectError("NaN", dtDynXmlErrorCode::NonFiniteValue, "NaN");
     expectError("Inf", dtDynXmlErrorCode::NonFiniteValue, "Inf");
+}
+
+void TestSpecXmlPreservesNumericWhitespaceAndFirstFailure()
+{
+    const std::string valid =
+        "<mujoco><worldbody><body name=\"base\"><inertial mass=\" \t 2.5 \n \"/>"
+        "</body></worldbody></mujoco>";
+    const dtDynSpec decoded = dtDynSpec::DecodeXml(valid);
+    assert(decoded.Bodies().size() == 2);
+    assert(std::fabs(decoded.Bodies()[1].inertial.mass - 2.5) < 1.0e-12);
+
+    const std::string trailingJunk =
+        "<mujoco><worldbody><body name=\"base\"><inertial mass=\" \t 1junk \n \"/>"
+        "</body></worldbody></mujoco>";
+    bool junkRejected = false;
+    try
+    {
+        (void)dtDynSpec::DecodeXml(trailingJunk);
+    }
+    catch (const dtDynXmlError &error)
+    {
+        junkRejected = error.Code() == dtDynXmlErrorCode::InvalidNumber &&
+                       error.Offset() == trailingJunk.find("junk");
+    }
+    assert(junkRejected);
+
+    const std::string whitespaceOnly =
+        "<mujoco><worldbody><body name=\"base\"><inertial mass=\" \t \n \"/>"
+        "</body></worldbody></mujoco>";
+    const std::size_t whitespaceOffset =
+        whitespaceOnly.find("mass=\"") + std::string("mass=\"").size();
+    bool whitespaceRejected = false;
+    try
+    {
+        (void)dtDynSpec::DecodeXml(whitespaceOnly);
+    }
+    catch (const dtDynXmlError &error)
+    {
+        whitespaceRejected = error.Code() == dtDynXmlErrorCode::InvalidNumber &&
+                             error.Offset() == whitespaceOffset;
+    }
+    assert(whitespaceRejected);
+}
+
+void TestSpecXmlPreservesWhitespaceOnlyNumericOffset()
+{
+    const std::string xml =
+        "<mujoco><worldbody><body name=\"base\"><inertial mass=\" \t \n \"/>"
+        "</body></worldbody></mujoco>";
+    const std::size_t expectedOffset =
+        xml.find("mass=\"") + std::string("mass=\"").size();
+    bool rejected = false;
+    try
+    {
+        (void)dtDynSpec::DecodeXml(xml);
+    }
+    catch (const dtDynXmlError &error)
+    {
+        rejected = error.Code() == dtDynXmlErrorCode::InvalidNumber &&
+                   error.Offset() == expectedOffset;
+    }
+    assert(rejected);
 }
 
 void TestSpecXmlRejectsWrongVectorArity()
@@ -2146,6 +4235,33 @@ void TestSpecXmlRejectsWrongVectorArity()
         "0");
 }
 
+void TestSpecXmlPreservesVectorWhitespaceAndArityOffset()
+{
+    const std::string valid =
+        "<mujoco><worldbody><body name=\"base\" pos=\" \t 1 \n 2  3 \n \"/>"
+        "</worldbody></mujoco>";
+    const dtDynSpec decoded = dtDynSpec::DecodeXml(valid);
+    assert(decoded.Bodies().size() == 2);
+    assert(std::fabs(decoded.Bodies()[1].pos(0) - 1.0) < 1.0e-12);
+    assert(std::fabs(decoded.Bodies()[1].pos(1) - 2.0) < 1.0e-12);
+    assert(std::fabs(decoded.Bodies()[1].pos(2) - 3.0) < 1.0e-12);
+
+    const std::string tooMany =
+        "<mujoco><worldbody><body name=\"base\" pos=\" \t 1 \n 2  3  4 \n \"/>"
+        "</worldbody></mujoco>";
+    bool rejected = false;
+    try
+    {
+        (void)dtDynSpec::DecodeXml(tooMany);
+    }
+    catch (const dtDynXmlError &error)
+    {
+        rejected = error.Code() == dtDynXmlErrorCode::InvalidVectorArity &&
+                   error.Offset() == tooMany.find("4");
+    }
+    assert(rejected);
+}
+
 void TestSpecXmlRejectsMalformedAttributes()
 {
     const std::string xml =
@@ -2165,6 +4281,136 @@ void TestSpecXmlRejectsMalformedAttributes()
     assert(rejected);
 }
 
+static void ExpectMalformedXmlAttributeError(const std::string &xml,
+                                             const std::string &anchor,
+                                             const std::string &requiredDiagnostic)
+{
+    bool rejected = false;
+    try
+    {
+        (void)dtDynSpec::DecodeXml(xml);
+    }
+    catch (const dtDynXmlError &error)
+    {
+        assert(error.Code() == dtDynXmlErrorCode::MalformedSyntax);
+        assert(error.Offset() == xml.find(anchor));
+        assert(std::string(error.what()).find(requiredDiagnostic) != std::string::npos);
+        rejected = true;
+    }
+    assert(rejected);
+}
+
+static void ExpectDecodeXmlError(const std::string &xml,
+                                 const dtDynXmlErrorCode expectedCode,
+                                 const std::size_t expectedOffset,
+                                 const std::string &expectedText)
+{
+    bool rejected = false;
+    try
+    {
+        (void)dtDynSpec::DecodeXml(xml);
+    }
+    catch (const dtDynXmlError &error)
+    {
+        assert(error.Code() == expectedCode);
+        assert(error.SourcePath().empty());
+        assert(error.Offset() == expectedOffset);
+        assert(std::string(error.what()) == expectedText);
+        rejected = true;
+    }
+    assert(rejected);
+}
+
+void TestSpecXmlDecodePreservesTerminalTextAndDeclarationDiagnostics()
+{
+    const dtDynSpec root = dtDynSpec::DecodeXml("<mujoco/>");
+    assert(root.Bodies().size() == 1);
+
+    const std::string trailingText = "<mujoco/>tail";
+    const std::size_t trailingOffset = trailingText.find("tail");
+    ExpectDecodeXmlError(
+        trailingText,
+        dtDynXmlErrorCode::MalformedSyntax,
+        trailingOffset,
+        std::string("dtDynSpec::DecodeXml at offset ") + std::to_string(trailingOffset) +
+            ": unexpected text outside an XML element");
+
+    const dtDynSpec declaration = dtDynSpec::DecodeXml("<?xml version=\"1.0\"?><mujoco/>");
+    assert(declaration.Bodies().size() == 1);
+
+    const std::string missingTerminalQuestion = "<?xml version=\"1.0\"><mujoco/>";
+    ExpectDecodeXmlError(
+        missingTerminalQuestion,
+        dtDynXmlErrorCode::MalformedSyntax,
+        0,
+        "dtDynSpec::DecodeXml at offset 0: malformed or misplaced XML declaration");
+
+    const std::string leadingWhitespaceDeclaration = "\n<?xml version=\"1.0\"?><mujoco/>";
+    const std::size_t declarationOffset = leadingWhitespaceDeclaration.find("<?xml");
+    ExpectDecodeXmlError(
+        leadingWhitespaceDeclaration,
+        dtDynXmlErrorCode::MalformedSyntax,
+        declarationOffset,
+        std::string("dtDynSpec::DecodeXml at offset ") + std::to_string(declarationOffset) +
+            ": malformed or misplaced XML declaration");
+}
+
+void TestSpecXmlDecodePreservesJointTypeFallbackAndExplicitSlide()
+{
+    const dtDynSpec decoded = dtDynSpec::DecodeXml(
+        "<mujoco><worldbody><body name=\"base\"><joint name=\"default\"/>"
+        "<joint name=\"sliding\" type=\"slide\"/></body></worldbody></mujoco>");
+    assert(decoded.Bodies().size() == 2);
+    assert(decoded.Joints().size() == 2);
+    assert(decoded.Joints()[0].type == dtDynJointType::Hinge);
+    assert(decoded.Joints()[1].type == dtDynJointType::Slide);
+}
+
+void TestSpecXmlDecodePreservesActuatorJointReferenceDiagnostics()
+{
+    const std::string missingJointAttribute =
+        "<mujoco><worldbody><body name=\"base\"/></worldbody><actuator>"
+        "<motor name=\"motor\"/></actuator></mujoco>";
+    const std::size_t missingAttributeOffset = missingJointAttribute.find("<motor");
+    ExpectDecodeXmlError(
+        missingJointAttribute,
+        dtDynXmlErrorCode::InvalidReference,
+        missingAttributeOffset,
+        std::string("dtDynSpec::DecodeXml at offset ") + std::to_string(missingAttributeOffset) +
+            ": actuator references unknown joint ''");
+
+    const std::string explicitUnknownJoint =
+        "<mujoco><worldbody><body name=\"base\"/></worldbody><actuator>"
+        "<motor name=\"motor\" joint=\"missing_joint\"/></actuator></mujoco>";
+    const std::size_t explicitAttributeOffset = explicitUnknownJoint.find("missing_joint");
+    ExpectDecodeXmlError(
+        explicitUnknownJoint,
+        dtDynXmlErrorCode::InvalidReference,
+        explicitAttributeOffset,
+        std::string("dtDynSpec::DecodeXml at offset ") + std::to_string(explicitAttributeOffset) +
+            ": actuator references unknown joint 'missing_joint'");
+}
+
+void TestSpecXmlPreservesAttributeWhitespaceAndFirstFailure()
+{
+    const std::string valid =
+        "<mujoco><worldbody><body name = \"base\" pos = \"1 0 0\" />"
+        "</worldbody></mujoco>";
+    const dtDynSpec decoded = dtDynSpec::DecodeXml(valid);
+    assert(decoded.Bodies().size() == 2);
+    assert(decoded.BodyId("base") >= 0);
+    assert(std::fabs(decoded.Bodies()[1].pos(0) - 1.0) < 1.0e-12);
+
+    ExpectMalformedXmlAttributeError(
+        "<mujoco><worldbody><body name \"base\"/></worldbody></mujoco>",
+        "name",
+        "malformed XML attribute");
+    ExpectMalformedXmlAttributeError(
+        "<mujoco><worldbody><body name=base/></worldbody></mujoco>",
+        "name",
+        "XML attribute value must be quoted");
+}
+
 void TestSpecXmlRejectsMisnestedSupportedTags()
 {
     const std::string xml =
@@ -2180,6 +4426,70 @@ void TestSpecXmlRejectsMisnestedSupportedTags()
                    error.Offset() == xml.find("</worldbody>");
     }
     assert(rejected);
+}
+
+void TestSpecXmlPreservesClosingElementFailureOrder()
+{
+    const std::string selfClosing = "<mujoco><worldbody></worldbody/></mujoco>";
+    bool selfClosingRejected = false;
+    try
+    {
+        (void)dtDynSpec::DecodeXml(selfClosing);
+    }
+    catch (const dtDynXmlError &error)
+    {
+        selfClosingRejected = error.Code() == dtDynXmlErrorCode::MalformedSyntax;
+        if (selfClosingRejected)
+        {
+            selfClosingRejected = error.Offset() == selfClosing.find("</worldbody/>");
+        }
+        if (selfClosingRejected)
+        {
+            selfClosingRejected = std::string(error.what()).find("misnested closing element </worldbody>") != std::string::npos;
+        }
+    }
+    assert(selfClosingRejected);
+
+    const std::string emptyStack = "</mujoco>";
+    bool emptyStackRejected = false;
+    try
+    {
+        (void)dtDynSpec::DecodeXml(emptyStack);
+    }
+    catch (const dtDynXmlError &error)
+    {
+        emptyStackRejected = error.Code() == dtDynXmlErrorCode::MalformedSyntax;
+        if (emptyStackRejected)
+        {
+            emptyStackRejected = error.Offset() == emptyStack.find("</mujoco>");
+        }
+        if (emptyStackRejected)
+        {
+            emptyStackRejected = std::string(error.what()).find("misnested closing element </mujoco>") != std::string::npos;
+        }
+    }
+    assert(emptyStackRejected);
+
+    const std::string mismatched =
+        "<mujoco><worldbody><body name=\"base\"></worldbody></body></mujoco>";
+    bool mismatchedRejected = false;
+    try
+    {
+        (void)dtDynSpec::DecodeXml(mismatched);
+    }
+    catch (const dtDynXmlError &error)
+    {
+        mismatchedRejected = error.Code() == dtDynXmlErrorCode::MalformedSyntax;
+        if (mismatchedRejected)
+        {
+            mismatchedRejected = error.Offset() == mismatched.find("</worldbody>");
+        }
+        if (mismatchedRejected)
+        {
+            mismatchedRejected = std::string(error.what()).find("misnested closing element </worldbody>") != std::string::npos;
+        }
+    }
+    assert(mismatchedRejected);
 }
 
 void TestSpecXmlRejectsDuplicateObjectNames()
@@ -2232,6 +4542,67 @@ void TestSpecXmlRejectsUnknownReferencesWithTypedError()
                    error.Offset() == xml.find("missing_joint");
     }
     assert(rejected);
+}
+
+void TestSpecXmlPreservesBodyAndActuatorValidationOrigins()
+{
+    const std::string invalidBody =
+        "<mujoco><worldbody><body name=\"base\"><inertial mass=\"-1\"/>"
+        "</body></worldbody></mujoco>";
+    bool bodyRejected = false;
+    try
+    {
+        (void)dtDynSpec::DecodeXml(invalidBody);
+    }
+    catch (const dtDynXmlError &error)
+    {
+        bodyRejected = error.Code() == dtDynXmlErrorCode::InvalidReference &&
+                       error.Offset() == invalidBody.find("<body");
+    }
+    assert(bodyRejected);
+
+    const std::string invalidActuator =
+        "<mujoco><worldbody><body name=\"base\"/></worldbody>"
+        "<actuator><motor name=\"motor\" joint=\"missing_joint\"/></actuator>"
+        "</mujoco>";
+    bool actuatorRejected = false;
+    try
+    {
+        (void)dtDynSpec::DecodeXml(invalidActuator);
+    }
+    catch (const dtDynXmlError &error)
+    {
+        actuatorRejected = error.Code() == dtDynXmlErrorCode::InvalidReference &&
+                           error.Offset() == invalidActuator.find("missing_joint");
+    }
+    assert(actuatorRejected);
+}
+
+void TestSpecXmlPreservesJointAndSiteValidationOrigins()
+{
+    const std::string invalidJoint =
+        "<mujoco><worldbody><body name=\"base\"><joint name=\"j0\"/>"
+        "<joint name=\"j1\" axis=\"2 0 0\"/><site name=\"s0\"/></body>"
+        "</worldbody></mujoco>";
+    const std::size_t jointOffset = invalidJoint.find("<joint name=\"j1\"");
+    ExpectDecodeXmlError(
+        invalidJoint,
+        dtDynXmlErrorCode::InvalidReference,
+        jointOffset,
+        std::string("dtDynSpec::DecodeXml at offset ") + std::to_string(jointOffset) +
+            ": joint axis must be unit length for slide/hinge joints");
+
+    const std::string invalidSite =
+        "<mujoco><worldbody><body name=\"base\"><joint name=\"j0\"/>"
+        "<site name=\"s0\"/><site name=\"s1\" quat=\"2 0 0 0\"/></body>"
+        "</worldbody></mujoco>";
+    const std::size_t siteOffset = invalidSite.find("<site name=\"s1\"");
+    ExpectDecodeXmlError(
+        invalidSite,
+        dtDynXmlErrorCode::InvalidReference,
+        siteOffset,
+        std::string("dtDynSpec::DecodeXml at offset ") + std::to_string(siteOffset) +
+            ": site quaternion must be unit length");
 }
 
 void TestSpecXmlRejectsInvalidJointRange()
@@ -2298,6 +4669,167 @@ void TestSpecXmlRejectsInvalidBooleanValue()
     assert(rejected);
 }
 
+void TestSpecXmlPreservesLimitedBooleanGrammar()
+{
+    const std::string xml =
+        "<mujoco><worldbody><body name=\"base\">"
+        "<joint name=\"word_true\" limited=\"true\"/>"
+        "<joint name=\"numeric_true\" limited=\"1\"/>"
+        "<joint name=\"word_false\" limited=\"false\"/>"
+        "<joint name=\"numeric_false\" limited=\"0\"/>"
+        "</body></worldbody></mujoco>";
+    const dtDynSpec decoded = dtDynSpec::DecodeXml(xml);
+    assert(decoded.Joints().size() == 4);
+    assert(decoded.Joints()[0].limited);
+    assert(decoded.Joints()[1].limited);
+    assert(!decoded.Joints()[2].limited);
+    assert(!decoded.Joints()[3].limited);
+}
+
+void TestSpecXmlPreservesAttributeFallbacks()
+{
+    const dtDynSpec fallback = dtDynSpec::DecodeXml(
+        "<mujoco><worldbody><body><joint/></body></worldbody></mujoco>");
+    assert(fallback.Bodies().size() == 2);
+    assert(fallback.Bodies()[1].name == "body");
+    assert(fallback.Joints().size() == 1);
+    assert(fallback.Joints()[0].name == "joint");
+
+    const dtDynSpec explicitNames = dtDynSpec::DecodeXml(
+        "<mujoco><worldbody><body name=\"base\"><joint name=\"hinge\"/>"
+        "</body></worldbody></mujoco>");
+    assert(explicitNames.Bodies().size() == 2);
+    assert(explicitNames.Bodies()[1].name == "base");
+    assert(explicitNames.Joints().size() == 1);
+    assert(explicitNames.Joints()[0].name == "hinge");
+}
+
+void TestSpecXmlPreservesNumericAttributeFallbacks()
+{
+    const dtDynSpec fallback = dtDynSpec::DecodeXml(
+        "<mujoco><worldbody><body name=\"base\"><joint name=\"hinge\"/>"
+        "</body></worldbody></mujoco>");
+    assert(fallback.Joints().size() == 1);
+    assert(std::fabs(fallback.Joints()[0].armature) < 1.0e-12);
+
+    const dtDynSpec explicitArmature = dtDynSpec::DecodeXml(
+        "<mujoco><worldbody><body name=\"base\"><joint name=\"hinge\" armature=\"2.5\"/>"
+        "</body></worldbody></mujoco>");
+    assert(explicitArmature.Joints().size() == 1);
+    assert(std::fabs(explicitArmature.Joints()[0].armature - 2.5) < 1.0e-12);
+}
+
+void TestSpecXmlPreservesCompilerAngleFallbackAndInvalidOffset()
+{
+    const dtDynSpec defaultAngle = dtDynSpec::DecodeXml(
+        "<mujoco><worldbody><body name=\"base\"><joint name=\"hinge\" limited=\"true\" "
+        "range=\"-90 180\"/></body></worldbody></mujoco>");
+    assert(defaultAngle.Joints().size() == 1);
+    assert(std::fabs(defaultAngle.Joints()[0].rangeMin + (0.5 * 3.14159265358979323846)) < 1.0e-12);
+    assert(std::fabs(defaultAngle.Joints()[0].rangeMax - 3.14159265358979323846) < 1.0e-12);
+
+    const std::string invalid = "<mujoco><compiler angle=\"gradian\"/><worldbody/></mujoco>";
+    bool rejected = false;
+    try
+    {
+        (void)dtDynSpec::DecodeXml(invalid);
+    }
+    catch (const dtDynXmlError &error)
+    {
+        rejected = error.Code() == dtDynXmlErrorCode::UnsupportedElement &&
+                   error.Offset() == invalid.find("gradian") &&
+                   std::string(error.what()).find("unsupported compiler angle unit 'gradian'") !=
+                       std::string::npos;
+    }
+    assert(rejected);
+}
+
+void TestSpecXmlPreservesDuplicateNameOffsets()
+{
+    const std::string fallbackDuplicates =
+        "<mujoco><worldbody><body/><body/></worldbody></mujoco>";
+    bool fallbackRejected = false;
+    try
+    {
+        (void)dtDynSpec::DecodeXml(fallbackDuplicates);
+    }
+    catch (const dtDynXmlError &error)
+    {
+        fallbackRejected = error.Code() == dtDynXmlErrorCode::DuplicateName &&
+                           error.Offset() == fallbackDuplicates.rfind("<body");
+    }
+    assert(fallbackRejected);
+
+    const std::string explicitDuplicates =
+        "<mujoco><worldbody><body name=\"duplicate\"/><body name=\"duplicate\"/>"
+        "</worldbody></mujoco>";
+    bool explicitRejected = false;
+    try
+    {
+        (void)dtDynSpec::DecodeXml(explicitDuplicates);
+    }
+    catch (const dtDynXmlError &error)
+    {
+        explicitRejected = error.Code() == dtDynXmlErrorCode::DuplicateName &&
+                           error.Offset() == explicitDuplicates.rfind("duplicate");
+    }
+    assert(explicitRejected);
+}
+
+void TestSpecXmlPreservesTagWhitespaceAndClosingSuffixOffset()
+{
+    const std::string whitespaceXml =
+        "< \tmujoco>< \nworldbody>< \tbody name=\"base\"></ \tbody \n>"
+        "</ \nworldbody ></ \tmujoco >";
+    const dtDynSpec decoded = dtDynSpec::DecodeXml(whitespaceXml);
+    assert(decoded.Bodies().size() == 2);
+    assert(decoded.Bodies()[1].name == "base");
+
+    const std::string invalidNameXml = "< \t9invalid/>";
+    bool invalidNameRejected = false;
+    try
+    {
+        (void)dtDynSpec::DecodeXml(invalidNameXml);
+    }
+    catch (const dtDynXmlError &error)
+    {
+        invalidNameRejected = error.Code() == dtDynXmlErrorCode::MalformedSyntax;
+        if (invalidNameRejected)
+        {
+            invalidNameRejected = error.Offset() == invalidNameXml.find("9invalid");
+        }
+        if (invalidNameRejected)
+        {
+            invalidNameRejected = std::string(error.what()).find("invalid XML element name") !=
+                                  std::string::npos;
+        }
+    }
+    assert(invalidNameRejected);
+
+    const std::string suffixXml =
+        "<mujoco><worldbody><body name=\"base\"></body \ttrailing>"
+        "</worldbody></mujoco>";
+    bool suffixRejected = false;
+    try
+    {
+        (void)dtDynSpec::DecodeXml(suffixXml);
+    }
+    catch (const dtDynXmlError &error)
+    {
+        suffixRejected = error.Code() == dtDynXmlErrorCode::MalformedSyntax;
+        if (suffixRejected)
+        {
+            suffixRejected = error.Offset() == suffixXml.find("trailing");
+        }
+        if (suffixRejected)
+        {
+            suffixRejected = std::string(error.what()).find("closing XML tags cannot contain attributes or suffix text") !=
+                             std::string::npos;
+        }
+    }
+    assert(suffixRejected);
+}
+
 void TestSpecXmlRequiresSingleRootElement()
 {
     const auto expectMalformed = [](const std::string &xml, const std::size_t expectedOffset)
@@ -2322,6 +4854,34 @@ void TestSpecXmlRequiresSingleRootElement()
     expectMalformed(duplicateWorldbody, duplicateWorldbody.rfind("<worldbody"));
 }
 
+void TestSpecXmlRejectsDuplicateCompilerAndActuatorSections()
+{
+    const dtDynSpec distinctSections =
+        dtDynSpec::DecodeXml("<mujoco><compiler/><option/><worldbody><body name=\"base\"/>"
+                             "</worldbody><actuator/></mujoco>");
+    assert(distinctSections.Bodies().size() == 2);
+    assert(distinctSections.BodyId("base") >= 0);
+    assert(distinctSections.Actuators().empty());
+
+    const std::string duplicateCompiler = "<mujoco><compiler/><compiler/></mujoco>";
+    const std::size_t compilerOffset = duplicateCompiler.rfind("<compiler");
+    ExpectDecodeXmlError(
+        duplicateCompiler,
+        dtDynXmlErrorCode::MalformedSyntax,
+        compilerOffset,
+        std::string("dtDynSpec::DecodeXml at offset ") + std::to_string(compilerOffset) +
+            ": duplicate <compiler> section");
+
+    const std::string duplicateActuator = "<mujoco><actuator/><actuator/></mujoco>";
+    const std::size_t actuatorOffset = duplicateActuator.rfind("<actuator");
+    ExpectDecodeXmlError(
+        duplicateActuator,
+        dtDynXmlErrorCode::MalformedSyntax,
+        actuatorOffset,
+        std::string("dtDynSpec::DecodeXml at offset ") + std::to_string(actuatorOffset) +
+            ": duplicate <actuator> section");
+}
+
 void TestSpecXmlRejectsSupportedElementInWrongContext()
 {
     const std::string xml =
@@ -2339,6 +4899,64 @@ void TestSpecXmlRejectsSupportedElementInWrongContext()
                    error.Offset() == xml.find("<motor");
     }
     assert(rejected);
+}
+
+void TestSpecXmlAcceptsEverySupportedElementInItsDocumentedParent()
+{
+    const std::string xml =
+        "<mujoco><compiler angle=\"radian\"/><option/><worldbody>"
+        "<body name=\"base\"><body name=\"hinged\">"
+        "<inertial mass=\"1\" diaginertia=\"1 1 1\"/>"
+        "<joint name=\"hinge\"/><site name=\"tool\"/>"
+        "</body><body name=\"floating\"><freejoint name=\"free\"/>"
+        "</body></body></worldbody>"
+        "<actuator><motor name=\"drive\" joint=\"hinge\"/></actuator>"
+        "</mujoco>";
+
+    const dtDynSpec spec = dtDynSpec::DecodeXml(xml);
+    assert(spec.Bodies().size() == 4);
+    assert(spec.Joints().size() == 2);
+    assert(spec.Sites().size() == 1);
+    assert(spec.Actuators().size() == 1);
+    assert(spec.BodyId("base") >= 0);
+    assert(spec.BodyId("hinged") >= 0);
+    assert(spec.BodyId("floating") >= 0);
+    assert(spec.JointId("hinge") >= 0);
+    assert(spec.JointId("free") >= 0);
+    assert(spec.SiteId("tool") >= 0);
+    assert(spec.ActuatorId("drive") >= 0);
+}
+
+void TestSpecXmlPreservesWhitespaceAndTagNameGrammar()
+{
+    const std::string whitespace =
+        "<  mujoco  ><  worldbody  ><  body name=\"base\"  /  >"
+        "</  worldbody  ></  mujoco  >";
+    const dtDynSpec decoded = dtDynSpec::DecodeXml(whitespace);
+    assert(decoded.Bodies().size() == 2);
+    assert(decoded.BodyId("base") >= 0);
+
+    const auto expectError = [](const std::string &xml,
+                                const dtDynXmlErrorCode code,
+                                const std::string &anchor)
+    {
+        bool rejected = false;
+        try
+        {
+            (void)dtDynSpec::DecodeXml(xml);
+        }
+        catch (const dtDynXmlError &error)
+        {
+            rejected = error.Code() == code && error.Offset() == xml.find(anchor);
+        }
+        assert(rejected);
+    };
+
+    expectError("<mujoco><1invalid/></mujoco>", dtDynXmlErrorCode::MalformedSyntax, "1invalid");
+    expectError("<mujoco><invalid!/></mujoco>", dtDynXmlErrorCode::MalformedSyntax, "invalid!");
+    expectError("<mujoco><_valid-1:name.part/></mujoco>",
+                dtDynXmlErrorCode::UnsupportedElement,
+                "<_valid-1:name.part");
 }
 
 void TestSpecXmlScannerIsQuoteAwareAndFailClosed()
@@ -2374,6 +4992,27 @@ void TestSpecXmlScannerIsQuoteAwareAndFailClosed()
 
     const std::string unclosed = "<mujoco><worldbody><body name=\"base\">";
     expectError(unclosed, dtDynXmlErrorCode::MalformedSyntax, unclosed.find("<body"));
+}
+
+void TestSpecXmlScannerPreservesSingleQuoteTagScanning()
+{
+    const dtDynSpec decoded = dtDynSpec::DecodeXml(
+        "<mujoco><worldbody><body name='base>link'/></worldbody></mujoco>");
+    assert(decoded.Bodies().size() == 2);
+    assert(decoded.Bodies()[1].name == "base>link");
+
+    const std::string unclosed = "<mujoco><worldbody><body name='base>";
+    bool rejected = false;
+    try
+    {
+        (void)dtDynSpec::DecodeXml(unclosed);
+    }
+    catch (const dtDynXmlError &error)
+    {
+        rejected = error.Code() == dtDynXmlErrorCode::MalformedSyntax &&
+                   error.Offset() == unclosed.find("<body");
+    }
+    assert(rejected);
 }
 
 void TestSpecXmlRunsSetupValidationAfterParsing()
@@ -2437,6 +5076,22 @@ void TestSpecXmlRejectsMalformedSelfClosingSuffix()
     assert(rejected);
 }
 
+void TestSpecXmlPreservesSelfClosingTagDetection()
+{
+    const dtDynSpec rootSelfClosing = dtDynSpec::DecodeXml("<mujoco/>");
+    assert(rootSelfClosing.Bodies().size() == 1);
+
+    const dtDynSpec bodySelfClosing = dtDynSpec::DecodeXml(
+        "<mujoco><worldbody><body name=\"base\"/></worldbody></mujoco>");
+    assert(bodySelfClosing.Bodies().size() == 2);
+    assert(bodySelfClosing.Bodies()[1].name == "base");
+
+    const dtDynSpec explicitClosing = dtDynSpec::DecodeXml(
+        "<mujoco><worldbody><body name=\"base\"></body></worldbody></mujoco>");
+    assert(explicitClosing.Bodies().size() == 2);
+    assert(explicitClosing.Bodies()[1].name == "base");
+}
+
 void TestSpecXmlRejectsDuplicateDeclaration()
 {
     const std::string xml = "<?xml version=\"1.0\"?><?xml version=\"1.0\"?><mujoco/>";
@@ -2494,6 +5149,57 @@ void TestSpecXmlRejectsMalformedDeclarationGrammar()
     expectMalformed(unquoted, unquoted.find("version"));
 }
 
+void TestSpecXmlPreservesDeclarationVersionAndAttributeGrammar()
+{
+    const dtDynSpec version10 = dtDynSpec::DecodeXml(
+        "<?xml version=\"1.0\" encoding=\"utf-8\" standalone=\"yes\"?><mujoco/>");
+    assert(version10.Bodies().size() == 1);
+    const dtDynSpec version11 = dtDynSpec::DecodeXml(
+        "<?xml version=\"1.1\" standalone=\"no\" encoding=\"utf-8\"?><mujoco/>");
+    assert(version11.Bodies().size() == 1);
+
+    const std::string unsupportedAttribute = "<?xml version=\"1.0\" invalid=\"x\"?><mujoco/>";
+    bool unsupportedRejected = false;
+    try
+    {
+        (void)dtDynSpec::DecodeXml(unsupportedAttribute);
+    }
+    catch (const dtDynXmlError &error)
+    {
+        unsupportedRejected = error.Code() == dtDynXmlErrorCode::MalformedSyntax;
+        if (unsupportedRejected)
+        {
+            unsupportedRejected = error.Offset() == unsupportedAttribute.rfind("x");
+        }
+        if (unsupportedRejected)
+        {
+            unsupportedRejected = std::string(error.what()).find("unsupported XML declaration attribute") != std::string::npos;
+        }
+    }
+    assert(unsupportedRejected);
+
+    const std::string invalidStandalone =
+        "<?xml version=\"1.0\" standalone=\"maybe\"?><mujoco/>";
+    bool standaloneRejected = false;
+    try
+    {
+        (void)dtDynSpec::DecodeXml(invalidStandalone);
+    }
+    catch (const dtDynXmlError &error)
+    {
+        standaloneRejected = error.Code() == dtDynXmlErrorCode::MalformedSyntax;
+        if (standaloneRejected)
+        {
+            standaloneRejected = error.Offset() == invalidStandalone.find("maybe");
+        }
+        if (standaloneRejected)
+        {
+            standaloneRejected = std::string(error.what()).find("invalid XML standalone declaration value") != std::string::npos;
+        }
+    }
+    assert(standaloneRejected);
+}
+
 void TestSpecXmlRejectsDeclarationAfterLeadingWhitespace()
 {
     const std::string xml = "\n<?xml version=\"1.0\"?><mujoco/>";
@@ -2508,6 +5214,62 @@ void TestSpecXmlRejectsDeclarationAfterLeadingWhitespace()
                    error.Offset() == xml.find("<?xml");
     }
     assert(rejected);
+}
+
+void ConfigureEncodeBodyQuaternionRegressionBody(dtDynBodySpec &draft)
+{
+    draft.quat(0) = 1.0;
+    draft.quat(1) = 2.0;
+    draft.quat(2) = 3.0;
+    draft.quat(3) = 4.0;
+    draft.inertial.mass = 13.0;
+    draft.inertial.quat(0) = 5.0;
+    draft.inertial.quat(1) = 6.0;
+    draft.inertial.quat(2) = 7.0;
+    draft.inertial.quat(3) = 8.0;
+}
+
+void ConfigureEncodeBodyQuaternionRegressionSite(dtDynSiteSpec &draft)
+{
+    draft.quat(0) = 9.0;
+    draft.quat(1) = 10.0;
+    draft.quat(2) = 11.0;
+    draft.quat(3) = 12.0;
+}
+
+void AssertXmlElementOccursExactlyOnce(const std::string &xml, const std::string &element)
+{
+    const std::size_t first = xml.find(element);
+    assert(first != std::string::npos);
+    assert(xml.find(element, first + element.size()) == std::string::npos);
+}
+
+void AssertDecodedXmlBodyPresent(const dtDynSpec &spec, const std::string &name)
+{
+    const dtDynIndex body = spec.BodyId(name);
+    assert(body != DTDYN_INVALID_INDEX);
+    assert(spec.Bodies()[static_cast<std::size_t>(body)].name == name);
+}
+
+void TestSpecXmlEncodeBodyQuaternionAttributes()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("quaternion_body", 0);
+    const dtDynIndex site = spec.AddSite(body, "quaternion_site");
+    spec.EditBody(body, ConfigureEncodeBodyQuaternionRegressionBody);
+    spec.EditSite(site, ConfigureEncodeBodyQuaternionRegressionSite);
+
+    const std::string encoded = spec.EncodeXml();
+    const std::string bodyElement =
+        "    <body name=\"quaternion_body\" pos=\"0 0 0\" quat=\"1 2 3 4\">\n";
+    const std::string inertialElement =
+        "      <inertial pos=\"0 0 0\" mass=\"13\" diaginertia=\"0 0 0\" quat=\"5 6 7 8\"/>\n";
+    const std::string siteElement =
+        "      <site name=\"quaternion_site\" pos=\"0 0 0\" quat=\"9 10 11 12\"/>\n";
+
+    AssertXmlElementOccursExactlyOnce(encoded, bodyElement);
+    AssertXmlElementOccursExactlyOnce(encoded, inertialElement);
+    AssertXmlElementOccursExactlyOnce(encoded, siteElement);
 }
 
 void TestSpecXmlDecodeEncodeRoundTrip()
@@ -2557,6 +5319,84 @@ void TestSpecXmlDecodeEncodeRoundTrip()
     assert(reparsed.Joints()[0].name == "hinge_z");
     assert(reparsed.Sites()[0].name == "tool");
     assert(reparsed.Actuators()[0].name == "hinge_motor");
+}
+
+void TestSpecXmlEncodePreservesTerminalAndSiblingBodyTraversal()
+{
+    const std::string nestedXml =
+        "<mujoco><worldbody><body name=\"nested_parent\">"
+        "<body name=\"nested_first\"/><body name=\"nested_second\"/>"
+        "</body></worldbody></mujoco>";
+    const dtDynSpec nested = dtDynSpec::DecodeXml(nestedXml);
+    assert(nested.Bodies().size() == 4);
+    AssertDecodedXmlBodyPresent(nested, "nested_parent");
+    AssertDecodedXmlBodyPresent(nested, "nested_first");
+    AssertDecodedXmlBodyPresent(nested, "nested_second");
+
+    const std::string nestedEncoded = nested.EncodeXml();
+    AssertXmlElementOccursExactlyOnce(
+        nestedEncoded, "    <body name=\"nested_parent\" pos=\"0 0 0\" quat=\"1 0 0 0\">\n");
+    AssertXmlElementOccursExactlyOnce(
+        nestedEncoded, "      <body name=\"nested_first\" pos=\"0 0 0\" quat=\"1 0 0 0\">\n      </body>\n");
+    AssertXmlElementOccursExactlyOnce(
+        nestedEncoded, "      <body name=\"nested_second\" pos=\"0 0 0\" quat=\"1 0 0 0\">\n      </body>\n");
+
+    const dtDynSpec nestedReparsed = dtDynSpec::DecodeXml(nestedEncoded);
+    assert(nestedReparsed.Bodies().size() == 4);
+    AssertDecodedXmlBodyPresent(nestedReparsed, "nested_parent");
+    AssertDecodedXmlBodyPresent(nestedReparsed, "nested_first");
+    AssertDecodedXmlBodyPresent(nestedReparsed, "nested_second");
+
+    const std::string worldSiblingsXml =
+        "<mujoco><worldbody><body name=\"world_first\"/><body name=\"world_second\"/>"
+        "</worldbody></mujoco>";
+    const dtDynSpec worldSiblings = dtDynSpec::DecodeXml(worldSiblingsXml);
+    assert(worldSiblings.Bodies().size() == 3);
+    AssertDecodedXmlBodyPresent(worldSiblings, "world_first");
+    AssertDecodedXmlBodyPresent(worldSiblings, "world_second");
+
+    const std::string worldSiblingsEncoded = worldSiblings.EncodeXml();
+    AssertXmlElementOccursExactlyOnce(
+        worldSiblingsEncoded, "    <body name=\"world_first\" pos=\"0 0 0\" quat=\"1 0 0 0\">\n    </body>\n");
+    AssertXmlElementOccursExactlyOnce(
+        worldSiblingsEncoded, "    <body name=\"world_second\" pos=\"0 0 0\" quat=\"1 0 0 0\">\n    </body>\n");
+
+    const dtDynSpec worldSiblingsReparsed = dtDynSpec::DecodeXml(worldSiblingsEncoded);
+    assert(worldSiblingsReparsed.Bodies().size() == 3);
+    AssertDecodedXmlBodyPresent(worldSiblingsReparsed, "world_first");
+    AssertDecodedXmlBodyPresent(worldSiblingsReparsed, "world_second");
+}
+
+void TestSpecXmlEncodeOmitsInvalidActuatorJointReferences()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("body", 0);
+    const dtDynIndex joint = spec.AddJoint(body, "valid_joint", dtDynJointType::Hinge);
+    const dtDynIndex validMotor = spec.AddActuator(joint, "valid_motor");
+    const dtDynIndex invalidMotor = spec.AddActuator(DTDYN_INVALID_INDEX, "invalid_motor");
+    const dtDynIndex onePastEndJoint = static_cast<dtDynIndex>(spec.Joints().size());
+    const dtDynIndex onePastEndMotor = spec.AddActuator(onePastEndJoint, "one_past_end_motor");
+
+    assert(spec.Actuators().size() == 3);
+    assert(spec.Actuators()[validMotor].joint == joint);
+    assert(spec.Actuators()[invalidMotor].joint == DTDYN_INVALID_INDEX);
+    assert(spec.Actuators()[onePastEndMotor].joint == onePastEndJoint);
+
+    const std::string encoded = spec.EncodeXml();
+    const std::string validMotorElement =
+        "    <motor name=\"valid_motor\" joint=\"valid_joint\" gear=\"1\"/>\n";
+    const std::string invalidMotorElement =
+        "    <motor name=\"invalid_motor\" gear=\"1\"/>\n";
+    const std::string onePastEndMotorElement =
+        "    <motor name=\"one_past_end_motor\" gear=\"1\"/>\n";
+
+    assert(encoded.find(validMotorElement) != std::string::npos);
+    assert(encoded.find(invalidMotorElement) != std::string::npos);
+    assert(encoded.find(onePastEndMotorElement) != std::string::npos);
+
+    const std::size_t firstJointAttribute = encoded.find(" joint=\"");
+    assert(firstJointAttribute != std::string::npos);
+    assert(encoded.find(" joint=\"", firstJointAttribute + 1) == std::string::npos);
 }
 
 void TestSpecXmlLoadsFromFile()
@@ -2842,6 +5682,8 @@ void TestModelFixedBodyConvention()
     assert(!model.IsFixedBody(1));
     assert(model.IsFixedBody(2));
     assert(!model.IsFixedBody(3));
+    assert(!model.IsFixedBody(-1));
+    assert(!model.IsFixedBody(4));
 }
 
 void TestCompiledModelCopiesIntoDefaultModel()
@@ -2918,6 +5760,368 @@ void TestCompileSpecCanFillExistingModel()
     assert(model.nbody == 2);
     assert(model.nv == 1);
     assert(model.BodyId("link") == link);
+}
+
+template <typename T>
+void AssertP81ArrayUnchanged(const dtArray<T> &actual, const dtArray<T> &expected)
+{
+    assert(actual.size() == expected.size());
+    for (std::size_t index = 0; index < actual.size(); ++index)
+    {
+        assert(actual[index] == expected[index]);
+    }
+}
+
+void AssertP81DenseVectorUnchanged(const dtDynDenseVector &actual,
+                                   const dtDynDenseVector &expected)
+{
+    assert(actual.GetDim() == expected.GetDim());
+    for (dtDynIndex index = 0; index < static_cast<dtDynIndex>(actual.GetDim()); ++index)
+    {
+        assert(actual(index) == expected(index));
+    }
+}
+
+void AssertP81Vector3Unchanged(const dt::Math::Vector3<dtDynReal> &actual,
+                               const dt::Math::Vector3<dtDynReal> &expected)
+{
+    for (dtDynIndex axis = 0; axis < 3; ++axis)
+    {
+        assert(actual(axis) == expected(axis));
+    }
+}
+
+void AssertP81Vector4Unchanged(const dt::Math::Vector4<dtDynReal> &actual,
+                               const dt::Math::Vector4<dtDynReal> &expected)
+{
+    for (dtDynIndex component = 0; component < 4; ++component)
+    {
+        assert(actual(component) == expected(component));
+    }
+}
+
+void AssertP81Matrix3Unchanged(const dt::Math::Matrix3<dtDynReal> &actual,
+                               const dt::Math::Matrix3<dtDynReal> &expected)
+{
+    for (dtDynIndex row = 0; row < 3; ++row)
+    {
+        for (dtDynIndex column = 0; column < 3; ++column)
+        {
+            assert(actual(row, column) == expected(row, column));
+        }
+    }
+}
+
+void AssertP81Vector3ArrayUnchanged(const dtArray<dt::Math::Vector3<dtDynReal>> &actual,
+                                    const dtArray<dt::Math::Vector3<dtDynReal>> &expected)
+{
+    assert(actual.size() == expected.size());
+    for (std::size_t index = 0; index < actual.size(); ++index)
+    {
+        AssertP81Vector3Unchanged(actual[index], expected[index]);
+    }
+}
+
+void AssertP81Vector4ArrayUnchanged(const dtArray<dt::Math::Vector4<dtDynReal>> &actual,
+                                    const dtArray<dt::Math::Vector4<dtDynReal>> &expected)
+{
+    assert(actual.size() == expected.size());
+    for (std::size_t index = 0; index < actual.size(); ++index)
+    {
+        AssertP81Vector4Unchanged(actual[index], expected[index]);
+    }
+}
+
+void AssertP81Matrix3ArrayUnchanged(const dtArray<dt::Math::Matrix3<dtDynReal>> &actual,
+                                    const dtArray<dt::Math::Matrix3<dtDynReal>> &expected)
+{
+    assert(actual.size() == expected.size());
+    for (std::size_t index = 0; index < actual.size(); ++index)
+    {
+        AssertP81Matrix3Unchanged(actual[index], expected[index]);
+    }
+}
+
+void AssertP81BodyPositionsUnchanged(const dtDynModel &actual, const dtDynModel &expected)
+{
+    assert(actual.body_pos.size() == expected.body_pos.size());
+    for (std::size_t bodyIndex = 0; bodyIndex < actual.body_pos.size(); ++bodyIndex)
+    {
+        for (dtDynIndex axis = 0; axis < 3; ++axis)
+        {
+            assert(actual.body_pos[bodyIndex](axis) == expected.body_pos[bodyIndex](axis));
+        }
+    }
+}
+
+void AssertP81TopologyUnchanged(const dtDynModel &actual, const dtDynModel &expected)
+{
+    assert(actual.nq == expected.nq);
+    assert(actual.nv == expected.nv);
+    assert(actual.nbody == expected.nbody);
+    assert(actual.njnt == expected.njnt);
+    assert(actual.nsite == expected.nsite);
+    assert(actual.nu == expected.nu);
+    assert(actual.nroot == expected.nroot);
+    AssertP81ArrayUnchanged(actual.body_names, expected.body_names);
+    AssertP81ArrayUnchanged(actual.joint_names, expected.joint_names);
+    AssertP81ArrayUnchanged(actual.site_names, expected.site_names);
+    AssertP81ArrayUnchanged(actual.actuator_names, expected.actuator_names);
+    AssertP81ArrayUnchanged(actual.body_parentid, expected.body_parentid);
+    AssertP81ArrayUnchanged(actual.body_rootid, expected.body_rootid);
+    AssertP81ArrayUnchanged(actual.body_rootidx, expected.body_rootidx);
+    AssertP81ArrayUnchanged(actual.body_jntnum, expected.body_jntnum);
+    AssertP81ArrayUnchanged(actual.body_jntadr, expected.body_jntadr);
+    AssertP81ArrayUnchanged(actual.body_dofnum, expected.body_dofnum);
+    AssertP81ArrayUnchanged(actual.body_dofadr, expected.body_dofadr);
+    AssertP81ArrayUnchanged(actual.body_weldid, expected.body_weldid);
+    AssertP81ArrayUnchanged(actual.jnt_type, expected.jnt_type);
+    AssertP81ArrayUnchanged(actual.jnt_bodyid, expected.jnt_bodyid);
+    AssertP81ArrayUnchanged(actual.jnt_specid, expected.jnt_specid);
+    AssertP81ArrayUnchanged(actual.jnt_qposadr, expected.jnt_qposadr);
+    AssertP81ArrayUnchanged(actual.jnt_dofadr, expected.jnt_dofadr);
+    AssertP81ArrayUnchanged(actual.jnt_limited, expected.jnt_limited);
+    AssertP81ArrayUnchanged(actual.dof_bodyid, expected.dof_bodyid);
+    AssertP81ArrayUnchanged(actual.dof_parentid, expected.dof_parentid);
+    AssertP81ArrayUnchanged(actual.dof_jntid, expected.dof_jntid);
+    AssertP81ArrayUnchanged(actual.site_bodyid, expected.site_bodyid);
+    AssertP81ArrayUnchanged(actual.actuator_jointid, expected.actuator_jointid);
+    AssertP81ArrayUnchanged(actual.root_bodyid, expected.root_bodyid);
+}
+
+struct P81ModelStoragePointers
+{
+    const dtDynIndex *bodyParent = nullptr;
+    const dtDynIndex *bodyRoot = nullptr;
+    const dtDynIndex *bodyRootSlot = nullptr;
+    const dtDynIndex *bodyJointCount = nullptr;
+    const dtDynIndex *bodyJointAddress = nullptr;
+    const dtDynIndex *bodyDofCount = nullptr;
+    const dtDynIndex *bodyDofAddress = nullptr;
+    const dtDynIndex *bodyWeld = nullptr;
+    const dtDynIndex *jointSpec = nullptr;
+    const dtDynIndex *dofParent = nullptr;
+    const dtDynIndex *rootBody = nullptr;
+    const dt::Math::Vector3<dtDynReal> *bodyPosition = nullptr;
+    const dtDynReal *bodyMass = nullptr;
+    const dtDynReal *bodySubtreeMass = nullptr;
+    const dtDynReal *rootMass = nullptr;
+};
+
+const dtDynReal *CaptureP81DenseStoragePointer(const dtDynDenseVector &value)
+{
+    if (value.GetDim() == 0)
+    {
+        return nullptr;
+    }
+    return value.GetElementsAddr();
+}
+
+P81ModelStoragePointers CaptureP81ModelStoragePointers(const dtDynModel &model)
+{
+    return P81ModelStoragePointers{model.body_parentid.data(),
+                                   model.body_rootid.data(),
+                                   model.body_rootidx.data(),
+                                   model.body_jntnum.data(),
+                                   model.body_jntadr.data(),
+                                   model.body_dofnum.data(),
+                                   model.body_dofadr.data(),
+                                   model.body_weldid.data(),
+                                   model.jnt_specid.data(),
+                                   model.dof_parentid.data(),
+                                   model.root_bodyid.data(),
+                                   model.body_pos.data(),
+                                   CaptureP81DenseStoragePointer(model.body_mass),
+                                   CaptureP81DenseStoragePointer(model.body_subtreemass),
+                                   CaptureP81DenseStoragePointer(model.root_mass)};
+}
+
+void AssertP81ModelStoragePointersUnchanged(const dtDynModel &model,
+                                            const P81ModelStoragePointers &expected)
+{
+    assert(model.body_parentid.data() == expected.bodyParent);
+    assert(model.body_rootid.data() == expected.bodyRoot);
+    assert(model.body_rootidx.data() == expected.bodyRootSlot);
+    assert(model.body_jntnum.data() == expected.bodyJointCount);
+    assert(model.body_jntadr.data() == expected.bodyJointAddress);
+    assert(model.body_dofnum.data() == expected.bodyDofCount);
+    assert(model.body_dofadr.data() == expected.bodyDofAddress);
+    assert(model.body_weldid.data() == expected.bodyWeld);
+    assert(model.jnt_specid.data() == expected.jointSpec);
+    assert(model.dof_parentid.data() == expected.dofParent);
+    assert(model.root_bodyid.data() == expected.rootBody);
+    assert(model.body_pos.data() == expected.bodyPosition);
+    assert(CaptureP81DenseStoragePointer(model.body_mass) == expected.bodyMass);
+    assert(CaptureP81DenseStoragePointer(model.body_subtreemass) == expected.bodySubtreeMass);
+    assert(CaptureP81DenseStoragePointer(model.root_mass) == expected.rootMass);
+}
+
+void AssertP81PhysicalWriteTargetsUnchanged(const dtDynModel &actual,
+                                            const dtDynModel &expected)
+{
+    AssertP81Vector3ArrayUnchanged(actual.body_pos, expected.body_pos);
+    AssertP81Vector4ArrayUnchanged(actual.body_quat, expected.body_quat);
+    AssertP81Matrix3ArrayUnchanged(actual.body_mat, expected.body_mat);
+    AssertP81Vector3ArrayUnchanged(actual.body_ipos, expected.body_ipos);
+    AssertP81Vector4ArrayUnchanged(actual.body_iquat, expected.body_iquat);
+    AssertP81Matrix3ArrayUnchanged(actual.body_imat, expected.body_imat);
+    AssertP81Vector3ArrayUnchanged(actual.body_inertia, expected.body_inertia);
+    AssertP81DenseVectorUnchanged(actual.body_mass, expected.body_mass);
+    AssertP81DenseVectorUnchanged(actual.body_subtreemass, expected.body_subtreemass);
+
+    AssertP81ArrayUnchanged(actual.jnt_limited, expected.jnt_limited);
+    AssertP81DenseVectorUnchanged(actual.jnt_range_min, expected.jnt_range_min);
+    AssertP81DenseVectorUnchanged(actual.jnt_range_max, expected.jnt_range_max);
+    AssertP81Vector3ArrayUnchanged(actual.jnt_pos, expected.jnt_pos);
+    AssertP81Vector3ArrayUnchanged(actual.jnt_axis, expected.jnt_axis);
+    AssertP81DenseVectorUnchanged(actual.dof_armature, expected.dof_armature);
+
+    AssertP81Vector3ArrayUnchanged(actual.site_pos, expected.site_pos);
+    AssertP81Vector4ArrayUnchanged(actual.site_quat, expected.site_quat);
+    AssertP81Matrix3ArrayUnchanged(actual.site_mat, expected.site_mat);
+    AssertP81DenseVectorUnchanged(actual.actuator_gear, expected.actuator_gear);
+    AssertP81DenseVectorUnchanged(actual.root_mass, expected.root_mass);
+}
+
+struct P81BodyPhysicalEditor
+{
+    dtDynReal mass = 0.0;
+    dtDynReal positionX = 0.0;
+
+    void operator()(dtDynBodySpec &draft) const
+    {
+        draft.inertial.mass = mass;
+        draft.pos(0) = positionX;
+    }
+};
+
+struct P81NextSiblingEditor
+{
+    dtDynIndex nextSibling = DTDYN_INVALID_INDEX;
+
+    void operator()(dtDynBodySpec &draft) const
+    {
+        draft.nextSibling = nextSibling;
+    }
+};
+
+dtDynSpec MakeP81MultiRootSpec(dtDynIndex &firstRoot, dtDynIndex &secondRoot)
+{
+    dtDynSpec spec;
+    firstRoot = spec.AddBody("p81_first_root", 0);
+    secondRoot = spec.AddBody("p81_second_root", 0);
+    const dtDynIndex firstJoint = spec.AddJoint(firstRoot, "p81_first_joint", dtDynJointType::Hinge);
+    const dtDynIndex secondJoint = spec.AddJoint(secondRoot, "p81_second_joint", dtDynJointType::Hinge);
+    spec.EditBody(firstRoot, P81BodyPhysicalEditor{1.0, 0.25});
+    spec.EditBody(secondRoot, P81BodyPhysicalEditor{2.0, -0.5});
+
+    assert(firstRoot == 1);
+    assert(secondRoot == 2);
+    assert(firstJoint == 0);
+    assert(secondJoint == 1);
+    assert(spec.Bodies()[0].nextSibling == DTDYN_INVALID_INDEX);
+    assert(spec.Bodies()[secondRoot].parent == 0);
+    assert(spec.Bodies()[secondRoot].nextSibling == firstRoot);
+
+    dtDynValidationError error;
+    assert(ValidateSpec(spec, &error));
+    assert(error.code == dtDynValidationCode::None);
+    return spec;
+}
+
+void TestUpdateSpecPreservesWorldSiblingCompatibility()
+{
+    dtDynIndex firstRoot = DTDYN_INVALID_INDEX;
+    dtDynIndex secondRoot = DTDYN_INVALID_INDEX;
+    const dtDynSpec original = MakeP81MultiRootSpec(firstRoot, secondRoot);
+
+    dtDynModel compatibleModel = CompileSpecChecked(original);
+    assert(compatibleModel.nroot == 2);
+    dtDynSpec compatible = original;
+    compatible.EditBody(firstRoot, P81BodyPhysicalEditor{3.0, 0.75});
+    const std::size_t allocationsBeforeCompatibleUpdate = g_totalTestAllocations;
+    assert(UpdateSpec(compatible, compatibleModel));
+    assert(g_totalTestAllocations == allocationsBeforeCompatibleUpdate);
+    assert(compatibleModel.body_mass(firstRoot) == 3.0);
+    assert(compatibleModel.body_pos[static_cast<std::size_t>(firstRoot)](0) == 0.75);
+
+    dtDynValidationError error;
+    assert(ValidateModel(compatibleModel, &error));
+    assert(error.code == dtDynValidationCode::None);
+
+    dtDynSpec incompatible = original;
+    incompatible.EditBody(0, P81NextSiblingEditor{secondRoot});
+    incompatible.EditBody(secondRoot, P81BodyPhysicalEditor{7.0, 8.0});
+    assert(incompatible.Bodies()[0].nextSibling == secondRoot);
+    assert(ValidateSpec(incompatible, &error));
+    assert(error.code == dtDynValidationCode::None);
+
+    dtDynModel rejectedModel = CompileSpecChecked(original);
+    const dtDynModel expectedModel = rejectedModel;
+    const P81ModelStoragePointers storageBeforeUpdate =
+        CaptureP81ModelStoragePointers(rejectedModel);
+    const std::size_t allocationsBeforeRejectedUpdate = g_totalTestAllocations;
+    assert(!UpdateSpec(incompatible, rejectedModel));
+    assert(g_totalTestAllocations == allocationsBeforeRejectedUpdate);
+    AssertP81ModelStoragePointersUnchanged(rejectedModel, storageBeforeUpdate);
+    AssertP81TopologyUnchanged(rejectedModel, expectedModel);
+    AssertP81BodyPositionsUnchanged(rejectedModel, expectedModel);
+    AssertP81DenseVectorUnchanged(rejectedModel.body_mass, expectedModel.body_mass);
+    AssertP81DenseVectorUnchanged(rejectedModel.body_subtreemass, expectedModel.body_subtreemass);
+    AssertP81DenseVectorUnchanged(rejectedModel.root_mass, expectedModel.root_mass);
+    assert(ValidateModel(rejectedModel, &error));
+    assert(error.code == dtDynValidationCode::None);
+}
+
+dtDynSpec MakeTwoRootChildListSpec(dtDynIndex &firstRoot, dtDynIndex &secondRoot)
+{
+    dtDynSpec spec;
+    firstRoot = spec.AddBody("child_list_first_root", 0);
+    secondRoot = spec.AddBody("child_list_second_root", 0);
+    assert(firstRoot == 1);
+    assert(secondRoot == 2);
+    assert(spec.Bodies()[0].firstChild == secondRoot);
+    assert(spec.Bodies()[static_cast<std::size_t>(secondRoot)].nextSibling == firstRoot);
+    assert(spec.Bodies()[static_cast<std::size_t>(firstRoot)].nextSibling == DTDYN_INVALID_INDEX);
+    assert(spec.Bodies()[static_cast<std::size_t>(firstRoot)].firstChild == DTDYN_INVALID_INDEX);
+    AssertP75ObjectCountBaseline(spec);
+    return spec;
+}
+
+void AssertRepeatedChildListEntry(const dtDynSpec &spec, const dtDynIndex repeated)
+{
+    AssertSpecValidationFailure(spec, dtDynValidationCode::TopologyCycle, dtDynObjectType::Body,
+                                repeated,
+                                "body[" + std::to_string(repeated) +
+                                    "] appears repeatedly in child lists");
+}
+
+void TestSpecValidationRejectsRepeatedChildListEntries()
+{
+    {
+        dtDynIndex firstRoot = DTDYN_INVALID_INDEX;
+        dtDynIndex secondRoot = DTDYN_INVALID_INDEX;
+        dtDynSpec spec = MakeTwoRootChildListSpec(firstRoot, secondRoot);
+        spec.EditBody(secondRoot, P81NextSiblingEditor{secondRoot});
+        assert(spec.Bodies()[static_cast<std::size_t>(secondRoot)].nextSibling == secondRoot);
+        AssertRepeatedChildListEntry(spec, secondRoot);
+    }
+    {
+        dtDynIndex firstRoot = DTDYN_INVALID_INDEX;
+        dtDynIndex secondRoot = DTDYN_INVALID_INDEX;
+        dtDynSpec spec = MakeTwoRootChildListSpec(firstRoot, secondRoot);
+        spec.EditBody(firstRoot, P81NextSiblingEditor{secondRoot});
+        assert(spec.Bodies()[static_cast<std::size_t>(firstRoot)].nextSibling == secondRoot);
+        AssertRepeatedChildListEntry(spec, secondRoot);
+    }
+    {
+        dtDynIndex firstRoot = DTDYN_INVALID_INDEX;
+        dtDynIndex secondRoot = DTDYN_INVALID_INDEX;
+        dtDynSpec spec = MakeTwoRootChildListSpec(firstRoot, secondRoot);
+        spec.EditBody(firstRoot, FirstChildEditor{secondRoot});
+        assert(spec.Bodies()[static_cast<std::size_t>(firstRoot)].firstChild == secondRoot);
+        AssertRepeatedChildListEntry(spec, secondRoot);
+    }
 }
 
 void TestUpdateSpecRejectsSameDofJointTypeChangeWithoutWriting()
@@ -3001,11 +6205,923 @@ void TestUpdateSpecRejectsSiteBacklinkMutationWithoutWriting()
     spec.EditBody(body, [](dtDynBodySpec &draft)
                   {
                       draft.sites.clear();
-                      draft.inertial.mass = 7.0;
-                  });
+                      draft.inertial.mass = 7.0; });
 
     assert(!UpdateSpec(spec, model));
     assert(model.body_mass(body) == mass);
+}
+
+void TestUpdateSpecRejectsEarlyStorageMismatchWithoutWriting()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("link", 0);
+    spec.AddJoint(body, "hinge", dtDynJointType::Hinge);
+    spec.EditBody(body, [](dtDynBodySpec &draft)
+                  {
+                      draft.pos(0) = 1.0;
+                      draft.inertial.mass = 1.0; });
+
+    dtDynModel model = CompileSpecChecked(spec);
+    const auto position = model.body_pos[static_cast<std::size_t>(body)];
+    const dtDynReal mass = model.body_mass(body);
+    spec.EditBody(body, [](dtDynBodySpec &draft)
+                  {
+                      draft.pos(0) = 7.0;
+                      draft.inertial.mass = 7.0; });
+    model.body_names.clear();
+
+    assert(!UpdateSpec(spec, model));
+    assert(model.body_pos[static_cast<std::size_t>(body)](0) == position(0));
+    assert(model.body_mass(body) == mass);
+}
+
+void TestUpdateSpecRejectsLateStorageMismatchWithoutWriting()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("link", 0);
+    spec.AddJoint(body, "hinge", dtDynJointType::Hinge);
+    spec.EditBody(body, [](dtDynBodySpec &draft)
+                  {
+                      draft.pos(0) = 1.0;
+                      draft.inertial.mass = 1.0; });
+
+    dtDynModel model = CompileSpecChecked(spec);
+    assert(model.nroot > 0);
+    const auto position = model.body_pos[static_cast<std::size_t>(body)];
+    const dtDynReal mass = model.body_mass(body);
+    spec.EditBody(body, [](dtDynBodySpec &draft)
+                  {
+                      draft.pos(0) = 7.0;
+                      draft.inertial.mass = 7.0; });
+    ResizeDenseVector(model.root_mass, model.nroot - 1);
+
+    assert(!UpdateSpec(spec, model));
+    assert(model.body_pos[static_cast<std::size_t>(body)](0) == position(0));
+    assert(model.body_mass(body) == mass);
+}
+
+void TestUpdateSpecRejectsLateCompatibilityMetadataMutationsWithoutWriting()
+{
+    {
+        dtDynSpec spec;
+        const dtDynIndex body = spec.AddBody("joint_body", 0);
+        const dtDynIndex joint = spec.AddJoint(body, "joint", dtDynJointType::Hinge);
+        spec.EditBody(body, [](dtDynBodySpec &draft)
+                      {
+                          draft.pos(0) = 1.0;
+                          draft.inertial.mass = 1.0; });
+
+        dtDynModel model = CompileSpecChecked(spec);
+        const dtDynReal mass = model.body_mass(body);
+        const auto position = model.body_pos[static_cast<std::size_t>(body)];
+        const std::string *const jointNameStorage = model.joint_names.data();
+        spec.EditJoint(joint, [](dtDynJointSpec &draft)
+                       { draft.name = "renamed_joint"; });
+        spec.EditBody(body, [](dtDynBodySpec &draft)
+                      {
+                          draft.pos(0) = 7.0;
+                          draft.inertial.mass = 7.0; });
+        const std::size_t allocationsBeforeUpdate = g_totalTestAllocations;
+
+        assert(!UpdateSpec(spec, model));
+        assert(g_totalTestAllocations == allocationsBeforeUpdate);
+        assert(model.joint_names.data() == jointNameStorage);
+        assert(model.joint_names[static_cast<std::size_t>(joint)] == "joint");
+        assert(model.JointId("joint") == joint);
+        assert(model.JointId("renamed_joint") == DTDYN_INVALID_INDEX);
+        assert(model.body_pos[static_cast<std::size_t>(body)](0) == position(0));
+        assert(model.body_mass(body) == mass);
+    }
+
+    {
+        dtDynSpec spec;
+        const dtDynIndex body = spec.AddBody("site_body", 0);
+        spec.AddJoint(body, "site_joint", dtDynJointType::Hinge);
+        const dtDynIndex site = spec.AddSite(body, "site");
+        spec.EditBody(body, [](dtDynBodySpec &draft)
+                      {
+                          draft.pos(0) = 1.0;
+                          draft.inertial.mass = 1.0; });
+
+        dtDynModel model = CompileSpecChecked(spec);
+        const dtDynReal mass = model.body_mass(body);
+        const auto position = model.body_pos[static_cast<std::size_t>(body)];
+        const std::string *const siteNameStorage = model.site_names.data();
+        spec.EditSite(site, [](dtDynSiteSpec &draft)
+                      { draft.name = "renamed_site"; });
+        spec.EditBody(body, [](dtDynBodySpec &draft)
+                      {
+                          draft.pos(0) = 7.0;
+                          draft.inertial.mass = 7.0; });
+        const std::size_t allocationsBeforeUpdate = g_totalTestAllocations;
+
+        assert(!UpdateSpec(spec, model));
+        assert(g_totalTestAllocations == allocationsBeforeUpdate);
+        assert(model.site_names.data() == siteNameStorage);
+        assert(model.site_names[static_cast<std::size_t>(site)] == "site");
+        assert(model.SiteId("site") == site);
+        assert(model.SiteId("renamed_site") == DTDYN_INVALID_INDEX);
+        assert(model.body_pos[static_cast<std::size_t>(body)](0) == position(0));
+        assert(model.body_mass(body) == mass);
+    }
+
+    {
+        dtDynSpec spec;
+        const dtDynIndex body = spec.AddBody("backlink_body", 0);
+        spec.AddJoint(body, "backlink_joint", dtDynJointType::Hinge);
+        const dtDynIndex site = spec.AddSite(body, "backlink_site");
+        spec.EditBody(body, [](dtDynBodySpec &draft)
+                      {
+                          draft.pos(0) = 1.0;
+                          draft.inertial.mass = 1.0; });
+
+        dtDynModel model = CompileSpecChecked(spec);
+        const dtDynReal mass = model.body_mass(body);
+        const auto position = model.body_pos[static_cast<std::size_t>(body)];
+        const dtDynIndex *const siteOwnerStorage = model.site_bodyid.data();
+        spec.EditBody(body, [site](dtDynBodySpec &draft)
+                      {
+                          draft.sites.push_back(site);
+                          draft.pos(0) = 7.0;
+                          draft.inertial.mass = 7.0; });
+        const std::size_t allocationsBeforeUpdate = g_totalTestAllocations;
+
+        assert(!UpdateSpec(spec, model));
+        assert(g_totalTestAllocations == allocationsBeforeUpdate);
+        assert(model.site_bodyid.data() == siteOwnerStorage);
+        assert(model.site_bodyid[static_cast<std::size_t>(site)] == body);
+        assert(model.SiteId("backlink_site") == site);
+        assert(model.body_pos[static_cast<std::size_t>(body)](0) == position(0));
+        assert(model.body_mass(body) == mass);
+    }
+
+    {
+        dtDynSpec spec;
+        const dtDynIndex body = spec.AddBody("child_body", 0);
+        spec.AddJoint(body, "child_joint", dtDynJointType::Hinge);
+        spec.EditBody(body, [](dtDynBodySpec &draft)
+                      {
+                          draft.pos(0) = 1.0;
+                          draft.inertial.mass = 1.0; });
+
+        dtDynModel model = CompileSpecChecked(spec);
+        const dtDynReal mass = model.body_mass(body);
+        const auto position = model.body_pos[static_cast<std::size_t>(body)];
+        const dtDynIndex *const parentStorage = model.body_parentid.data();
+        spec.EditBody(body, [body](dtDynBodySpec &draft)
+                      {
+                          draft.nextSibling = body;
+                          draft.pos(0) = 7.0;
+                          draft.inertial.mass = 7.0; });
+        const std::size_t allocationsBeforeUpdate = g_totalTestAllocations;
+
+        assert(!UpdateSpec(spec, model));
+        assert(g_totalTestAllocations == allocationsBeforeUpdate);
+        assert(model.body_parentid.data() == parentStorage);
+        assert(model.body_parentid[static_cast<std::size_t>(body)] == 0);
+        assert(model.BodyId("child_body") == body);
+        assert(model.body_pos[static_cast<std::size_t>(body)](0) == position(0));
+        assert(model.body_mass(body) == mass);
+    }
+
+    {
+        dtDynSpec spec;
+        const dtDynIndex body = spec.AddBody("actuator_body", 0);
+        const dtDynIndex joint = spec.AddJoint(body, "actuator_joint", dtDynJointType::Hinge);
+        const dtDynIndex actuator = spec.AddActuator(joint, "actuator");
+        spec.EditBody(body, [](dtDynBodySpec &draft)
+                      {
+                          draft.pos(0) = 1.0;
+                          draft.inertial.mass = 1.0; });
+
+        dtDynModel model = CompileSpecChecked(spec);
+        const dtDynReal mass = model.body_mass(body);
+        const auto position = model.body_pos[static_cast<std::size_t>(body)];
+        const std::string *const actuatorNameStorage = model.actuator_names.data();
+        spec.EditActuator(actuator, [](dtDynActuatorSpec &draft)
+                          { draft.name = "renamed_actuator"; });
+        spec.EditBody(body, [](dtDynBodySpec &draft)
+                      {
+                          draft.pos(0) = 7.0;
+                          draft.inertial.mass = 7.0; });
+        const std::size_t allocationsBeforeUpdate = g_totalTestAllocations;
+
+        assert(!UpdateSpec(spec, model));
+        assert(g_totalTestAllocations == allocationsBeforeUpdate);
+        assert(model.actuator_names.data() == actuatorNameStorage);
+        assert(model.actuator_names[static_cast<std::size_t>(actuator)] == "actuator");
+        assert(model.ActuatorId("actuator") == actuator);
+        assert(model.ActuatorId("renamed_actuator") == DTDYN_INVALID_INDEX);
+        assert(model.body_pos[static_cast<std::size_t>(body)](0) == position(0));
+        assert(model.body_mass(body) == mass);
+    }
+}
+
+void AssertP85ModelNameMapsUnchanged(const dtDynModel &model)
+{
+    assert(model.BodyId("world") == 0);
+    assert(model.BodyId("p85_root") == 1);
+    assert(model.JointId("p85_joint") == 0);
+    assert(model.SiteId("p85_site") == 0);
+    assert(model.ActuatorId("p85_actuator") == 0);
+    assert(model.BodyId("p85_extra_body") == DTDYN_INVALID_INDEX);
+    assert(model.JointId("p85_extra_joint") == DTDYN_INVALID_INDEX);
+    assert(model.SiteId("p85_extra_site") == DTDYN_INVALID_INDEX);
+    assert(model.ActuatorId("p85_extra_actuator") == DTDYN_INVALID_INDEX);
+}
+
+void AssertP85ModelUnchanged(const dtDynModel &actual, const dtDynModel &expected,
+                             const P81ModelStoragePointers &storageBeforeUpdate)
+{
+    AssertP81ModelStoragePointersUnchanged(actual, storageBeforeUpdate);
+    AssertP81TopologyUnchanged(actual, expected);
+    AssertP81PhysicalWriteTargetsUnchanged(actual, expected);
+    AssertP85ModelNameMapsUnchanged(actual);
+}
+
+struct P85BodyPhysicalEditor
+{
+    dtDynReal offset = 0.0;
+
+    void operator()(dtDynBodySpec &draft) const
+    {
+        dt::Math::Vector3<dtDynReal> bodyAxis;
+        dt::Math::Vector3<dtDynReal> inertialAxis;
+        bodyAxis.SetZero();
+        inertialAxis.SetZero();
+        bodyAxis(0) = 1.0;
+        inertialAxis(1) = 1.0;
+
+        draft.pos(0) = 0.25 + offset;
+        draft.pos(1) = -0.5 - offset;
+        draft.pos(2) = 0.75 + offset;
+        draft.quat = math::AxisAngleQuat(bodyAxis, 0.3 + (0.1 * offset));
+        draft.inertial.mass = 2.0 + offset;
+        draft.inertial.pos(0) = -0.15 - offset;
+        draft.inertial.pos(1) = 0.35 + offset;
+        draft.inertial.pos(2) = -0.55 - offset;
+        draft.inertial.quat = math::AxisAngleQuat(inertialAxis, -0.45 - (0.1 * offset));
+        draft.inertial.inertia(0) = 0.4 + (0.1 * offset);
+        draft.inertial.inertia(1) = 0.5 + (0.1 * offset);
+        draft.inertial.inertia(2) = 0.6 + (0.1 * offset);
+    }
+};
+
+struct P85JointPhysicalEditor
+{
+    void operator()(dtDynJointSpec &draft) const
+    {
+        draft.limited = true;
+        draft.rangeMin = -0.75;
+        draft.rangeMax = 0.95;
+        draft.pos(0) = 0.6;
+        draft.pos(1) = -0.4;
+        draft.pos(2) = 0.2;
+        draft.axis.SetZero();
+        draft.axis(0) = 1.0;
+        draft.armature = 0.35;
+    }
+};
+
+struct P85SitePhysicalEditor
+{
+    void operator()(dtDynSiteSpec &draft) const
+    {
+        dt::Math::Vector3<dtDynReal> axis;
+        axis.SetZero();
+        axis(2) = 1.0;
+        draft.pos(0) = 0.45;
+        draft.pos(1) = -0.25;
+        draft.pos(2) = 0.65;
+        draft.quat = math::AxisAngleQuat(axis, 0.6);
+    }
+};
+
+struct P85ActuatorPhysicalEditor
+{
+    void operator()(dtDynActuatorSpec &draft) const
+    {
+        draft.gear = 3.5;
+    }
+};
+
+void ConfigureP85DifferentPhysicalValues(dtDynSpec &spec)
+{
+    spec.EditBody(0, P85BodyPhysicalEditor{0.0});
+    spec.EditBody(1, P85BodyPhysicalEditor{1.0});
+    spec.EditJoint(0, P85JointPhysicalEditor{});
+    spec.EditSite(0, P85SitePhysicalEditor{});
+    spec.EditActuator(0, P85ActuatorPhysicalEditor{});
+}
+
+dtDynSpec MakeP85SourceShapeSpec()
+{
+    dtDynSpec spec;
+    const dtDynIndex root = spec.AddBody("p85_root", 0);
+    const dtDynIndex joint = spec.AddJoint(root, "p85_joint", dtDynJointType::Hinge);
+    const dtDynIndex site = spec.AddSite(root, "p85_site");
+    const dtDynIndex actuator = spec.AddActuator(joint, "p85_actuator");
+    assert(root == 1);
+    assert(joint == 0);
+    assert(site == 0);
+    assert(actuator == 0);
+
+    dtDynValidationError error;
+    assert(ValidateSpec(spec, &error));
+    assert(error.code == dtDynValidationCode::None);
+    return spec;
+}
+
+void AssertP85BodyPhysicalWriteTargetsDiffer(const dtDynModel &actual,
+                                             const dtDynModel &expected,
+                                             const dtDynIndex bodyId)
+{
+    const std::size_t bodyIndex = static_cast<std::size_t>(bodyId);
+    assert(actual.body_pos[bodyIndex](0) != expected.body_pos[bodyIndex](0));
+    assert(actual.body_quat[bodyIndex](0) != expected.body_quat[bodyIndex](0));
+    assert(actual.body_mat[bodyIndex](1, 1) != expected.body_mat[bodyIndex](1, 1));
+    assert(actual.body_ipos[bodyIndex](0) != expected.body_ipos[bodyIndex](0));
+    assert(actual.body_iquat[bodyIndex](0) != expected.body_iquat[bodyIndex](0));
+    assert(actual.body_imat[bodyIndex](0, 0) != expected.body_imat[bodyIndex](0, 0));
+    assert(actual.body_inertia[bodyIndex](0) != expected.body_inertia[bodyIndex](0));
+    assert(actual.body_mass(bodyId) != expected.body_mass(bodyId));
+    assert(actual.body_subtreemass(bodyId) != expected.body_subtreemass(bodyId));
+}
+
+void AssertP85SourcePhysicalWriteTargetsDiffer(const dtDynModel &actual,
+                                               const dtDynModel &expected)
+{
+    AssertP85BodyPhysicalWriteTargetsDiffer(actual, expected, 0);
+    AssertP85BodyPhysicalWriteTargetsDiffer(actual, expected, 1);
+
+    assert(actual.jnt_limited[0] != expected.jnt_limited[0]);
+    assert(actual.jnt_range_min(0) != expected.jnt_range_min(0));
+    assert(actual.jnt_range_max(0) != expected.jnt_range_max(0));
+    assert(actual.jnt_pos[0](0) != expected.jnt_pos[0](0));
+    assert(actual.jnt_axis[0](0) != expected.jnt_axis[0](0));
+    assert(actual.dof_armature(0) != expected.dof_armature(0));
+
+    assert(actual.site_pos[0](0) != expected.site_pos[0](0));
+    assert(actual.site_quat[0](0) != expected.site_quat[0](0));
+    assert(actual.site_mat[0](0, 0) != expected.site_mat[0](0, 0));
+    assert(actual.actuator_gear(0) != expected.actuator_gear(0));
+    assert(actual.root_mass(0) != expected.root_mass(0));
+}
+
+void AssertP85RejectsValidSourceShapeWithoutWriting(const dtDynSpec &incompatible,
+                                                    const dtDynModel &expected)
+{
+    dtDynValidationError error;
+    assert(ValidateSpec(incompatible, &error));
+    assert(error.code == dtDynValidationCode::None);
+    const dtDynModel recompiled = CompileSpecChecked(incompatible);
+    assert(ValidateModel(recompiled, &error));
+    assert(error.code == dtDynValidationCode::None);
+    AssertP85SourcePhysicalWriteTargetsDiffer(recompiled, expected);
+
+    dtDynModel actual = expected;
+    const P81ModelStoragePointers storageBeforeUpdate = CaptureP81ModelStoragePointers(actual);
+    const std::size_t allocationsBeforeUpdate = g_totalTestAllocations;
+    assert(!UpdateSpec(incompatible, actual));
+    assert(g_totalTestAllocations == allocationsBeforeUpdate);
+    AssertP85ModelUnchanged(actual, expected, storageBeforeUpdate);
+    assert(ValidateModel(actual, &error));
+    assert(error.code == dtDynValidationCode::None);
+}
+
+void TestUpdateSpecP85AcceptsZeroDimensionsWithoutTopologyWrites()
+{
+    const dtDynSpec spec;
+    dtDynValidationError error;
+    assert(ValidateSpec(spec, &error));
+    assert(error.code == dtDynValidationCode::None);
+
+    dtDynModel model = CompileSpecChecked(spec);
+    assert(model.nq == 0);
+    assert(model.nv == 0);
+    assert(model.nbody == 1);
+    assert(model.njnt == 0);
+    assert(model.nsite == 0);
+    assert(model.nu == 0);
+    assert(model.nroot == 0);
+    const dtDynModel expected = model;
+    const P81ModelStoragePointers storageBeforeUpdate = CaptureP81ModelStoragePointers(model);
+    const std::size_t allocationsBeforeUpdate = g_totalTestAllocations;
+
+    assert(UpdateSpec(spec, model));
+    assert(g_totalTestAllocations == allocationsBeforeUpdate);
+    AssertP81ModelStoragePointersUnchanged(model, storageBeforeUpdate);
+    AssertP81TopologyUnchanged(model, expected);
+    AssertP81PhysicalWriteTargetsUnchanged(model, expected);
+    assert(model.BodyId("world") == 0);
+    assert(model.JointId("p85_absent_joint") == DTDYN_INVALID_INDEX);
+    assert(model.SiteId("p85_absent_site") == DTDYN_INVALID_INDEX);
+    assert(model.ActuatorId("p85_absent_actuator") == DTDYN_INVALID_INDEX);
+    assert(ValidateModel(model, &error));
+    assert(error.code == dtDynValidationCode::None);
+}
+
+void TestUpdateSpecP85RejectsValidSourceCollectionShapeChangesWithoutWriting()
+{
+    const dtDynSpec original = MakeP85SourceShapeSpec();
+    const dtDynModel expected = CompileSpecChecked(original);
+    AssertP85ModelNameMapsUnchanged(expected);
+
+    dtDynSpec bodyAdded = original;
+    const dtDynIndex extraBody = bodyAdded.AddBody("p85_extra_body", 0);
+    assert(extraBody == 2);
+    assert(bodyAdded.Bodies().size() == 3U);
+    ConfigureP85DifferentPhysicalValues(bodyAdded);
+    AssertP85RejectsValidSourceShapeWithoutWriting(bodyAdded, expected);
+
+    dtDynSpec jointAdded = original;
+    const dtDynIndex extraJoint =
+        jointAdded.AddJoint(1, "p85_extra_joint", dtDynJointType::Hinge);
+    assert(extraJoint == 1);
+    assert(jointAdded.Joints().size() == 2U);
+    ConfigureP85DifferentPhysicalValues(jointAdded);
+    AssertP85RejectsValidSourceShapeWithoutWriting(jointAdded, expected);
+
+    dtDynSpec siteAdded = original;
+    const dtDynIndex extraSite = siteAdded.AddSite(1, "p85_extra_site");
+    assert(extraSite == 1);
+    assert(siteAdded.Sites().size() == 2U);
+    ConfigureP85DifferentPhysicalValues(siteAdded);
+    AssertP85RejectsValidSourceShapeWithoutWriting(siteAdded, expected);
+
+    dtDynSpec actuatorAdded = original;
+    const dtDynIndex extraActuator = actuatorAdded.AddActuator(0, "p85_extra_actuator");
+    assert(extraActuator == 1);
+    assert(actuatorAdded.Actuators().size() == 2U);
+    ConfigureP85DifferentPhysicalValues(actuatorAdded);
+    AssertP85RejectsValidSourceShapeWithoutWriting(actuatorAdded, expected);
+}
+
+struct P83BodyNameEditor
+{
+    std::string name;
+
+    void operator()(dtDynBodySpec &draft) const
+    {
+        draft.name = name;
+    }
+};
+
+struct P83BodyHierarchyEditor
+{
+    dtDynIndex parent = DTDYN_INVALID_INDEX;
+    dtDynIndex firstChild = DTDYN_INVALID_INDEX;
+    dtDynIndex nextSibling = DTDYN_INVALID_INDEX;
+
+    void operator()(dtDynBodySpec &draft) const
+    {
+        draft.parent = parent;
+        draft.firstChild = firstChild;
+        draft.nextSibling = nextSibling;
+    }
+};
+
+struct P83ReparentableBodyIds
+{
+    dtDynIndex rootA = DTDYN_INVALID_INDEX;
+    dtDynIndex rootB = DTDYN_INVALID_INDEX;
+    dtDynIndex child = DTDYN_INVALID_INDEX;
+};
+
+dtDynSpec MakeP83WorldRootChildSpec(dtDynIndex &root, dtDynIndex &child)
+{
+    dtDynSpec spec;
+    root = spec.AddBody("p83_root", 0);
+    child = spec.AddBody("p83_child", root);
+    spec.EditBody(root, P81BodyPhysicalEditor{1.0, 0.25});
+    spec.EditBody(child, P81BodyPhysicalEditor{2.0, -0.5});
+
+    assert(root == 1);
+    assert(child == 2);
+    assert(spec.Bodies()[0].parent == DTDYN_INVALID_INDEX);
+    assert(spec.Bodies()[static_cast<std::size_t>(root)].parent == 0);
+    assert(spec.Bodies()[static_cast<std::size_t>(child)].parent == root);
+
+    dtDynValidationError error;
+    assert(ValidateSpec(spec, &error));
+    assert(error.code == dtDynValidationCode::None);
+    return spec;
+}
+
+dtDynSpec MakeP83ReparentableSpec(P83ReparentableBodyIds &ids)
+{
+    dtDynSpec spec;
+    ids.rootA = spec.AddBody("p83_root_a", 0);
+    ids.rootB = spec.AddBody("p83_root_b", 0);
+    ids.child = spec.AddBody("p83_child", ids.rootA);
+    spec.EditBody(ids.rootA, P81BodyPhysicalEditor{1.0, 0.25});
+    spec.EditBody(ids.rootB, P81BodyPhysicalEditor{2.0, -0.5});
+    spec.EditBody(ids.child, P81BodyPhysicalEditor{3.0, 0.75});
+
+    assert(ids.rootA == 1);
+    assert(ids.rootB == 2);
+    assert(ids.child == 3);
+    assert(spec.Bodies()[0].firstChild == ids.rootB);
+    assert(spec.Bodies()[static_cast<std::size_t>(ids.rootB)].nextSibling == ids.rootA);
+    assert(spec.Bodies()[static_cast<std::size_t>(ids.rootA)].firstChild == ids.child);
+
+    dtDynValidationError error;
+    assert(ValidateSpec(spec, &error));
+    assert(error.code == dtDynValidationCode::None);
+    const dtDynModel checked = CompileSpecChecked(spec);
+    assert(checked.body_parentid[static_cast<std::size_t>(ids.rootA)] == 0);
+    assert(checked.body_parentid[static_cast<std::size_t>(ids.rootB)] == 0);
+    assert(checked.body_parentid[static_cast<std::size_t>(ids.child)] == ids.rootA);
+    return spec;
+}
+
+void AssertP83PhysicalStateUnchanged(const dtDynModel &actual, const dtDynModel &expected)
+{
+    assert(actual.nbody == expected.nbody);
+    for (dtDynIndex bodyId = 0; bodyId < actual.nbody; ++bodyId)
+    {
+        const std::size_t bodyIndex = static_cast<std::size_t>(bodyId);
+        assert(actual.body_mass(bodyId) == expected.body_mass(bodyId));
+        for (dtDynIndex axis = 0; axis < 3; ++axis)
+        {
+            assert(actual.body_pos[bodyIndex](axis) == expected.body_pos[bodyIndex](axis));
+            assert(actual.body_ipos[bodyIndex](axis) == expected.body_ipos[bodyIndex](axis));
+        }
+    }
+    AssertP81DenseVectorUnchanged(actual.body_subtreemass, expected.body_subtreemass);
+    AssertP81DenseVectorUnchanged(actual.root_mass, expected.root_mass);
+}
+
+void AssertP83RejectedUpdateLeavesOldModelUnchanged(
+    const dtDynSpec &incompatible, dtDynModel &model)
+{
+    const dtDynModel expectedModel = model;
+    const P81ModelStoragePointers storageBeforeUpdate = CaptureP81ModelStoragePointers(model);
+    const std::size_t allocationsBeforeUpdate = g_totalTestAllocations;
+    assert(!UpdateSpec(incompatible, model));
+    assert(g_totalTestAllocations == allocationsBeforeUpdate);
+    AssertP81ModelStoragePointersUnchanged(model, storageBeforeUpdate);
+    AssertP81TopologyUnchanged(model, expectedModel);
+    AssertP83PhysicalStateUnchanged(model, expectedModel);
+
+    dtDynValidationError error;
+    assert(ValidateModel(model, &error));
+    assert(error.code == dtDynValidationCode::None);
+}
+
+void TestUpdateSpecP83UpdatesWorldRootChildPhysicalModel()
+{
+    dtDynIndex root = DTDYN_INVALID_INDEX;
+    dtDynIndex child = DTDYN_INVALID_INDEX;
+    const dtDynSpec original = MakeP83WorldRootChildSpec(root, child);
+    dtDynModel model = CompileSpecChecked(original);
+    assert(model.nbody == 3);
+    assert(model.body_parentid[0] == 0);
+    assert(model.body_parentid[static_cast<std::size_t>(root)] == 0);
+    assert(model.body_parentid[static_cast<std::size_t>(child)] == root);
+
+    dtDynSpec updated = original;
+    updated.EditBody(root, P81BodyPhysicalEditor{4.0, -1.25});
+    updated.EditBody(child, P81BodyPhysicalEditor{5.0, 1.5});
+    dtDynValidationError error;
+    assert(ValidateSpec(updated, &error));
+    assert(error.code == dtDynValidationCode::None);
+    const dtDynModel expected = CompileSpecChecked(updated);
+
+    const P81ModelStoragePointers storageBeforeUpdate = CaptureP81ModelStoragePointers(model);
+    const std::size_t allocationsBeforeUpdate = g_totalTestAllocations;
+    assert(UpdateSpec(updated, model));
+    assert(g_totalTestAllocations == allocationsBeforeUpdate);
+    AssertP81ModelStoragePointersUnchanged(model, storageBeforeUpdate);
+    AssertP81TopologyUnchanged(model, expected);
+    AssertP83PhysicalStateUnchanged(model, expected);
+    assert(IsDtMathNear(model.body_mass(root), 4.0));
+    assert(IsDtMathNear(model.body_mass(child), 5.0));
+    assert(IsDtMathNear(model.root_mass(0), expected.root_mass(0)));
+    assert(ValidateModel(model, &error));
+    assert(error.code == dtDynValidationCode::None);
+}
+
+void TestUpdateSpecP83RejectsValidBodyNameAndParentChangesWithoutWriting()
+{
+    P83ReparentableBodyIds ids;
+    const dtDynSpec original = MakeP83ReparentableSpec(ids);
+
+    dtDynSpec renamed = original;
+    renamed.EditBody(ids.rootA, P81BodyPhysicalEditor{7.0, -1.0});
+    renamed.EditBody(ids.child, P81BodyPhysicalEditor{8.0, 2.0});
+    renamed.EditBody(ids.child, P83BodyNameEditor{"p83_child_renamed"});
+    dtDynValidationError error;
+    assert(ValidateSpec(renamed, &error));
+    assert(error.code == dtDynValidationCode::None);
+    const dtDynModel renamedRecompile = CompileSpecChecked(renamed);
+    assert(renamedRecompile.BodyId("p83_child") == DTDYN_INVALID_INDEX);
+    assert(renamedRecompile.BodyId("p83_child_renamed") == ids.child);
+    assert(renamedRecompile.body_parentid[static_cast<std::size_t>(ids.child)] == ids.rootA);
+
+    dtDynModel nameOldModel = CompileSpecChecked(original);
+    AssertP83RejectedUpdateLeavesOldModelUnchanged(renamed, nameOldModel);
+
+    dtDynSpec reparented = original;
+    reparented.EditBody(ids.rootA,
+                        P83BodyHierarchyEditor{0, DTDYN_INVALID_INDEX, DTDYN_INVALID_INDEX});
+    reparented.EditBody(ids.rootB, P83BodyHierarchyEditor{0, ids.child, ids.rootA});
+    reparented.EditBody(ids.child,
+                        P83BodyHierarchyEditor{ids.rootB, DTDYN_INVALID_INDEX,
+                                               DTDYN_INVALID_INDEX});
+    reparented.EditBody(ids.rootA, P81BodyPhysicalEditor{11.0, -1.25});
+    reparented.EditBody(ids.child, P81BodyPhysicalEditor{13.0, 1.5});
+    assert(reparented.Bodies()[static_cast<std::size_t>(ids.rootA)].firstChild ==
+           DTDYN_INVALID_INDEX);
+    assert(reparented.Bodies()[static_cast<std::size_t>(ids.rootB)].firstChild == ids.child);
+    assert(reparented.Bodies()[static_cast<std::size_t>(ids.child)].parent == ids.rootB);
+    assert(ValidateSpec(reparented, &error));
+    assert(error.code == dtDynValidationCode::None);
+    const dtDynModel reparentedRecompile = CompileSpecChecked(reparented);
+    assert(reparentedRecompile.body_parentid[static_cast<std::size_t>(ids.child)] == ids.rootB);
+    assert(reparentedRecompile.body_rootid[static_cast<std::size_t>(ids.child)] == ids.rootB);
+
+    dtDynModel parentOldModel = CompileSpecChecked(original);
+    AssertP83RejectedUpdateLeavesOldModelUnchanged(reparented, parentOldModel);
+}
+
+struct P88LoopTraversalIds
+{
+    dtDynIndex root = DTDYN_INVALID_INDEX;
+    dtDynIndex fixed = DTDYN_INVALID_INDEX;
+    dtDynIndex child = DTDYN_INVALID_INDEX;
+    dtDynIndex rootJoint = DTDYN_INVALID_INDEX;
+    dtDynIndex childJoint = DTDYN_INVALID_INDEX;
+    dtDynIndex firstSite = DTDYN_INVALID_INDEX;
+    dtDynIndex secondSite = DTDYN_INVALID_INDEX;
+    dtDynIndex actuator = DTDYN_INVALID_INDEX;
+};
+
+struct P88JointPhysicalEditor
+{
+    dtDynReal armature = 0.0;
+    bool limited = true;
+
+    void operator()(dtDynJointSpec &draft) const
+    {
+        draft.pos.SetZero();
+        draft.pos(0) = 0.15 + armature;
+        draft.pos(1) = -0.25 - armature;
+        draft.pos(2) = 0.35 + armature;
+        draft.axis.SetZero();
+        if (limited)
+        {
+            draft.axis(0) = 1.0;
+        }
+        else
+        {
+            draft.axis(1) = 1.0;
+        }
+        draft.limited = limited;
+        draft.rangeMin = -0.75 - armature;
+        draft.rangeMax = 0.95 + armature;
+        draft.armature = armature;
+    }
+};
+
+struct P88SitePhysicalEditor
+{
+    dtDynReal offset = 0.0;
+
+    void operator()(dtDynSiteSpec &draft) const
+    {
+        dt::Math::Vector3<dtDynReal> axis;
+        axis.SetZero();
+        axis(2) = 1.0;
+        draft.pos.SetZero();
+        draft.pos(0) = 0.1 + offset;
+        draft.pos(1) = -0.2 - offset;
+        draft.pos(2) = 0.3 + offset;
+        draft.quat = math::AxisAngleQuat(axis, 0.2 + (0.1 * offset));
+    }
+};
+
+struct P88ActuatorPhysicalEditor
+{
+    dtDynReal gear = 1.0;
+
+    void operator()(dtDynActuatorSpec &draft) const
+    {
+        draft.gear = gear;
+    }
+};
+
+struct P88ActuatorNameEditor
+{
+    std::string name;
+
+    void operator()(dtDynActuatorSpec &draft) const
+    {
+        draft.name = name;
+    }
+};
+
+dtDynSpec MakeP88LoopTraversalSpec(P88LoopTraversalIds &ids)
+{
+    dtDynSpec spec;
+    ids.root = spec.AddBody("p88_root", 0);
+    ids.fixed = spec.AddBody("p88_fixed", ids.root);
+    ids.child = spec.AddBody("p88_child", ids.fixed);
+    ids.rootJoint = spec.AddJoint(ids.root, "p88_root_hinge", dtDynJointType::Hinge);
+    ids.childJoint = spec.AddJoint(ids.child, "p88_child_hinge", dtDynJointType::Hinge);
+    ids.firstSite = spec.AddSite(ids.child, "p88_first_site");
+    ids.secondSite = spec.AddSite(ids.child, "p88_second_site");
+    ids.actuator = spec.AddActuator(ids.childJoint, "p88_actuator");
+
+    spec.EditBody(ids.root, P81BodyPhysicalEditor{2.0, 0.25});
+    spec.EditBody(ids.fixed, P81BodyPhysicalEditor{3.0, -0.5});
+    spec.EditBody(ids.child, P81BodyPhysicalEditor{4.0, 0.75});
+    spec.EditJoint(ids.rootJoint, P88JointPhysicalEditor{0.1});
+    spec.EditJoint(ids.childJoint, P88JointPhysicalEditor{0.2});
+    spec.EditSite(ids.firstSite, P88SitePhysicalEditor{0.0});
+    spec.EditSite(ids.secondSite, P88SitePhysicalEditor{1.0});
+    spec.EditActuator(ids.actuator, P88ActuatorPhysicalEditor{1.5});
+
+    assert(ids.root == 1);
+    assert(ids.fixed == 2);
+    assert(ids.child == 3);
+    assert(ids.rootJoint == 0);
+    assert(ids.childJoint == 1);
+    assert(ids.firstSite == 0);
+    assert(ids.secondSite == 1);
+    assert(ids.actuator == 0);
+    assert(spec.Bodies()[static_cast<std::size_t>(ids.fixed)].joints.empty());
+    assert(spec.Bodies()[static_cast<std::size_t>(ids.child)].sites.size() == 2U);
+    assert(spec.Bodies()[static_cast<std::size_t>(ids.child)].sites[0] == ids.firstSite);
+    assert(spec.Bodies()[static_cast<std::size_t>(ids.child)].sites[1] == ids.secondSite);
+
+    dtDynValidationError error;
+    assert(ValidateSpec(spec, &error));
+    assert(error.code == dtDynValidationCode::None);
+    return spec;
+}
+
+void ConfigureP88RejectedPhysicalValues(dtDynSpec &spec, const P88LoopTraversalIds &ids)
+{
+    spec.EditBody(0, P85BodyPhysicalEditor{0.0});
+    spec.EditBody(ids.root, P85BodyPhysicalEditor{1.0});
+    spec.EditBody(ids.fixed, P85BodyPhysicalEditor{2.0});
+    spec.EditBody(ids.child, P85BodyPhysicalEditor{3.0});
+    spec.EditJoint(ids.rootJoint, P88JointPhysicalEditor{0.7, false});
+    spec.EditJoint(ids.childJoint, P88JointPhysicalEditor{0.8, false});
+    spec.EditSite(ids.firstSite, P88SitePhysicalEditor{4.0});
+    spec.EditSite(ids.secondSite, P88SitePhysicalEditor{5.0});
+    spec.EditActuator(ids.actuator, P88ActuatorPhysicalEditor{3.5});
+}
+
+void AssertP88SourcePhysicalWriteTargetsDiffer(const dtDynModel &actual,
+                                               const dtDynModel &expected)
+{
+    assert(actual.nbody == expected.nbody);
+    for (dtDynIndex bodyId = 0; bodyId < actual.nbody; ++bodyId)
+    {
+        AssertP85BodyPhysicalWriteTargetsDiffer(actual, expected, bodyId);
+    }
+
+    assert(actual.njnt == expected.njnt);
+    for (dtDynIndex jointId = 0; jointId < actual.njnt; ++jointId)
+    {
+        const std::size_t jointIndex = static_cast<std::size_t>(jointId);
+        const dtDynIndex actualDof = actual.jnt_dofadr[jointIndex];
+        const dtDynIndex expectedDof = expected.jnt_dofadr[jointIndex];
+        assert(actual.jnt_limited[jointIndex] != expected.jnt_limited[jointIndex]);
+        assert(actual.jnt_range_min(jointId) != expected.jnt_range_min(jointId));
+        assert(actual.jnt_range_max(jointId) != expected.jnt_range_max(jointId));
+        assert(actual.jnt_pos[jointIndex](0) != expected.jnt_pos[jointIndex](0));
+        assert(actual.jnt_axis[jointIndex](0) != expected.jnt_axis[jointIndex](0));
+        assert(actual.dof_armature(actualDof) != expected.dof_armature(expectedDof));
+    }
+
+    assert(actual.nsite == expected.nsite);
+    for (dtDynIndex siteId = 0; siteId < actual.nsite; ++siteId)
+    {
+        const std::size_t siteIndex = static_cast<std::size_t>(siteId);
+        assert(actual.site_pos[siteIndex](0) != expected.site_pos[siteIndex](0));
+        assert(actual.site_quat[siteIndex](0) != expected.site_quat[siteIndex](0));
+        assert(actual.site_mat[siteIndex](0, 0) != expected.site_mat[siteIndex](0, 0));
+    }
+
+    assert(actual.nu == expected.nu);
+    for (dtDynIndex actuatorId = 0; actuatorId < actual.nu; ++actuatorId)
+    {
+        assert(actual.actuator_gear(actuatorId) != expected.actuator_gear(actuatorId));
+    }
+
+    assert(actual.nroot == expected.nroot);
+    for (dtDynIndex rootId = 0; rootId < actual.nroot; ++rootId)
+    {
+        assert(actual.root_mass(rootId) != expected.root_mass(rootId));
+    }
+}
+
+void TestUpdateSpecP88PreservesAncestorAndSiteTraversal()
+{
+    P88LoopTraversalIds ids;
+    const dtDynSpec original = MakeP88LoopTraversalSpec(ids);
+    dtDynModel model = CompileSpecChecked(original);
+
+    assert(model.nbody == 4);
+    assert(model.njnt == 2);
+    assert(model.nsite == 2);
+    assert(model.nu == 1);
+    assert(model.nroot == 1);
+    assert(model.body_dofnum[static_cast<std::size_t>(ids.root)] == 1);
+    assert(model.body_dofnum[static_cast<std::size_t>(ids.fixed)] == 0);
+    assert(model.body_dofnum[static_cast<std::size_t>(ids.child)] == 1);
+    assert(model.jnt_specid[0] == ids.rootJoint);
+    assert(model.jnt_specid[1] == ids.childJoint);
+    const dtDynIndex rootDof = model.jnt_dofadr[0];
+    const dtDynIndex childDof = model.jnt_dofadr[1];
+    assert(model.dof_parentid[static_cast<std::size_t>(childDof)] == rootDof);
+
+    dtDynSpec updated = original;
+    updated.EditBody(ids.root, P81BodyPhysicalEditor{5.0, -1.25});
+    updated.EditBody(ids.fixed, P81BodyPhysicalEditor{6.0, 1.5});
+    updated.EditBody(ids.child, P81BodyPhysicalEditor{7.0, -1.75});
+    updated.EditJoint(ids.rootJoint, P88JointPhysicalEditor{0.4});
+    updated.EditJoint(ids.childJoint, P88JointPhysicalEditor{0.5});
+    updated.EditSite(ids.firstSite, P88SitePhysicalEditor{2.0});
+    updated.EditSite(ids.secondSite, P88SitePhysicalEditor{3.0});
+    updated.EditActuator(ids.actuator, P88ActuatorPhysicalEditor{2.5});
+
+    dtDynValidationError error;
+    assert(ValidateSpec(updated, &error));
+    assert(error.code == dtDynValidationCode::None);
+    const dtDynModel expected = CompileSpecChecked(updated);
+    const P81ModelStoragePointers storageBeforeUpdate = CaptureP81ModelStoragePointers(model);
+    const std::size_t allocationsBeforeUpdate = g_totalTestAllocations;
+
+    assert(UpdateSpec(updated, model));
+    assert(g_totalTestAllocations == allocationsBeforeUpdate);
+    AssertP81ModelStoragePointersUnchanged(model, storageBeforeUpdate);
+    AssertP81TopologyUnchanged(model, expected);
+    assert(model.dof_parentid[static_cast<std::size_t>(childDof)] == rootDof);
+
+    for (dtDynIndex bodyId = 0; bodyId < model.nbody; ++bodyId)
+    {
+        const std::size_t bodyIndex = static_cast<std::size_t>(bodyId);
+        assert(IsDtMathNear(model.body_mass(bodyId), expected.body_mass(bodyId)));
+        assert(IsDtMathNear(model.body_subtreemass(bodyId), expected.body_subtreemass(bodyId)));
+        assert(IsDtMathNear(model.body_pos[bodyIndex](0), expected.body_pos[bodyIndex](0)));
+    }
+    for (dtDynIndex jointId = 0; jointId < model.njnt; ++jointId)
+    {
+        assert(IsDtMathNear(model.dof_armature(model.jnt_dofadr[static_cast<std::size_t>(jointId)]),
+                            expected.dof_armature(expected.jnt_dofadr[static_cast<std::size_t>(jointId)])));
+    }
+    for (dtDynIndex siteId = 0; siteId < model.nsite; ++siteId)
+    {
+        const std::size_t siteIndex = static_cast<std::size_t>(siteId);
+        assert(model.site_bodyid[siteIndex] == ids.child);
+        for (dtDynIndex axis = 0; axis < 3; ++axis)
+        {
+            assert(IsDtMathNear(model.site_pos[siteIndex](axis), expected.site_pos[siteIndex](axis)));
+        }
+        for (dtDynIndex component = 0; component < 4; ++component)
+        {
+            assert(IsDtMathNear(model.site_quat[siteIndex](component),
+                                expected.site_quat[siteIndex](component)));
+        }
+    }
+    assert(IsDtMathNear(model.actuator_gear(ids.actuator),
+                        expected.actuator_gear(ids.actuator)));
+    assert(IsDtMathNear(model.root_mass(0), expected.root_mass(0)));
+    assert(ValidateModel(model, &error));
+    assert(error.code == dtDynValidationCode::None);
+
+    dtDynSpec incompatible = updated;
+    ConfigureP88RejectedPhysicalValues(incompatible, ids);
+    incompatible.EditActuator(ids.actuator, P88ActuatorNameEditor{"p88_renamed_actuator"});
+    assert(ValidateSpec(incompatible, &error));
+    assert(error.code == dtDynValidationCode::None);
+    const dtDynModel incompatibleRecompile = CompileSpecChecked(incompatible);
+    assert(ValidateModel(incompatibleRecompile, &error));
+    assert(error.code == dtDynValidationCode::None);
+    AssertP88SourcePhysicalWriteTargetsDiffer(incompatibleRecompile, expected);
+    assert(incompatibleRecompile.ActuatorId("p88_actuator") == DTDYN_INVALID_INDEX);
+    assert(incompatibleRecompile.ActuatorId("p88_renamed_actuator") == ids.actuator);
+
+    const dtDynModel modelBeforeRejectedUpdate = model;
+    const P81ModelStoragePointers storageBeforeRejectedUpdate =
+        CaptureP81ModelStoragePointers(model);
+    const dtDynIndex actuatorBeforeRejectedUpdate = model.ActuatorId("p88_actuator");
+    const dtDynIndex renamedActuatorBeforeRejectedUpdate =
+        model.ActuatorId("p88_renamed_actuator");
+    const std::size_t allocationsBeforeRejectedUpdate = g_totalTestAllocations;
+    assert(!UpdateSpec(incompatible, model));
+    assert(g_totalTestAllocations == allocationsBeforeRejectedUpdate);
+    AssertP81ModelStoragePointersUnchanged(model, storageBeforeRejectedUpdate);
+    AssertP81TopologyUnchanged(model, modelBeforeRejectedUpdate);
+    AssertP81PhysicalWriteTargetsUnchanged(model, modelBeforeRejectedUpdate);
+    assert(model.ActuatorId("p88_actuator") == actuatorBeforeRejectedUpdate);
+    assert(model.ActuatorId("p88_renamed_actuator") == renamedActuatorBeforeRejectedUpdate);
+    assert(ValidateModel(model, &error));
+    assert(error.code == dtDynValidationCode::None);
 }
 
 void TestUpdateSpecMatchesPhysicalRecompile()
@@ -3023,10 +7139,24 @@ void TestUpdateSpecMatchesPhysicalRecompile()
                           draft.inertial.mass = 2.0;
                           draft.inertial.inertia(0) = 0.2;
                           draft.inertial.inertia(1) = 0.3;
-                          draft.inertial.inertia(2) = 0.4;
-                      });
+                          draft.inertial.inertia(2) = 0.4; });
     original.EditBody(child, [](dtDynBodySpec &draft)
-                      { draft.inertial.mass = 0.0; });
+                      {
+                          dt::Math::Vector3<dtDynReal> xAxis;
+                          dt::Math::Vector3<dtDynReal> yAxis;
+                          xAxis.SetZero();
+                          yAxis.SetZero();
+                          xAxis(0) = 1.0;
+                          yAxis(1) = 1.0;
+                          draft.pos(0) = 0.45;
+                          draft.pos(1) = -0.35;
+                          draft.pos(2) = 0.2;
+                          draft.quat = math::AxisAngleQuat(xAxis, 0.25);
+                          draft.inertial.mass = 0.0;
+                          draft.inertial.pos(0) = -0.25;
+                          draft.inertial.pos(1) = 0.3;
+                          draft.inertial.pos(2) = -0.15;
+                          draft.inertial.quat = math::AxisAngleQuat(yAxis, -0.35); });
 
     dtDynModel model = CompileSpecChecked(original);
     assert(model.jnt_type[0] == static_cast<dtDynIndex>(dtDynJointType::Hinge));
@@ -3066,44 +7196,42 @@ void TestUpdateSpecMatchesPhysicalRecompile()
                          draft.inertial.quat = math::AxisAngleQuat(xAxis, 0.3);
                          draft.inertial.inertia(0) = 0.25;
                          draft.inertial.inertia(1) = 0.35;
-                         draft.inertial.inertia(2) = 0.45;
-                     });
+                         draft.inertial.inertia(2) = 0.45; });
     updated.EditBody(child, [&](dtDynBodySpec &draft)
                      {
                          draft.pos(0) = 0.6;
+                         draft.pos(1) = -0.4;
                          draft.pos(2) = -0.2;
                          draft.quat = math::AxisAngleQuat(yAxis, -0.2);
                          draft.inertial.mass = 1.75;
                          draft.inertial.pos(0) = 0.3;
+                         draft.inertial.pos(1) = 0.15;
+                         draft.inertial.pos(2) = -0.35;
                          draft.inertial.quat = math::AxisAngleQuat(zAxis, -0.5);
                          draft.inertial.inertia(0) = 0.12;
                          draft.inertial.inertia(1) = 0.18;
-                         draft.inertial.inertia(2) = 0.24;
-                     });
+                         draft.inertial.inertia(2) = 0.24; });
     updated.EditJoint(rootJoint, [&](dtDynJointSpec &draft)
-                        {
+                      {
                             draft.pos(0) = 0.1;
                             draft.axis = yAxis;
                             draft.limited = true;
                             draft.rangeMin = -0.7;
                             draft.rangeMax = 0.8;
-                            draft.armature = 0.11;
-                        });
+                            draft.armature = 0.11; });
     updated.EditJoint(childJoint, [&](dtDynJointSpec &draft)
-                        {
+                      {
                             draft.pos(2) = -0.3;
                             draft.axis = xAxis;
                             draft.limited = true;
                             draft.rangeMin = -0.2;
                             draft.rangeMax = 0.4;
-                            draft.armature = 0.23;
-                        });
+                            draft.armature = 0.23; });
     updated.EditSite(site, [&](dtDynSiteSpec &draft)
                      {
                          draft.pos(0) = 0.4;
                          draft.pos(2) = 0.1;
-                         draft.quat = math::AxisAngleQuat(yAxis, 0.6);
-                     });
+                         draft.quat = math::AxisAngleQuat(yAxis, 0.6); });
     updated.EditActuator(actuator, [](dtDynActuatorSpec &draft)
                          { draft.gear = 42.0; });
 
@@ -3111,6 +7239,20 @@ void TestUpdateSpecMatchesPhysicalRecompile()
     const std::size_t allocationsBeforeUpdate = g_totalTestAllocations;
     assert(UpdateSpec(updated, model));
     assert(g_totalTestAllocations == allocationsBeforeUpdate);
+    const std::size_t childIndex = static_cast<std::size_t>(child);
+    const dtDynBodySpec &updatedChild = updated.Bodies()[childIndex];
+    for (dtDynIndex axis = 0; axis < 3; ++axis)
+    {
+        assert(!IsDtMathNear(updatedChild.pos(axis), updatedChild.inertial.pos(axis)));
+        assert(IsDtMathNear(model.body_ipos[childIndex](axis), updatedChild.inertial.pos(axis)));
+        assert(!IsDtMathNear(model.body_ipos[childIndex](axis), updatedChild.pos(axis)));
+    }
+    assert(!IsDtMathNear(updatedChild.quat(0), updatedChild.inertial.quat(0)));
+    for (dtDynIndex component = 0; component < 4; ++component)
+    {
+        assert(IsDtMathNear(model.body_iquat[childIndex](component),
+                            updatedChild.inertial.quat(component)));
+    }
 
     assert(model.body_parentid.data() == bodyParentStorage);
     assert(model.jnt_type.data() == jointTypeStorage);
@@ -3233,16 +7375,22 @@ void TestUpdateSpecMatchesPhysicalRecompile()
     const std::size_t allocationsBeforeZeroMassUpdate = g_totalTestAllocations;
     assert(UpdateSpec(original, model));
     assert(g_totalTestAllocations == allocationsBeforeZeroMassUpdate);
-    const std::size_t childIndex = static_cast<std::size_t>(child);
+    const dtDynBodySpec &zeroMassChild = original.Bodies()[childIndex];
     for (dtDynIndex axis = 0; axis < 3; ++axis)
     {
+        assert(!IsDtMathNear(zeroMassChild.pos(axis), zeroMassChild.inertial.pos(axis)));
+        assert(IsDtMathNear(model.body_ipos[childIndex](axis), zeroMassChild.pos(axis)));
+        assert(!IsDtMathNear(model.body_ipos[childIndex](axis), zeroMassChild.inertial.pos(axis)));
         assert(IsDtMathNear(model.body_ipos[childIndex](axis), zeroMassExpected.body_ipos[childIndex](axis)));
     }
+    assert(!IsDtMathNear(zeroMassChild.quat(0), zeroMassChild.inertial.quat(0)));
     for (dtDynIndex component = 0; component < 4; ++component)
     {
+        assert(IsDtMathNear(model.body_iquat[childIndex](component), zeroMassChild.quat(component)));
         assert(IsDtMathNear(model.body_iquat[childIndex](component),
                             zeroMassExpected.body_iquat[childIndex](component)));
     }
+    assert(ValidateModel(model, &error));
 }
 
 void TestUpdateSpecRefreshesMultiRootMultiDofCaches()
@@ -3382,6 +7530,19 @@ void TestDataResizeSeparatesBodyAndDofStorage()
     assert(!data.IsCompatible(mismatchedModel));
 }
 
+void TestDataCompatibilityRejectsLateWorkspaceMismatch()
+{
+    const dtDynModel model = CompileSpecChecked(dtDynSpec{});
+    assert(model.nroot == 0);
+
+    dtDynData data;
+    data.Resize(model);
+    assert(data.IsCompatible(model));
+
+    ResizeDenseVector(data.comVel, 2);
+    assert(!data.IsCompatible(model));
+}
+
 void TestDataResizeSupportsFullyFixedZeroDofModel()
 {
     for (const dtDynIndex siteCount : {dtDynIndex(0), dtDynIndex(1), dtDynIndex(3)})
@@ -3501,6 +7662,220 @@ void TestDtDynMathHelpersAreReusable()
     const dt::Math::Matrix<6, 6, dtDynReal> transposed = identity6.Transpose();
     assert(transposed(0, 0) == 1.0);
     assert(transposed(5, 5) == 1.0);
+}
+
+void TestQuatToMatPreservesQuarterTurn()
+{
+    dt::Math::Vector3<dtDynReal> axis;
+    axis.SetZero();
+    axis(2) = 1.0;
+    const dt::Math::Vector4<dtDynReal> quarterTurn =
+        math::AxisAngleQuat(axis, 0.5 * 3.14159265358979323846);
+    const dt::Math::Matrix3<dtDynReal> matrix = math::QuatToMat(quarterTurn);
+
+    assert(std::fabs(matrix(0, 0)) < 1.0e-12);
+    assert(std::fabs(matrix(0, 1) + 1.0) < 1.0e-12);
+    assert(std::fabs(matrix(1, 0) - 1.0) < 1.0e-12);
+    assert(std::fabs(matrix(1, 1)) < 1.0e-12);
+    assert(std::fabs(matrix(2, 2) - 1.0) < 1.0e-12);
+}
+
+void TestMulQuatPreservesQuaternionProduct()
+{
+    dt::Math::Vector4<dtDynReal> a;
+    a(0) = 0.5;
+    a(1) = 0.5;
+    a(2) = 0.5;
+    a(3) = 0.5;
+
+    dt::Math::Vector4<dtDynReal> b;
+    b(0) = 0.5;
+    b(1) = -0.5;
+    b(2) = 0.5;
+    b(3) = -0.5;
+
+    const dt::Math::Vector4<dtDynReal> product = math::MulQuat(a, b);
+    assert(std::fabs(product(0) - 0.5) < 1.0e-12);
+    assert(std::fabs(product(1) + 0.5) < 1.0e-12);
+    assert(std::fabs(product(2) - 0.5) < 1.0e-12);
+    assert(std::fabs(product(3) - 0.5) < 1.0e-12);
+}
+
+void TestMatrixRotatePreservesLinearCombination()
+{
+    dt::Math::Matrix3<dtDynReal> matrix;
+    matrix(0, 0) = 1.0;
+    matrix(0, 1) = 2.0;
+    matrix(0, 2) = 3.0;
+    matrix(1, 0) = 4.0;
+    matrix(1, 1) = 5.0;
+    matrix(1, 2) = 6.0;
+    matrix(2, 0) = 7.0;
+    matrix(2, 1) = 8.0;
+    matrix(2, 2) = 10.0;
+
+    dt::Math::Vector3<dtDynReal> vector;
+    vector(0) = 1.0;
+    vector(1) = -2.0;
+    vector(2) = 0.5;
+
+    const dt::Math::Vector3<dtDynReal> rotated = math::Rotate(matrix, vector);
+    assert(std::fabs(rotated(0) + 1.5) < 1.0e-12);
+    assert(std::fabs(rotated(1) + 3.0) < 1.0e-12);
+    assert(std::fabs(rotated(2) + 4.0) < 1.0e-12);
+}
+
+void TestNormalizeOrIdentityPreservesUnitAndZeroCases()
+{
+    dt::Math::Vector4<dtDynReal> scaledIdentity;
+    scaledIdentity(0) = 2.0;
+    scaledIdentity(1) = 0.0;
+    scaledIdentity(2) = 0.0;
+    scaledIdentity(3) = 0.0;
+    const dt::Math::Vector4<dtDynReal> normalized = math::NormalizeOrIdentity(scaledIdentity);
+    assert(std::fabs(normalized(0) - 1.0) < 1.0e-12);
+    assert(std::fabs(normalized(1)) < 1.0e-12);
+    assert(std::fabs(normalized(2)) < 1.0e-12);
+    assert(std::fabs(normalized(3)) < 1.0e-12);
+
+    dt::Math::Vector4<dtDynReal> zero;
+    zero.SetZero();
+    const dt::Math::Vector4<dtDynReal> identity = math::NormalizeOrIdentity(zero);
+    assert(std::fabs(identity(0) - 1.0) < 1.0e-12);
+    assert(std::fabs(identity(1)) < 1.0e-12);
+    assert(std::fabs(identity(2)) < 1.0e-12);
+    assert(std::fabs(identity(3)) < 1.0e-12);
+}
+
+void TestBodyInertiaInWorldPreservesRotatedPrincipalAxes()
+{
+    dtDynModel model;
+    model.body_inertia.resize(1);
+    model.body_inertia[0](0) = 2.0;
+    model.body_inertia[0](1) = 3.0;
+    model.body_inertia[0](2) = 5.0;
+
+    dtDynData data;
+    data.ximat.resize(1);
+    data.ximat[0].SetZero();
+    data.ximat[0](0, 1) = -1.0;
+    data.ximat[0](1, 0) = 1.0;
+    data.ximat[0](2, 2) = 1.0;
+
+    const dt::Math::Matrix3<dtDynReal> inertia = math::BodyInertiaInWorld(model, data, 0);
+    assert(std::fabs(inertia(0, 0) - 3.0) < 1.0e-12);
+    assert(std::fabs(inertia(1, 1) - 2.0) < 1.0e-12);
+    assert(std::fabs(inertia(2, 2) - 5.0) < 1.0e-12);
+    assert(std::fabs(inertia(0, 1)) < 1.0e-12);
+    assert(std::fabs(inertia(1, 2)) < 1.0e-12);
+    assert(std::fabs(inertia(2, 0)) < 1.0e-12);
+}
+
+void TestSpatialInertiaAtWorldOriginUsesParallelAxisTheorem()
+{
+    dt::Math::Vector3<dtDynReal> com;
+    com(0) = 1.0;
+    com(1) = 2.0;
+    com(2) = 3.0;
+    dt::Math::Matrix3<dtDynReal> rotationalInertia;
+    rotationalInertia.SetZero();
+    rotationalInertia(0, 0) = 4.0;
+    rotationalInertia(1, 1) = 5.0;
+    rotationalInertia(2, 2) = 6.0;
+
+    const dt::Math::Matrix<6, 6, dtDynReal> inertia =
+        math::SpatialInertiaAtWorldOrigin(2.0, com, rotationalInertia);
+
+    assert(inertia(0, 0) == 30.0);
+    assert(inertia(1, 1) == 25.0);
+    assert(inertia(2, 2) == 16.0);
+    assert(inertia(0, 1) == -4.0);
+    assert(inertia(1, 2) == -12.0);
+    assert(inertia(3, 3) == 2.0);
+    assert(inertia(0, 4) == -6.0);
+    assert(inertia(3, 1) == 6.0);
+}
+
+dtDynSpec MakeP89MultiJointCompileSpec()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("p89_joint_stack", 0);
+    const dtDynIndex freeJoint = spec.AddJoint(body, "p89_free", dtDynJointType::Free);
+    const dtDynIndex ballJoint = spec.AddJoint(body, "p89_ball", dtDynJointType::Ball);
+    const dtDynIndex slideJoint = spec.AddJoint(body, "p89_slide", dtDynJointType::Slide);
+
+    assert(body == 1);
+    assert(freeJoint == 0);
+    assert(ballJoint == 1);
+    assert(slideJoint == 2);
+
+    dtDynValidationError error;
+    assert(ValidateSpec(spec, &error));
+    assert(error.code == dtDynValidationCode::None);
+    return spec;
+}
+
+void TestCompileSpecCheckedPreservesP89MultiJointLoopLayout()
+{
+    const dtDynSpec spec = MakeP89MultiJointCompileSpec();
+    const dtDynIndex body = spec.BodyId("p89_joint_stack");
+    const dtDynIndex freeJoint = spec.JointId("p89_free");
+    const dtDynIndex ballJoint = spec.JointId("p89_ball");
+    const dtDynIndex slideJoint = spec.JointId("p89_slide");
+
+    const dtDynModel model = CompileSpecChecked(spec);
+    assert(model.nbody == 2);
+    assert(model.njnt == 3);
+    assert(model.nq == 12);
+    assert(model.nv == 10);
+    assert(model.nroot == 1);
+    assert(model.root_bodyid[0] == body);
+    assert(model.body_jntadr[body] == 0);
+    assert(model.body_jntnum[body] == 3);
+    assert(model.body_dofadr[body] == 0);
+    assert(model.body_dofnum[body] == 10);
+
+    assert(model.jnt_specid[0] == freeJoint);
+    assert(model.jnt_specid[1] == ballJoint);
+    assert(model.jnt_specid[2] == slideJoint);
+    assert(model.joint_names[0] == "p89_free");
+    assert(model.joint_names[1] == "p89_ball");
+    assert(model.joint_names[2] == "p89_slide");
+    assert(model.jnt_type[0] == static_cast<dtDynIndex>(dtDynJointType::Free));
+    assert(model.jnt_type[1] == static_cast<dtDynIndex>(dtDynJointType::Ball));
+    assert(model.jnt_type[2] == static_cast<dtDynIndex>(dtDynJointType::Slide));
+    assert(model.jnt_bodyid[0] == body);
+    assert(model.jnt_bodyid[1] == body);
+    assert(model.jnt_bodyid[2] == body);
+    assert(model.jnt_qposadr[0] == 0);
+    assert(model.jnt_qposadr[1] == 7);
+    assert(model.jnt_qposadr[2] == 11);
+    assert(model.jnt_dofadr[0] == 0);
+    assert(model.jnt_dofadr[1] == 6);
+    assert(model.jnt_dofadr[2] == 9);
+
+    for (dtDynIndex dof = 0; dof < 6; ++dof)
+    {
+        assert(model.dof_bodyid[dof] == body);
+        assert(model.dof_jntid[dof] == freeJoint);
+        assert(model.dof_parentid[dof] == dof - 1);
+    }
+    assert(model.dof_bodyid[6] == body);
+    assert(model.dof_bodyid[7] == body);
+    assert(model.dof_bodyid[8] == body);
+    assert(model.dof_jntid[6] == ballJoint);
+    assert(model.dof_jntid[7] == ballJoint);
+    assert(model.dof_jntid[8] == ballJoint);
+    assert(model.dof_parentid[6] == 5);
+    assert(model.dof_parentid[7] == 6);
+    assert(model.dof_parentid[8] == 7);
+    assert(model.dof_bodyid[9] == body);
+    assert(model.dof_jntid[9] == slideJoint);
+    assert(model.dof_parentid[9] == 8);
+
+    dtDynValidationError error;
+    assert(ValidateModel(model, &error));
+    assert(error.code == dtDynValidationCode::None);
 }
 
 void TestCompileSpecUsesNativeIndexLayout()
@@ -3667,6 +8042,611 @@ void TestCompileSpecSupportsMultipleMovableRoots()
     assert(std::fabs(data.comJmat(4, 1) - 1.0) < 1.0e-12);
 }
 
+void SetRootMassForComProductRegression(dtDynBodySpec &draft)
+{
+    draft.inertial.mass = 2.0;
+}
+
+void SetRootHingeAxisForComProductRegression(dtDynJointSpec &draft)
+{
+    draft.axis(1) = 1.0;
+}
+
+void TestEffectiveRootCountPreservesFallback()
+{
+    dtDynModel model;
+    model.nroot = 0;
+    assert(utils::EffectiveRootCount(model) == 1);
+    model.nroot = 2;
+    assert(utils::EffectiveRootCount(model) == 2);
+}
+
+void TestCcrbaPreservesRootMassGuardedComProducts()
+{
+    dtDynSpec spec;
+    const dtDynIndex root = spec.AddBody("root", 0);
+    spec.EditBody(root, SetRootMassForComProductRegression);
+    const dtDynIndex joint = spec.AddJoint(root, "root_hinge", dtDynJointType::Hinge);
+    spec.EditJoint(joint, SetRootHingeAxisForComProductRegression);
+
+    const dtDynModel model = CompileSpec(spec);
+    assert(model.nroot == 1);
+    assert(model.nv == 1);
+    assert(std::fabs(model.root_mass(0) - 2.0) < 1.0e-12);
+
+    dtDynData data;
+    data.Resize(model);
+    data.qvel(0) = 0.75;
+    dt::Math::Vector3<dtDynReal> gravity;
+    gravity.SetZero();
+    ComputeDynamicsCCRBA(model, data, gravity, DTDYN_CCRBA_TERM_ALL);
+
+    for (dtDynIndex row = 0; row < 3; ++row)
+    {
+        assert(std::isfinite(data.comJmat(row, 0)));
+        assert(std::isfinite(data.comJmatDot(row, 0)));
+        assert(std::isfinite(data.comVel(row)));
+        assert(std::fabs(data.comVel(row) - data.comJmat(row, 0) * data.qvel(0)) < 1.0e-12);
+    }
+}
+
+void SetUnitMassForFreeJointSpatialCrossRegression(dtDynBodySpec &draft)
+{
+    draft.inertial.mass = 1.0;
+}
+
+void TestFreeJointCdoFDotPreservesSpatialCrossTerms()
+{
+    dtDynSpec spec;
+    const dtDynIndex root = spec.AddBody("root", 0);
+    spec.EditBody(root, SetUnitMassForFreeJointSpatialCrossRegression);
+    spec.AddJoint(root, "free", dtDynJointType::Free);
+    const dtDynModel model = CompileSpec(spec);
+    assert(model.nv == 6);
+
+    dtDynData data;
+    data.Resize(model);
+    data.qpos(3) = 1.0;
+    data.qvel(0) = 0.1;
+    data.qvel(1) = 0.2;
+    data.qvel(2) = 0.3;
+    data.qvel(3) = 0.4;
+    data.qvel(4) = 0.5;
+    data.qvel(5) = 0.6;
+    dt::Math::Vector3<dtDynReal> gravity;
+    gravity.SetZero();
+    ComputeDynamicsCCRBA(model, data, gravity, DTDYN_CCRBA_TERM_ALL);
+
+    assert(std::fabs(data.cdof_dot[3](0)) < 1.0e-12);
+    assert(std::fabs(data.cdof_dot[3](1)) < 1.0e-12);
+    assert(std::fabs(data.cdof_dot[3](2)) < 1.0e-12);
+    assert(std::fabs(data.cdof_dot[3](3)) < 1.0e-12);
+    assert(std::fabs(data.cdof_dot[3](4) - 0.3) < 1.0e-12);
+    assert(std::fabs(data.cdof_dot[3](5) + 0.2) < 1.0e-12);
+    assert(std::fabs(data.cdof_dot[4](0)) < 1.0e-12);
+    assert(std::fabs(data.cdof_dot[4](1)) < 1.0e-12);
+    assert(std::fabs(data.cdof_dot[4](2)) < 1.0e-12);
+    assert(std::fabs(data.cdof_dot[4](3) + 0.3) < 1.0e-12);
+    assert(std::fabs(data.cdof_dot[4](4)) < 1.0e-12);
+    assert(std::fabs(data.cdof_dot[4](5) - 0.1) < 1.0e-12);
+    assert(std::fabs(data.cdof_dot[5](0)) < 1.0e-12);
+    assert(std::fabs(data.cdof_dot[5](1)) < 1.0e-12);
+    assert(std::fabs(data.cdof_dot[5](2)) < 1.0e-12);
+    assert(std::fabs(data.cdof_dot[5](3) - 0.2) < 1.0e-12);
+    assert(std::fabs(data.cdof_dot[5](4) + 0.1) < 1.0e-12);
+    assert(std::fabs(data.cdof_dot[5](5)) < 1.0e-12);
+}
+
+void ConfigureHalfSymmetricMotionCrossColumn2Root(dtDynBodySpec &draft)
+{
+    draft.inertial.mass = 2.0;
+    draft.inertial.inertia(0) = 1.0;
+    draft.inertial.inertia(1) = 2.0;
+    draft.inertial.inertia(2) = 3.0;
+}
+
+void ConfigureHalfSymmetricMotionCrossColumn2Child(dtDynBodySpec &draft)
+{
+    draft.pos(0) = 2.0;
+    draft.pos(1) = 3.0;
+    draft.pos(2) = 5.0;
+    draft.inertial.mass = 3.0;
+    draft.inertial.inertia(0) = 4.0;
+    draft.inertial.inertia(1) = 5.0;
+    draft.inertial.inertia(2) = 6.0;
+}
+
+dt::Math::Vector6<dtDynReal> MultiplySpatialMatrixForHalfSymmetricMotionCrossColumn2(
+    const dt::Math::Matrix<6, 6, dtDynReal> &matrix,
+    const dt::Math::Vector6<dtDynReal> &vector)
+{
+    dt::Math::Vector6<dtDynReal> out;
+    for (dtDynIndex row = 0; row < 6; ++row)
+    {
+        out(row) = 0.0;
+        for (dtDynIndex col = 0; col < 6; ++col)
+        {
+            out(row) += (matrix(row, col) * vector(col));
+        }
+    }
+    return out;
+}
+
+dt::Math::Vector6<dtDynReal> MultiplySpatialMatrixTransposeForHalfSymmetricMotionCrossColumn2(
+    const dt::Math::Matrix<6, 6, dtDynReal> &matrix,
+    const dt::Math::Vector6<dtDynReal> &vector)
+{
+    dt::Math::Vector6<dtDynReal> out;
+    for (dtDynIndex row = 0; row < 6; ++row)
+    {
+        out(row) = 0.0;
+        for (dtDynIndex col = 0; col < 6; ++col)
+        {
+            out(row) += (matrix(col, row) * vector(col));
+        }
+    }
+    return out;
+}
+
+dtDynReal SpatialDotForHalfSymmetricMotionCrossColumn2(
+    const dt::Math::Vector6<dtDynReal> &left,
+    const dt::Math::Vector6<dtDynReal> &right)
+{
+    dtDynReal out = 0.0;
+    for (dtDynIndex row = 0; row < 6; ++row)
+    {
+        out += (left(row) * right(row));
+    }
+    return out;
+}
+
+dt::Math::Matrix<6, 6, dtDynReal> BuildExpectedBiasMatrixForHalfSymmetricMotionCrossColumn2(
+    const dt::Math::Matrix<6, 6, dtDynReal> &inertia,
+    const dt::Math::Vector6<dtDynReal> &velocity,
+    dt::Math::Matrix<6, 6, dtDynReal> &symmetricPart,
+    dt::Math::Matrix<6, 6, dtDynReal> &momentumPart)
+{
+    const dt::Math::Matrix<6, 6, dtDynReal> motionCross =
+        math::CrossSpatialMotionMatrix(velocity);
+    const dt::Math::Vector6<dtDynReal> momentum =
+        MultiplySpatialMatrixForHalfSymmetricMotionCrossColumn2(inertia, velocity);
+    const dt::Math::Matrix<6, 6, dtDynReal> momentumCross =
+        math::CrossSpatialMomentumMatrix(momentum);
+    dt::Math::Matrix<6, 6, dtDynReal> out;
+
+    for (dtDynIndex row = 0; row < 6; ++row)
+    {
+        for (dtDynIndex col = 0; col < 6; ++col)
+        {
+            dtDynReal transposeInertia = 0.0;
+            dtDynReal inertiaMotion = 0.0;
+            for (dtDynIndex component = 0; component < 6; ++component)
+            {
+                transposeInertia +=
+                    (motionCross(component, row) * inertia(component, col));
+                inertiaMotion +=
+                    (inertia(row, component) * motionCross(component, col));
+            }
+            symmetricPart(row, col) = -0.5 * (transposeInertia + inertiaMotion);
+            momentumPart(row, col) = 0.5 * momentumCross(row, col);
+            out(row, col) = symmetricPart(row, col) + momentumPart(row, col);
+        }
+    }
+    return out;
+}
+
+void AssertSpatialMatrixNearForHalfSymmetricMotionCrossColumn2(
+    const dt::Math::Matrix<6, 6, dtDynReal> &actual,
+    const dt::Math::Matrix<6, 6, dtDynReal> &expected)
+{
+    for (dtDynIndex row = 0; row < 6; ++row)
+    {
+        for (dtDynIndex col = 0; col < 6; ++col)
+        {
+            assert(IsDtMathNear(actual(row, col), expected(row, col), 1.0e-10));
+        }
+    }
+}
+
+void AssertSpatialMatrixIsSymmetricForHalfSymmetricMotionCrossColumn2(
+    const dt::Math::Matrix<6, 6, dtDynReal> &matrix)
+{
+    for (dtDynIndex row = 0; row < 6; ++row)
+    {
+        for (dtDynIndex col = 0; col < 6; ++col)
+        {
+            assert(IsDtMathNear(matrix(row, col), matrix(col, row), 1.0e-10));
+        }
+    }
+}
+
+void AssertCcrbaBiasOutputsForHalfSymmetricMotionCrossColumn2(
+    const dtDynModel &model,
+    const dtDynData &data,
+    const dt::Math::Matrix<6, 6, dtDynReal> &expectedCompositeBias)
+{
+    dt::Math::Vector6<dtDynReal> expectedF1[6];
+    dt::Math::Vector6<dtDynReal> expectedF2[6];
+    dt::Math::Vector6<dtDynReal> expectedF3[6];
+
+    for (dtDynIndex dofId = 0; dofId < model.nv; ++dofId)
+    {
+        const dtDynIndex bodyId = model.dof_bodyid[static_cast<std::size_t>(dofId)];
+        const dt::Math::Vector6<dtDynReal> inertiaMotionDot =
+            MultiplySpatialMatrixForHalfSymmetricMotionCrossColumn2(
+                data.crb[static_cast<std::size_t>(bodyId)],
+                data.cdof_dot[static_cast<std::size_t>(dofId)]);
+        const dt::Math::Vector6<dtDynReal> biasMotion =
+            MultiplySpatialMatrixForHalfSymmetricMotionCrossColumn2(
+                expectedCompositeBias,
+                data.cdof[static_cast<std::size_t>(dofId)]);
+        expectedF2[dofId] = MultiplySpatialMatrixForHalfSymmetricMotionCrossColumn2(
+            data.crb[static_cast<std::size_t>(bodyId)],
+            data.cdof[static_cast<std::size_t>(dofId)]);
+        expectedF3[dofId] = MultiplySpatialMatrixTransposeForHalfSymmetricMotionCrossColumn2(
+            expectedCompositeBias,
+            data.cdof[static_cast<std::size_t>(dofId)]);
+
+        for (dtDynIndex row = 0; row < 6; ++row)
+        {
+            expectedF1[dofId](row) = inertiaMotionDot(row) + biasMotion(row);
+            assert(IsDtMathNear(data.f1[static_cast<std::size_t>(dofId)](row),
+                                expectedF1[dofId](row),
+                                1.0e-10));
+            assert(IsDtMathNear(data.f2[static_cast<std::size_t>(dofId)](row),
+                                expectedF2[dofId](row),
+                                1.0e-10));
+            assert(IsDtMathNear(data.f3[static_cast<std::size_t>(dofId)](row),
+                                expectedF3[dofId](row),
+                                1.0e-10));
+        }
+    }
+
+    dt::Math::Matrix<6, 6, dtDynReal> expectedCmat;
+    expectedCmat.SetZero();
+    for (dtDynIndex dofId = model.nv - 1; dofId >= 0; --dofId)
+    {
+        expectedCmat(dofId, dofId) = SpatialDotForHalfSymmetricMotionCrossColumn2(
+            data.cdof[static_cast<std::size_t>(dofId)], expectedF1[dofId]);
+
+        dtDynIndex ancestorDofId = model.dof_parentid[static_cast<std::size_t>(dofId)];
+        while (ancestorDofId >= 0)
+        {
+            expectedCmat(ancestorDofId, dofId) = SpatialDotForHalfSymmetricMotionCrossColumn2(
+                data.cdof[static_cast<std::size_t>(ancestorDofId)], expectedF1[dofId]);
+            expectedCmat(dofId, ancestorDofId) =
+                SpatialDotForHalfSymmetricMotionCrossColumn2(
+                    data.cdof_dot[static_cast<std::size_t>(ancestorDofId)], expectedF2[dofId]) +
+                SpatialDotForHalfSymmetricMotionCrossColumn2(
+                    data.cdof[static_cast<std::size_t>(ancestorDofId)], expectedF3[dofId]);
+            ancestorDofId = model.dof_parentid[static_cast<std::size_t>(ancestorDofId)];
+        }
+    }
+
+    for (dtDynIndex row = 0; row < model.nv; ++row)
+    {
+        dtDynReal expectedCoriolis = 0.0;
+        for (dtDynIndex col = 0; col < model.nv; ++col)
+        {
+            assert(IsDtMathNear(data.Cmat(row, col), expectedCmat(row, col), 1.0e-10));
+            expectedCoriolis += (expectedCmat(row, col) * data.qvel(col));
+        }
+        assert(IsDtMathNear(data.coriolisTorq(row), expectedCoriolis, 1.0e-10));
+        assert(IsDtMathNear(data.nonlinTorq(row), expectedCoriolis, 1.0e-10));
+    }
+}
+
+void TestCcrbaHalfSymmetricMotionCrossColumn2UsesPhysicalNonzeroTerms()
+{
+    dtDynSpec spec;
+    const dtDynIndex root = spec.AddBody("half_symmetric_root", 0);
+    const dtDynIndex child = spec.AddBody("half_symmetric_child", root);
+    spec.EditBody(root, ConfigureHalfSymmetricMotionCrossColumn2Root);
+    spec.EditBody(child, ConfigureHalfSymmetricMotionCrossColumn2Child);
+    spec.AddJoint(root, "half_symmetric_free", dtDynJointType::Free);
+
+    const dtDynModel model = CompileSpecChecked(spec);
+    assert(model.nbody == 3);
+    assert(model.nroot == 1);
+    assert(model.root_bodyid[0] == root);
+    assert(model.body_parentid[static_cast<std::size_t>(root)] == 0);
+    assert(model.body_parentid[static_cast<std::size_t>(child)] == root);
+    assert(model.nv == 6);
+    assert(IsDtMathNear(model.root_mass(0), 5.0));
+    for (dtDynIndex dofId = 0; dofId < model.nv; ++dofId)
+    {
+        assert(model.dof_bodyid[static_cast<std::size_t>(dofId)] == root);
+    }
+
+    dtDynData data;
+    data.Resize(model);
+    data.qpos(3) = 1.0;
+    data.qvel(0) = 4.0;
+    data.qvel(1) = 5.0;
+    data.qvel(2) = 6.0;
+    data.qvel(3) = 1.0;
+    data.qvel(4) = 2.0;
+    data.qvel(5) = 3.0;
+    dt::Math::Vector3<dtDynReal> gravity;
+    gravity.SetZero();
+    ComputeDynamicsCCRBA(model, data, gravity, DTDYN_CCRBA_TERM_ALL);
+
+    assert(data.BmatCompNonzero[static_cast<std::size_t>(root)] == 1);
+    assert(data.BmatCompNonzero[static_cast<std::size_t>(child)] == 1);
+    assert(IsDtMathNear(data.subtree_com[static_cast<std::size_t>(root)](0), 6.0 / 5.0));
+    assert(IsDtMathNear(data.subtree_com[static_cast<std::size_t>(root)](1), 9.0 / 5.0));
+    assert(IsDtMathNear(data.subtree_com[static_cast<std::size_t>(root)](2), 3.0));
+    assert(IsDtMathNear(data.xipos[static_cast<std::size_t>(child)](0), 2.0));
+    assert(IsDtMathNear(data.xipos[static_cast<std::size_t>(child)](1), 3.0));
+    assert(IsDtMathNear(data.xipos[static_cast<std::size_t>(child)](2), 5.0));
+
+    const dtDynReal expectedChildVelocity[6] = {1.0, 2.0, 3.0, 23.0 / 5.0, 28.0 / 5.0, 27.0 / 5.0};
+    for (dtDynIndex row = 0; row < 6; ++row)
+    {
+        assert(IsDtMathNear(data.cvel[static_cast<std::size_t>(child)](row),
+                            expectedChildVelocity[row]));
+        assert(std::fabs(data.cvel[static_cast<std::size_t>(child)](row)) > 1.0e-12);
+    }
+
+    const dt::Math::Matrix<6, 6, dtDynReal> &childInertia =
+        data.cinert[static_cast<std::size_t>(child)];
+    assert(IsDtMathNear(childInertia(4, 0), -6.0));
+    assert(IsDtMathNear(childInertia(5, 0), 18.0 / 5.0));
+    assert(IsDtMathNear(childInertia(3, 1), 6.0));
+    assert(IsDtMathNear(childInertia(5, 1), -12.0 / 5.0));
+    assert(IsDtMathNear(childInertia(3, 2), -18.0 / 5.0));
+    assert(IsDtMathNear(childInertia(4, 2), 12.0 / 5.0));
+
+    const dtDynReal column3FirstProduct =
+        data.cvel[static_cast<std::size_t>(child)](2) * childInertia(4, 0);
+    const dtDynReal column3SecondProduct =
+        -data.cvel[static_cast<std::size_t>(child)](1) * childInertia(5, 0);
+    const dtDynReal column4FirstProduct =
+        -data.cvel[static_cast<std::size_t>(child)](2) * childInertia(3, 1);
+    const dtDynReal column4SecondProduct =
+        data.cvel[static_cast<std::size_t>(child)](0) * childInertia(5, 1);
+    const dtDynReal column5FirstProduct =
+        data.cvel[static_cast<std::size_t>(child)](1) * childInertia(3, 2);
+    const dtDynReal column5SecondProduct =
+        -data.cvel[static_cast<std::size_t>(child)](0) * childInertia(4, 2);
+
+    assert(IsDtMathNear(column3FirstProduct, -18.0));
+    assert(IsDtMathNear(column3SecondProduct, -36.0 / 5.0));
+    assert(IsDtMathNear(column4FirstProduct, -18.0));
+    assert(IsDtMathNear(column4SecondProduct, -12.0 / 5.0));
+    assert(IsDtMathNear(column5FirstProduct, -36.0 / 5.0));
+    assert(IsDtMathNear(column5SecondProduct, -12.0 / 5.0));
+    assert(std::fabs(column3FirstProduct) > 1.0e-12);
+    assert(std::fabs(column3SecondProduct) > 1.0e-12);
+    assert(std::fabs(column4FirstProduct) > 1.0e-12);
+    assert(std::fabs(column4SecondProduct) > 1.0e-12);
+    assert(std::fabs(column5FirstProduct) > 1.0e-12);
+    assert(std::fabs(column5SecondProduct) > 1.0e-12);
+    assert(IsDtMathNear(-0.5 * (column3FirstProduct + column3SecondProduct), 63.0 / 5.0));
+    assert(IsDtMathNear(-0.5 * (column4FirstProduct + column4SecondProduct), 51.0 / 5.0));
+    assert(IsDtMathNear(-0.5 * (column5FirstProduct + column5SecondProduct), 24.0 / 5.0));
+
+    dt::Math::Matrix<6, 6, dtDynReal> expectedChildSymmetricPart;
+    dt::Math::Matrix<6, 6, dtDynReal> expectedChildMomentumPart;
+    const dt::Math::Matrix<6, 6, dtDynReal> expectedChildBias =
+        BuildExpectedBiasMatrixForHalfSymmetricMotionCrossColumn2(
+            childInertia,
+            data.cvel[static_cast<std::size_t>(child)],
+            expectedChildSymmetricPart,
+            expectedChildMomentumPart);
+    AssertSpatialMatrixNearForHalfSymmetricMotionCrossColumn2(
+        data.BmatComp[static_cast<std::size_t>(child)], expectedChildBias);
+    AssertSpatialMatrixIsSymmetricForHalfSymmetricMotionCrossColumn2(expectedChildSymmetricPart);
+
+    dt::Math::Matrix<6, 6, dtDynReal> observedChildSymmetricPart =
+        data.BmatComp[static_cast<std::size_t>(child)];
+    for (dtDynIndex row = 0; row < 6; ++row)
+    {
+        for (dtDynIndex col = 0; col < 6; ++col)
+        {
+            observedChildSymmetricPart(row, col) -= expectedChildMomentumPart(row, col);
+        }
+    }
+    AssertSpatialMatrixNearForHalfSymmetricMotionCrossColumn2(observedChildSymmetricPart,
+                                                              expectedChildSymmetricPart);
+    AssertSpatialMatrixIsSymmetricForHalfSymmetricMotionCrossColumn2(observedChildSymmetricPart);
+
+    dt::Math::Matrix<6, 6, dtDynReal> expectedRootSymmetricPart;
+    dt::Math::Matrix<6, 6, dtDynReal> expectedRootMomentumPart;
+    dt::Math::Matrix<6, 6, dtDynReal> expectedCompositeBias =
+        BuildExpectedBiasMatrixForHalfSymmetricMotionCrossColumn2(
+            data.cinert[static_cast<std::size_t>(root)],
+            data.cvel[static_cast<std::size_t>(root)],
+            expectedRootSymmetricPart,
+            expectedRootMomentumPart);
+    for (dtDynIndex row = 0; row < 6; ++row)
+    {
+        for (dtDynIndex col = 0; col < 6; ++col)
+        {
+            expectedCompositeBias(row, col) += expectedChildBias(row, col);
+        }
+    }
+    AssertSpatialMatrixNearForHalfSymmetricMotionCrossColumn2(
+        data.BmatComp[static_cast<std::size_t>(root)], expectedCompositeBias);
+    assert(data.BmatCompNonzero[0] == 1);
+    AssertSpatialMatrixNearForHalfSymmetricMotionCrossColumn2(data.BmatComp[0],
+                                                              expectedCompositeBias);
+    AssertCcrbaBiasOutputsForHalfSymmetricMotionCrossColumn2(model, data, expectedCompositeBias);
+
+    data.qvel.SetZero();
+    ComputeDynamicsCCRBA(model, data, gravity, DTDYN_CCRBA_TERM_ALL);
+    assert(data.BmatCompNonzero[0] == 0);
+    assert(data.BmatCompNonzero[static_cast<std::size_t>(root)] == 0);
+    assert(data.BmatCompNonzero[static_cast<std::size_t>(child)] == 0);
+    for (dtDynIndex dofId = 0; dofId < model.nv; ++dofId)
+    {
+        for (dtDynIndex row = 0; row < 6; ++row)
+        {
+            assert(IsDtMathNear(data.f1[static_cast<std::size_t>(dofId)](row), 0.0));
+            assert(IsDtMathNear(data.f3[static_cast<std::size_t>(dofId)](row), 0.0));
+        }
+    }
+    for (dtDynIndex row = 0; row < model.nv; ++row)
+    {
+        for (dtDynIndex col = 0; col < model.nv; ++col)
+        {
+            assert(IsDtMathNear(data.Cmat(row, col), 0.0));
+        }
+    }
+}
+
+void ConfigureSpatialMulIntoAllComponentRoot(dtDynBodySpec &draft)
+{
+    draft.inertial.mass = 2.0;
+    draft.inertial.inertia(0) = 2.0;
+    draft.inertial.inertia(1) = 3.0;
+    draft.inertial.inertia(2) = 4.0;
+}
+
+void ConfigureSpatialMulIntoAllComponentChild(dtDynBodySpec &draft)
+{
+    draft.pos(0) = 1.0;
+    draft.pos(1) = 1.0;
+    draft.pos(2) = 1.0;
+    draft.inertial.mass = 3.0;
+    draft.inertial.pos(0) = 2.0;
+    draft.inertial.pos(1) = 3.0;
+    draft.inertial.pos(2) = 5.0;
+    draft.inertial.inertia(0) = 5.0;
+    draft.inertial.inertia(1) = 6.0;
+    draft.inertial.inertia(2) = 7.0;
+}
+
+void ConfigureSpatialMulIntoAllComponentHinge(dtDynJointSpec &draft)
+{
+    const dtDynReal inverseAxisNorm = 1.0 / std::sqrt(14.0);
+    draft.axis(0) = inverseAxisNorm;
+    draft.axis(1) = 2.0 * inverseAxisNorm;
+    draft.axis(2) = 3.0 * inverseAxisNorm;
+}
+
+void AssertSpatialMulIntoAllComponentContributions(
+    const dt::Math::Matrix<6, 6, dtDynReal> &inertia,
+    const dt::Math::Vector6<dtDynReal> &motion)
+{
+    assert(std::fabs(inertia(0, 0) - (749.0 / 25.0)) < 1.0e-12);
+    assert(std::fabs(inertia(0, 1) + (144.0 / 25.0)) < 1.0e-12);
+    assert(std::fabs(inertia(0, 2) + (216.0 / 25.0)) < 1.0e-12);
+    assert(std::fabs(inertia(1, 3) - (36.0 / 5.0)) < 1.0e-12);
+    assert(std::fabs(inertia(0, 4) + (36.0 / 5.0)) < 1.0e-12);
+    assert(std::fabs(inertia(0, 5) - (24.0 / 5.0)) < 1.0e-12);
+
+    assert(std::fabs(inertia(0, 0) * motion(0)) > 1.0e-12);
+    assert(std::fabs(inertia(0, 1) * motion(1)) > 1.0e-12);
+    assert(std::fabs(inertia(0, 2) * motion(2)) > 1.0e-12);
+    assert(std::fabs(inertia(1, 3) * motion(3)) > 1.0e-12);
+    assert(std::fabs(inertia(0, 4) * motion(4)) > 1.0e-12);
+    assert(std::fabs(inertia(0, 5) * motion(5)) > 1.0e-12);
+}
+
+void TestCcrbaSpatialMulIntoZeroDofDotCoversAllComponents()
+{
+    dtDynSpec spec;
+    const dtDynIndex root = spec.AddBody("spatial_mul_root", 0);
+    const dtDynIndex child = spec.AddBody("spatial_mul_child", root);
+    spec.EditBody(root, ConfigureSpatialMulIntoAllComponentRoot);
+    spec.EditBody(child, ConfigureSpatialMulIntoAllComponentChild);
+    const dtDynIndex hinge = spec.AddJoint(child, "spatial_mul_hinge", dtDynJointType::Hinge);
+    spec.EditJoint(hinge, ConfigureSpatialMulIntoAllComponentHinge);
+
+    const dtDynModel model = CompileSpecChecked(spec);
+    assert(model.nroot == 1);
+    assert(model.nv == 1);
+    assert(model.dof_bodyid[0] == child);
+    assert(std::fabs(model.root_mass(0) - 5.0) < 1.0e-12);
+
+    dtDynData data;
+    data.Resize(model);
+    data.qpos(0) = 0.0;
+    data.qvel(0) = 0.0;
+    dt::Math::Vector3<dtDynReal> gravity;
+    gravity.SetZero();
+    ComputeDynamicsCCRBA(model, data, gravity, DTDYN_CCRBA_TERM_ALL);
+
+    // The root CoM is (9/5, 12/5, 18/5), so this zero-configuration hinge
+    // column is (1, 2, 3, 1, -1/5, -1/5) / sqrt(14). The child spatial inertia
+    // about that root CoM maps it to (-7, 114/5, 99/5, 3, 3, -3) / sqrt(14).
+    const dtDynReal inverseAxisNorm = 1.0 / std::sqrt(14.0);
+    const dtDynReal expectedMotion[6] = {inverseAxisNorm,
+                                         2.0 * inverseAxisNorm,
+                                         3.0 * inverseAxisNorm,
+                                         inverseAxisNorm,
+                                         -0.2 * inverseAxisNorm,
+                                         -0.2 * inverseAxisNorm};
+    const dtDynReal expectedForce[6] = {-7.0 * inverseAxisNorm,
+                                        (114.0 / 5.0) * inverseAxisNorm,
+                                        (99.0 / 5.0) * inverseAxisNorm,
+                                        3.0 * inverseAxisNorm,
+                                        3.0 * inverseAxisNorm,
+                                        -3.0 * inverseAxisNorm};
+    const dt::Math::Vector6<dtDynReal> &motion = data.cdof[0];
+    const dt::Math::Vector6<dtDynReal> &motionDot = data.cdof_dot[0];
+    const dt::Math::Vector6<dtDynReal> &force = data.f2[0];
+
+    for (dtDynIndex component = 0; component < 6; ++component)
+    {
+        assert(std::fabs(motion(component) - expectedMotion[component]) < 1.0e-12);
+        assert(std::fabs(motion(component)) > 1.0e-12);
+        assert(std::fabs(motionDot(component)) < 1.0e-12);
+        assert(std::fabs(data.f1[0](component)) < 1.0e-12);
+        assert(std::fabs(force(component) - expectedForce[component]) < 1.0e-12);
+    }
+
+    AssertSpatialMulIntoAllComponentContributions(data.crb[child], motion);
+    assert(force(0) < 0.0);
+    assert(force(1) > 0.0);
+    assert(force(2) > 0.0);
+    assert(force(3) > 0.0);
+    assert(force(4) > 0.0);
+    assert(force(5) < 0.0);
+}
+
+void ConfigureAngularPointMotionRegressionBody(dtDynBodySpec &draft)
+{
+    draft.inertial.mass = 1.0;
+    draft.inertial.pos(0) = 1.0;
+    draft.inertial.pos(1) = 2.0;
+    draft.inertial.pos(2) = 3.0;
+}
+
+void ConfigureAngularPointMotionRegressionJoint(dtDynJointSpec &draft)
+{
+    const dtDynReal inverseAxisNorm = 1.0 / std::sqrt(77.0);
+    draft.axis(0) = 4.0 * inverseAxisNorm;
+    draft.axis(1) = 5.0 * inverseAxisNorm;
+    draft.axis(2) = 6.0 * inverseAxisNorm;
+}
+
+void TestAngularPointMotionSubspacePreservesCrossTerms()
+{
+    dtDynSpec spec;
+    const dtDynIndex root = spec.AddBody("root", 0);
+    spec.EditBody(root, ConfigureAngularPointMotionRegressionBody);
+    const dtDynIndex hinge = spec.AddJoint(root, "hinge", dtDynJointType::Hinge);
+    spec.EditJoint(hinge, ConfigureAngularPointMotionRegressionJoint);
+    const dtDynModel model = CompileSpec(spec);
+    assert(model.nv == 1);
+
+    dtDynData data;
+    data.Resize(model);
+    dt::Math::Vector3<dtDynReal> gravity;
+    gravity.SetZero();
+    ComputeDynamicsCCRBA(model, data, gravity, DTDYN_CCRBA_TERM_ALL);
+
+    const dtDynReal inverseAxisNorm = 1.0 / std::sqrt(77.0);
+    assert(std::fabs(data.cdof[0](0) - (4.0 * inverseAxisNorm)) < 1.0e-12);
+    assert(std::fabs(data.cdof[0](1) - (5.0 * inverseAxisNorm)) < 1.0e-12);
+    assert(std::fabs(data.cdof[0](2) - (6.0 * inverseAxisNorm)) < 1.0e-12);
+    assert(std::fabs(data.cdof[0](3) - (3.0 * inverseAxisNorm)) < 1.0e-12);
+    assert(std::fabs(data.cdof[0](4) + (6.0 * inverseAxisNorm)) < 1.0e-12);
+    assert(std::fabs(data.cdof[0](5) - (3.0 * inverseAxisNorm)) < 1.0e-12);
+}
+
 void TestCompileSpecSupportsFloatingBaseQuadrupedTree()
 {
     dtDynSpec spec;
@@ -3746,6 +8726,84 @@ void TestCompileSpecSupportsFloatingBaseQuadrupedTree()
     assert(data.Mmat(6, 6) > 0.0);
     assert(std::fabs(data.Mmat(8, 9) - data.Mmat(9, 8)) < 1.0e-12);
     assert(std::fabs(data.nonlinTorq(0) - data.coriolisTorq(0)) < 1.0e-9);
+}
+
+void ConfigureBallForwardKinematicsRegressionBody(dtDynBodySpec &draft)
+{
+    draft.pos(0) = 4.0;
+    draft.pos(1) = -2.0;
+    draft.pos(2) = 7.0;
+}
+
+void ConfigureBallForwardKinematicsRegressionJoint(dtDynJointSpec &draft)
+{
+    draft.pos(0) = 1.0;
+    draft.pos(1) = 2.0;
+    draft.pos(2) = 3.0;
+}
+
+void ConfigureBallForwardKinematicsRegressionSite(dtDynSiteSpec &draft)
+{
+    draft.pos(0) = 2.0;
+    draft.pos(1) = -1.0;
+    draft.pos(2) = 4.0;
+}
+
+void TestForwardKinematicsAppliesBallJointQuaternionPose()
+{
+    dtDynSpec spec;
+    const dtDynIndex body = spec.AddBody("ball_body", 0);
+    const dtDynIndex joint = spec.AddJoint(body, "ball_joint", dtDynJointType::Ball);
+    const dtDynIndex site = spec.AddSite(body, "ball_site");
+    spec.EditBody(body, ConfigureBallForwardKinematicsRegressionBody);
+    spec.EditJoint(joint, ConfigureBallForwardKinematicsRegressionJoint);
+    spec.EditSite(site, ConfigureBallForwardKinematicsRegressionSite);
+
+    const dtDynModel model = CompileSpecChecked(spec);
+    assert(model.nq == 4);
+    assert(model.nv == 3);
+    assert(model.jnt_qposadr[static_cast<std::size_t>(joint)] == 0);
+    assert(model.jnt_dofadr[static_cast<std::size_t>(joint)] == 0);
+
+    dtDynData data;
+    data.Resize(model);
+    data.qpos(0) = 0.5;
+    data.qpos(1) = 0.5;
+    data.qpos(2) = 0.5;
+    data.qpos(3) = 0.5;
+    data.qvel(0) = 0.25;
+    data.qvel(1) = -0.5;
+    data.qvel(2) = 0.75;
+
+    ForwardKinematics(model, data);
+
+    assert(std::fabs(data.xquat[static_cast<std::size_t>(body)](0) - 0.5) < 1.0e-12);
+    assert(std::fabs(data.xquat[static_cast<std::size_t>(body)](1) - 0.5) < 1.0e-12);
+    assert(std::fabs(data.xquat[static_cast<std::size_t>(body)](2) - 0.5) < 1.0e-12);
+    assert(std::fabs(data.xquat[static_cast<std::size_t>(body)](3) - 0.5) < 1.0e-12);
+
+    assert(std::fabs(data.xmat[static_cast<std::size_t>(body)](0, 0)) < 1.0e-12);
+    assert(std::fabs(data.xmat[static_cast<std::size_t>(body)](0, 1)) < 1.0e-12);
+    assert(std::fabs(data.xmat[static_cast<std::size_t>(body)](0, 2) - 1.0) < 1.0e-12);
+    assert(std::fabs(data.xmat[static_cast<std::size_t>(body)](1, 0) - 1.0) < 1.0e-12);
+    assert(std::fabs(data.xmat[static_cast<std::size_t>(body)](1, 1)) < 1.0e-12);
+    assert(std::fabs(data.xmat[static_cast<std::size_t>(body)](1, 2)) < 1.0e-12);
+    assert(std::fabs(data.xmat[static_cast<std::size_t>(body)](2, 0)) < 1.0e-12);
+    assert(std::fabs(data.xmat[static_cast<std::size_t>(body)](2, 1) - 1.0) < 1.0e-12);
+    assert(std::fabs(data.xmat[static_cast<std::size_t>(body)](2, 2)) < 1.0e-12);
+
+    assert(std::fabs(data.xanchor[static_cast<std::size_t>(joint)](0) - 5.0) < 1.0e-12);
+    assert(std::fabs(data.xanchor[static_cast<std::size_t>(joint)](1)) < 1.0e-12);
+    assert(std::fabs(data.xanchor[static_cast<std::size_t>(joint)](2) - 10.0) < 1.0e-12);
+    assert(std::fabs(data.xpos[static_cast<std::size_t>(body)](0) - 2.0) < 1.0e-12);
+    assert(std::fabs(data.xpos[static_cast<std::size_t>(body)](1) + 1.0) < 1.0e-12);
+    assert(std::fabs(data.xpos[static_cast<std::size_t>(body)](2) - 8.0) < 1.0e-12);
+    assert(std::fabs(data.site_xpos[static_cast<std::size_t>(site)](0) - 6.0) < 1.0e-12);
+    assert(std::fabs(data.site_xpos[static_cast<std::size_t>(site)](1) - 1.0) < 1.0e-12);
+    assert(std::fabs(data.site_xpos[static_cast<std::size_t>(site)](2) - 7.0) < 1.0e-12);
+    assert(std::fabs(data.qvel(0) - 0.25) < 1.0e-12);
+    assert(std::fabs(data.qvel(1) + 0.5) < 1.0e-12);
+    assert(std::fabs(data.qvel(2) - 0.75) < 1.0e-12);
 }
 
 void TestForwardKinematicsAndPointJacobianForFixedChain()
@@ -3865,7 +8923,7 @@ void TestIndexedJacobiansOnlyRefreshRequestedIds()
     spec.EditJoint(hinge, [&](dtDynJointSpec &draft)
                    { draft.axis(2) = 1.0; });
 
-    const dtDynModel model = CompileSpec(spec);
+    const dtDynModel model = CompileSpecChecked(spec);
 
     dtDynData data;
     data.Resize(model);
@@ -4010,6 +9068,569 @@ void TestIndexedJacobiansRefreshFloatingBaseBodyAndTaskSite()
     }
 }
 
+constexpr dtDynReal kP52JacobianTolerance = 1.0e-12;
+constexpr dtDynReal kAllocationProofTolerance = 1.0e-9;
+
+void ConfigureP52FreeRootBody(dtDynBodySpec &draft)
+{
+    draft.pos(0) = 0.25;
+    draft.pos(1) = -0.35;
+    draft.pos(2) = 0.45;
+    draft.inertial.mass = 2.0;
+    draft.inertial.pos(0) = 0.15;
+    draft.inertial.pos(1) = -0.20;
+    draft.inertial.pos(2) = 0.30;
+    draft.inertial.inertia(0) = 0.30;
+    draft.inertial.inertia(1) = 0.40;
+    draft.inertial.inertia(2) = 0.50;
+}
+
+void ConfigureP52BallBody(dtDynBodySpec &draft)
+{
+    draft.pos(0) = 0.55;
+    draft.pos(1) = -0.65;
+    draft.pos(2) = 0.75;
+    draft.inertial.mass = 1.5;
+    draft.inertial.pos(0) = -0.10;
+    draft.inertial.pos(1) = 0.25;
+    draft.inertial.pos(2) = 0.35;
+    draft.inertial.inertia(0) = 0.25;
+    draft.inertial.inertia(1) = 0.35;
+    draft.inertial.inertia(2) = 0.45;
+}
+
+void ConfigureP52BallJoint(dtDynJointSpec &draft)
+{
+    draft.pos(0) = -0.30;
+    draft.pos(1) = 0.40;
+    draft.pos(2) = 0.50;
+}
+
+void ConfigureP52TaskSite(dtDynSiteSpec &draft)
+{
+    draft.pos(0) = 0.60;
+    draft.pos(1) = -0.45;
+    draft.pos(2) = 0.35;
+}
+
+void SetP52NormalizedQuaternion(dtDynData &data,
+                                const dtDynIndex qposAddress,
+                                const dtDynReal w,
+                                const dtDynReal x,
+                                const dtDynReal y,
+                                const dtDynReal z)
+{
+    const dtDynReal norm = std::sqrt((w * w) + (x * x) + (y * y) + (z * z));
+    assert(norm > kP52JacobianTolerance);
+    data.qpos(qposAddress + 0) = w / norm;
+    data.qpos(qposAddress + 1) = x / norm;
+    data.qpos(qposAddress + 2) = y / norm;
+    data.qpos(qposAddress + 3) = z / norm;
+
+    const dtDynReal normalizedSquaredNorm =
+        (data.qpos(qposAddress + 0) * data.qpos(qposAddress + 0)) +
+        (data.qpos(qposAddress + 1) * data.qpos(qposAddress + 1)) +
+        (data.qpos(qposAddress + 2) * data.qpos(qposAddress + 2)) +
+        (data.qpos(qposAddress + 3) * data.qpos(qposAddress + 3));
+    assert(std::fabs(normalizedSquaredNorm - 1.0) < kP52JacobianTolerance);
+}
+
+dt::Math::Vector3<dtDynReal> ReadP52QposPosition(const dtDynData &data,
+                                                 const dtDynIndex qposAddress)
+{
+    dt::Math::Vector3<dtDynReal> position;
+    for (dtDynIndex axis = 0; axis < 3; ++axis)
+    {
+        position(axis) = data.qpos(qposAddress + axis);
+    }
+    return position;
+}
+
+dt::Math::Vector4<dtDynReal> ReadP52QposQuaternion(const dtDynData &data,
+                                                   const dtDynIndex qposAddress)
+{
+    dt::Math::Vector4<dtDynReal> quaternion;
+    for (dtDynIndex component = 0; component < 4; ++component)
+    {
+        quaternion(component) = data.qpos(qposAddress + component);
+    }
+    return quaternion;
+}
+
+void AssertP52Vector3Matches(const dt::Math::Vector3<dtDynReal> &actual,
+                             const dt::Math::Vector3<dtDynReal> &expected)
+{
+    for (dtDynIndex axis = 0; axis < 3; ++axis)
+    {
+        assert(std::fabs(actual(axis) - expected(axis)) < kP52JacobianTolerance);
+    }
+}
+
+void AssertP52Vector4Matches(const dt::Math::Vector4<dtDynReal> &actual,
+                             const dt::Math::Vector4<dtDynReal> &expected)
+{
+    for (dtDynIndex component = 0; component < 4; ++component)
+    {
+        assert(std::fabs(actual(component) - expected(component)) < kP52JacobianTolerance);
+    }
+}
+
+void AssertP52Matrix3Matches(const dt::Math::Matrix3<dtDynReal> &actual,
+                             const dt::Math::Matrix3<dtDynReal> &expected)
+{
+    for (dtDynIndex row = 0; row < 3; ++row)
+    {
+        for (dtDynIndex column = 0; column < 3; ++column)
+        {
+            assert(std::fabs(actual(row, column) - expected(row, column)) < kP52JacobianTolerance);
+        }
+    }
+}
+
+void AssertP52BallKinematicFrames(const dtDynModel &model,
+                                  const dtDynData &data,
+                                  const dtDynIndex freeJoint,
+                                  const dtDynIndex ballJoint,
+                                  const dtDynIndex ballBody,
+                                  const dtDynIndex taskSite)
+{
+    const std::size_t freeJointIndex = static_cast<std::size_t>(freeJoint);
+    const std::size_t ballJointIndex = static_cast<std::size_t>(ballJoint);
+    const std::size_t ballBodyIndex = static_cast<std::size_t>(ballBody);
+    const std::size_t taskSiteIndex = static_cast<std::size_t>(taskSite);
+    const dtDynIndex freeQposAddress = model.jnt_qposadr[freeJointIndex];
+    const dtDynIndex ballQposAddress = model.jnt_qposadr[ballJointIndex];
+    const dt::Math::Vector3<dtDynReal> rootPosition = ReadP52QposPosition(data, freeQposAddress);
+    const dt::Math::Vector4<dtDynReal> rootQuaternion =
+        ReadP52QposQuaternion(data, freeQposAddress + 3);
+    const dt::Math::Vector4<dtDynReal> ballQuaternion =
+        ReadP52QposQuaternion(data, ballQposAddress);
+    const dt::Math::Matrix3<dtDynReal> rootMatrix = math::QuatToMat(rootQuaternion);
+    const dt::Math::Vector3<dtDynReal> beforeBallPosition =
+        rootPosition + math::Rotate(rootMatrix, model.body_pos[ballBodyIndex]);
+    const dt::Math::Vector4<dtDynReal> beforeBallQuaternion =
+        math::MulQuat(rootQuaternion, model.body_quat[ballBodyIndex]);
+    const dt::Math::Matrix3<dtDynReal> beforeBallMatrix = math::QuatToMat(beforeBallQuaternion);
+    const dt::Math::Vector3<dtDynReal> expectedAnchor =
+        beforeBallPosition + math::Rotate(beforeBallMatrix, model.jnt_pos[ballJointIndex]);
+    const dt::Math::Vector4<dtDynReal> expectedBallQuaternion =
+        math::MulQuat(beforeBallQuaternion, ballQuaternion);
+    const dt::Math::Matrix3<dtDynReal> expectedBallMatrix = math::QuatToMat(expectedBallQuaternion);
+    const dt::Math::Vector3<dtDynReal> expectedBallPosition =
+        expectedAnchor - math::Rotate(expectedBallMatrix, model.jnt_pos[ballJointIndex]);
+    const dt::Math::Vector3<dtDynReal> expectedSitePosition =
+        expectedBallPosition + math::Rotate(expectedBallMatrix, model.site_pos[taskSiteIndex]);
+
+    AssertP52Vector4Matches(data.xquat[ballBodyIndex], expectedBallQuaternion);
+    AssertP52Matrix3Matches(data.xmat[ballBodyIndex], expectedBallMatrix);
+    AssertP52Vector3Matches(data.xanchor[ballJointIndex], expectedAnchor);
+    AssertP52Vector3Matches(data.xpos[ballBodyIndex], expectedBallPosition);
+    AssertP52Vector3Matches(data.site_xpos[taskSiteIndex], expectedSitePosition);
+    assert(std::fabs(data.xquat[ballBodyIndex](0) - 1.0) > kP52JacobianTolerance);
+}
+
+void AssertP52MatrixMatches(const dtDynDenseMatrix &actual,
+                            const dtDynDenseMatrix &expected,
+                            const dtDynIndex nv)
+{
+    assert(actual.GetRowSize() == 3U);
+    assert(actual.GetColSize() == ToDtMathDim(nv));
+    assert(expected.GetRowSize() == 3U);
+    assert(expected.GetColSize() == ToDtMathDim(nv));
+    for (dtDynIndex row = 0; row < 3; ++row)
+    {
+        for (dtDynIndex column = 0; column < nv; ++column)
+        {
+            assert(std::fabs(actual(row, column) - expected(row, column)) < kP52JacobianTolerance);
+        }
+    }
+}
+
+void AssertP52CachedMatricesMatchSeparatePointApis(const dtDynModel &model,
+                                                   const dtDynData &data,
+                                                   const dtDynIndex bodyId,
+                                                   const dt::Math::Vector3<dtDynReal> &point,
+                                                   const dtDynDenseMatrix &cachedJacp,
+                                                   const dtDynDenseMatrix &cachedJacr,
+                                                   const dtDynDenseMatrix &cachedJacpDot,
+                                                   const dtDynDenseMatrix &cachedJacrDot)
+{
+    dtDynDenseMatrix pointJacp;
+    dtDynDenseMatrix pointJacr;
+    dtDynDenseMatrix pointJacpDot;
+    dtDynDenseMatrix pointJacrDot;
+    ComputePointJacobian(model, data, bodyId, point, pointJacp, pointJacr);
+    ComputePointJacobianDot(model, data, bodyId, point, pointJacpDot, pointJacrDot);
+
+    AssertP52MatrixMatches(cachedJacp, pointJacp, model.nv);
+    AssertP52MatrixMatches(cachedJacr, pointJacr, model.nv);
+    AssertP52MatrixMatches(cachedJacpDot, pointJacpDot, model.nv);
+    AssertP52MatrixMatches(cachedJacrDot, pointJacrDot, model.nv);
+}
+
+bool AssertP52CachedDerivativeColumnUsesFinalBodyVelocity(const dtDynModel &model,
+                                                          const dtDynData &data,
+                                                          const dtDynIndex dofId,
+                                                          const dtDynDenseMatrix &cachedJacrDot)
+{
+    const std::size_t dofIndex = static_cast<std::size_t>(dofId);
+    const dtDynIndex dofBody = model.dof_bodyid[dofIndex];
+    const dt::Math::Vector6<dtDynReal> expected = math::CrossSpatialMotion(
+        data.cvel[static_cast<std::size_t>(dofBody)], data.cdof[dofIndex]);
+    bool hasNonzeroSignal = false;
+    bool differsFromPreparedDerivative = false;
+    for (dtDynIndex row = 0; row < 3; ++row)
+    {
+        assert(std::fabs(cachedJacrDot(row, dofId) - expected(row)) < kP52JacobianTolerance);
+        if (std::fabs(cachedJacrDot(row, dofId)) > kP52JacobianTolerance)
+        {
+            hasNonzeroSignal = true;
+        }
+        if (std::fabs(expected(row) - data.cdof_dot[dofIndex](row)) > kP52JacobianTolerance)
+        {
+            differsFromPreparedDerivative = true;
+        }
+    }
+    assert(hasNonzeroSignal);
+    return differsFromPreparedDerivative;
+}
+
+void TestP52CachedPointJacobianDerivativeDispatchUsesBallAndFreeRotations()
+{
+    dtDynSpec spec;
+    const dtDynIndex freeRoot = spec.AddBody("p52_free_root", 0);
+    const dtDynIndex ballBody = spec.AddBody("p52_ball_body", freeRoot);
+    const dtDynIndex freeJoint = spec.AddJoint(freeRoot, "p52_free", dtDynJointType::Free);
+    const dtDynIndex ballJoint = spec.AddJoint(ballBody, "p52_ball", dtDynJointType::Ball);
+    const dtDynIndex taskSite = spec.AddSite(ballBody, "p52_task_site");
+    spec.EditBody(freeRoot, ConfigureP52FreeRootBody);
+    spec.EditBody(ballBody, ConfigureP52BallBody);
+    spec.EditJoint(ballJoint, ConfigureP52BallJoint);
+    spec.EditSite(taskSite, ConfigureP52TaskSite);
+
+    const dtDynModel model = CompileSpecChecked(spec);
+    assert(model.nq == 11);
+    assert(model.nv == 9);
+    const std::size_t freeJointIndex = static_cast<std::size_t>(freeJoint);
+    const std::size_t ballJointIndex = static_cast<std::size_t>(ballJoint);
+    const dtDynIndex freeDofAddress = model.jnt_dofadr[freeJointIndex];
+    const dtDynIndex ballDofAddress = model.jnt_dofadr[ballJointIndex];
+    assert(freeDofAddress == 0);
+    assert(ballDofAddress == 6);
+    assert(model.jnt_qposadr[freeJointIndex] == 0);
+    assert(model.jnt_qposadr[ballJointIndex] == 7);
+
+    dtDynData data;
+    data.Resize(model);
+    data.qpos(0) = 0.20;
+    data.qpos(1) = -0.30;
+    data.qpos(2) = 0.40;
+    SetP52NormalizedQuaternion(data, 3, 1.0, -2.0, 3.0, -4.0);
+    SetP52NormalizedQuaternion(data, 7, 2.0, 3.0, -4.0, 5.0);
+    const dtDynReal qvelValues[9] = {0.31, -0.47, 0.59, -0.71, 0.83, -0.97, 1.09, -1.21, 1.33};
+    for (dtDynIndex dofId = 0; dofId < model.nv; ++dofId)
+    {
+        data.qvel(dofId) = qvelValues[dofId];
+    }
+
+    ForwardKinematics(model, data);
+    AssertP52BallKinematicFrames(model, data, freeJoint, ballJoint, ballBody, taskSite);
+    dt::Math::Vector3<dtDynReal> gravity;
+    gravity.SetZero();
+    ComputeDynamicsCCRBA(model, data, gravity, DTDYN_CCRBA_TERM_ALL);
+
+    const dtDynArray<dtDynIndex> bodyIds = {ballBody};
+    const dtDynArray<dtDynIndex> siteIds = {taskSite};
+    ComputeJacobians(model, data, bodyIds, siteIds);
+
+    AssertP52CachedMatricesMatchSeparatePointApis(model,
+                                                  data,
+                                                  ballBody,
+                                                  data.xpos[static_cast<std::size_t>(ballBody)],
+                                                  data.body_jacp[static_cast<std::size_t>(ballBody)],
+                                                  data.body_jacr[static_cast<std::size_t>(ballBody)],
+                                                  data.body_jacp_dot[static_cast<std::size_t>(ballBody)],
+                                                  data.body_jacr_dot[static_cast<std::size_t>(ballBody)]);
+    AssertP52CachedMatricesMatchSeparatePointApis(model,
+                                                  data,
+                                                  ballBody,
+                                                  data.site_xpos[static_cast<std::size_t>(taskSite)],
+                                                  data.site_jacp[static_cast<std::size_t>(taskSite)],
+                                                  data.site_jacr[static_cast<std::size_t>(taskSite)],
+                                                  data.site_jacp_dot[static_cast<std::size_t>(taskSite)],
+                                                  data.site_jacr_dot[static_cast<std::size_t>(taskSite)]);
+
+    bool freeBranchDiffersFromPreparedDerivative = false;
+    bool ballBranchDiffersFromPreparedDerivative = false;
+    for (dtDynIndex offset = 0; offset < 3; ++offset)
+    {
+        const dtDynIndex freeRotationalDof = freeDofAddress + 3 + offset;
+        const dtDynIndex ballDof = ballDofAddress + offset;
+        assert(model.dof_jntid[static_cast<std::size_t>(freeRotationalDof)] == freeJoint);
+        assert(model.dof_jntid[static_cast<std::size_t>(ballDof)] == ballJoint);
+        const bool bodyFreeDiffers = AssertP52CachedDerivativeColumnUsesFinalBodyVelocity(
+            model, data, freeRotationalDof, data.body_jacr_dot[static_cast<std::size_t>(ballBody)]);
+        const bool siteFreeDiffers = AssertP52CachedDerivativeColumnUsesFinalBodyVelocity(
+            model, data, freeRotationalDof, data.site_jacr_dot[static_cast<std::size_t>(taskSite)]);
+        const bool bodyBallDiffers = AssertP52CachedDerivativeColumnUsesFinalBodyVelocity(
+            model, data, ballDof, data.body_jacr_dot[static_cast<std::size_t>(ballBody)]);
+        const bool siteBallDiffers = AssertP52CachedDerivativeColumnUsesFinalBodyVelocity(
+            model, data, ballDof, data.site_jacr_dot[static_cast<std::size_t>(taskSite)]);
+        freeBranchDiffersFromPreparedDerivative =
+            freeBranchDiffersFromPreparedDerivative || bodyFreeDiffers || siteFreeDiffers;
+        ballBranchDiffersFromPreparedDerivative =
+            ballBranchDiffersFromPreparedDerivative || bodyBallDiffers || siteBallDiffers;
+    }
+    assert(freeBranchDiffersFromPreparedDerivative);
+    assert(ballBranchDiffersFromPreparedDerivative);
+}
+
+dt::Math::Vector3<dtDynReal> MakeP111Vector3(const dtDynReal x,
+                                             const dtDynReal y,
+                                             const dtDynReal z)
+{
+    dt::Math::Vector3<dtDynReal> vector;
+    vector(0) = x;
+    vector(1) = y;
+    vector(2) = z;
+    return vector;
+}
+
+void FillP111RotationFromQuaternion(const dt::Math::Vector4<dtDynReal> &quaternion,
+                                    dtDynReal rotation[3][3])
+{
+    const dtDynReal w = quaternion(0);
+    const dtDynReal x = quaternion(1);
+    const dtDynReal y = quaternion(2);
+    const dtDynReal z = quaternion(3);
+    rotation[0][0] = 1.0 - (2.0 * ((y * y) + (z * z)));
+    rotation[0][1] = 2.0 * ((x * y) - (w * z));
+    rotation[0][2] = 2.0 * ((x * z) + (w * y));
+    rotation[1][0] = 2.0 * ((x * y) + (w * z));
+    rotation[1][1] = 1.0 - (2.0 * ((x * x) + (z * z)));
+    rotation[1][2] = 2.0 * ((y * z) - (w * x));
+    rotation[2][0] = 2.0 * ((x * z) - (w * y));
+    rotation[2][1] = 2.0 * ((y * z) + (w * x));
+    rotation[2][2] = 1.0 - (2.0 * ((x * x) + (y * y)));
+}
+
+void MultiplyP111Rotations(const dtDynReal left[3][3],
+                           const dtDynReal right[3][3],
+                           dtDynReal product[3][3])
+{
+    for (dtDynIndex row = 0; row < 3; ++row)
+    {
+        for (dtDynIndex column = 0; column < 3; ++column)
+        {
+            product[row][column] = (left[row][0] * right[0][column]) +
+                                   (left[row][1] * right[1][column]) +
+                                   (left[row][2] * right[2][column]);
+        }
+    }
+}
+
+void RotateP111Vector(const dtDynReal rotation[3][3],
+                      const dt::Math::Vector3<dtDynReal> &vector,
+                      dtDynReal rotated[3])
+{
+    for (dtDynIndex row = 0; row < 3; ++row)
+    {
+        rotated[row] = (rotation[row][0] * vector(0)) +
+                       (rotation[row][1] * vector(1)) +
+                       (rotation[row][2] * vector(2));
+    }
+}
+
+void FillP111ExpectedColumn(const dtDynReal axis[3],
+                            const dtDynReal point[3],
+                            const dtDynReal pivot[3],
+                            dtDynReal expected[6])
+{
+    const dtDynReal dx = point[0] - pivot[0];
+    const dtDynReal dy = point[1] - pivot[1];
+    const dtDynReal dz = point[2] - pivot[2];
+    expected[0] = axis[0];
+    expected[1] = axis[1];
+    expected[2] = axis[2];
+    expected[3] = (axis[1] * dz) - (axis[2] * dy);
+    expected[4] = (axis[2] * dx) - (axis[0] * dz);
+    expected[5] = (axis[0] * dy) - (axis[1] * dx);
+}
+
+void AssertP111ColumnMatches(const dt::Math::Vector6<dtDynReal> &actual,
+                             const dtDynReal expected[6])
+{
+    for (dtDynIndex component = 0; component < 6; ++component)
+    {
+        assert(std::fabs(actual(component) - expected[component]) < kP52JacobianTolerance);
+    }
+}
+
+void AssertP111ColumnDiffersFromPivot(const dtDynReal axis[3],
+                                      const dtDynReal point[3],
+                                      const dtDynReal pivot[3],
+                                      const dtDynReal wrongPivot[3])
+{
+    dtDynReal expected[6];
+    dtDynReal wrong[6];
+    FillP111ExpectedColumn(axis, point, pivot, expected);
+    FillP111ExpectedColumn(axis, point, wrongPivot, wrong);
+    dtDynReal largestDifference = 0.0;
+    for (dtDynIndex component = 3; component < 6; ++component)
+    {
+        const dtDynReal difference = std::fabs(expected[component] - wrong[component]);
+        if (difference > largestDifference)
+        {
+            largestDifference = difference;
+        }
+    }
+    assert(largestDifference > 1.0e-3);
+}
+
+void TestMotionSubspaceAtPointMatchesIndependentFreeAndBallColumns()
+{
+    dtDynSpec spec;
+    const dtDynIndex freeRoot = spec.AddBody("p111_free_root", 0);
+    const dtDynIndex ballBody = spec.AddBody("p111_ball_body", freeRoot);
+    const dtDynIndex freeJoint = spec.AddJoint(freeRoot, "p111_free", dtDynJointType::Free);
+    const dtDynIndex ballJoint = spec.AddJoint(ballBody, "p111_ball", dtDynJointType::Ball);
+    const dtDynIndex taskSite = spec.AddSite(ballBody, "p111_task_site");
+    spec.EditBody(freeRoot, ConfigureP52FreeRootBody);
+    spec.EditBody(ballBody, ConfigureP52BallBody);
+    spec.EditJoint(ballJoint, ConfigureP52BallJoint);
+    spec.EditSite(taskSite, ConfigureP52TaskSite);
+
+    const dtDynModel model = CompileSpecChecked(spec);
+    assert(model.nq == 11);
+    assert(model.nv == 9);
+    const std::size_t rootIndex = static_cast<std::size_t>(freeRoot);
+    const std::size_t ballBodyIndex = static_cast<std::size_t>(ballBody);
+    const std::size_t freeJointIndex = static_cast<std::size_t>(freeJoint);
+    const std::size_t ballJointIndex = static_cast<std::size_t>(ballJoint);
+    const dtDynIndex freeDofAddress = model.jnt_dofadr[freeJointIndex];
+    const dtDynIndex ballDofAddress = model.jnt_dofadr[ballJointIndex];
+    assert(freeDofAddress == 0);
+    assert(ballDofAddress == 6);
+    assert(model.jnt_type[freeJointIndex] == static_cast<dtDynIndex>(dtDynJointType::Free));
+    assert(model.jnt_type[ballJointIndex] == static_cast<dtDynIndex>(dtDynJointType::Ball));
+    assert(model.body_rootid[ballBodyIndex] == freeRoot);
+    assert(IsDtMathNear(model.body_quat[ballBodyIndex](0), 1.0));
+
+    dtDynData data;
+    data.Resize(model);
+    data.qpos(0) = 0.20;
+    data.qpos(1) = -0.30;
+    data.qpos(2) = 0.40;
+    SetP52NormalizedQuaternion(data, 3, 1.0, -2.0, 3.0, -4.0);
+    SetP52NormalizedQuaternion(data, 7, 2.0, 3.0, -4.0, 5.0);
+    assert(std::fabs(data.qpos(3) - 1.0) > 1.0e-3);
+    assert(std::fabs(data.qpos(7) - 1.0) > 1.0e-3);
+
+    ForwardKinematics(model, data);
+    dt::Math::Vector3<dtDynReal> gravity;
+    gravity.SetZero();
+    ComputeDynamicsCCRBA(model, data, gravity, DTDYN_CCRBA_TERM_ALL);
+
+    // Independent oracle: rebuild the world frames from qpos and the compiled
+    // offsets with plain rotation matrices instead of data.xmat/xanchor/xpos.
+    dtDynReal rootRotation[3][3];
+    dtDynReal ballLocalRotation[3][3];
+    dtDynReal childRotation[3][3];
+    FillP111RotationFromQuaternion(ReadP52QposQuaternion(data, 3), rootRotation);
+    FillP111RotationFromQuaternion(ReadP52QposQuaternion(data, 7), ballLocalRotation);
+    MultiplyP111Rotations(rootRotation, ballLocalRotation, childRotation);
+
+    dtDynReal rootPosition[3];
+    dtDynReal bodyOffset[3];
+    dtDynReal jointOffset[3];
+    dtDynReal rootInertialOffset[3];
+    dtDynReal childInertialOffset[3];
+    RotateP111Vector(rootRotation, model.body_pos[ballBodyIndex], bodyOffset);
+    RotateP111Vector(rootRotation, model.jnt_pos[ballJointIndex], jointOffset);
+    RotateP111Vector(rootRotation, model.body_ipos[rootIndex], rootInertialOffset);
+    dtDynReal childJointOffset[3];
+    RotateP111Vector(childRotation, model.jnt_pos[ballJointIndex], childJointOffset);
+    RotateP111Vector(childRotation, model.body_ipos[ballBodyIndex], childInertialOffset);
+
+    dtDynReal ballAnchor[3];
+    dtDynReal childPosition[3];
+    dtDynReal rootCom[3];
+    const dtDynReal rootMass = model.body_mass(freeRoot);
+    const dtDynReal childMass = model.body_mass(ballBody);
+    for (dtDynIndex axis = 0; axis < 3; ++axis)
+    {
+        rootPosition[axis] = data.qpos(axis);
+        ballAnchor[axis] = rootPosition[axis] + bodyOffset[axis] + jointOffset[axis];
+        childPosition[axis] = ballAnchor[axis] - childJointOffset[axis];
+        const dtDynReal rootInertialPosition = rootPosition[axis] + rootInertialOffset[axis];
+        const dtDynReal childInertialPosition = childPosition[axis] + childInertialOffset[axis];
+        rootCom[axis] = ((rootMass * rootInertialPosition) + (childMass * childInertialPosition)) /
+                        (rootMass + childMass);
+    }
+    assert(rootMass > 0.0);
+    assert(childMass > 0.0);
+    AssertP52Vector3Matches(data.subtree_com[rootIndex],
+                            MakeP111Vector3(rootCom[0], rootCom[1], rootCom[2]));
+
+    const dtDynReal probePoint[3] = {0.70, -0.20, 0.90};
+    const dt::Math::Vector3<dtDynReal> probeVector =
+        MakeP111Vector3(probePoint[0], probePoint[1], probePoint[2]);
+    const dt::Math::Vector3<dtDynReal> rootComVector =
+        MakeP111Vector3(rootCom[0], rootCom[1], rootCom[2]);
+
+    for (dtDynIndex dofId = 0; dofId < model.nv; ++dofId)
+    {
+        dtDynReal atRootCom[6];
+        dtDynReal atProbe[6];
+        const dtDynReal *pivot = ballAnchor;
+        dtDynReal axis[3] = {0.0, 0.0, 0.0};
+        bool linearOnly = false;
+        if (dofId < 3)
+        {
+            linearOnly = true;
+        }
+        else if (dofId < 6)
+        {
+            pivot = rootPosition;
+            for (dtDynIndex row = 0; row < 3; ++row)
+            {
+                axis[row] = rootRotation[row][dofId - 3];
+            }
+        }
+        else
+        {
+            for (dtDynIndex row = 0; row < 3; ++row)
+            {
+                axis[row] = childRotation[row][dofId - 6];
+            }
+            AssertP111ColumnDiffersFromPivot(axis, rootCom, ballAnchor, childPosition);
+            AssertP111ColumnDiffersFromPivot(axis, probePoint, ballAnchor, childPosition);
+        }
+
+        if (linearOnly)
+        {
+            for (dtDynIndex component = 0; component < 6; ++component)
+            {
+                atRootCom[component] = 0.0;
+                atProbe[component] = 0.0;
+            }
+            atRootCom[3 + dofId] = 1.0;
+            atProbe[3 + dofId] = 1.0;
+        }
+        else
+        {
+            FillP111ExpectedColumn(axis, rootCom, pivot, atRootCom);
+            FillP111ExpectedColumn(axis, probePoint, pivot, atProbe);
+        }
+
+        AssertP111ColumnMatches(data.cdof[static_cast<std::size_t>(dofId)], atRootCom);
+        AssertP111ColumnMatches(utils::MotionSubspaceAtPoint(model, data, dofId, rootComVector),
+                                atRootCom);
+        AssertP111ColumnMatches(utils::MotionSubspaceAtPoint(model, data, dofId, probeVector),
+                                atProbe);
+    }
+}
+
 void TestPointJacobianDotMatchesFiniteDifferenceForMaterialSite()
 {
     dtDynSpec spec;
@@ -4114,6 +9735,352 @@ void TestPointJacobianDotMatchesFiniteDifferenceForMaterialSite()
         assert(std::fabs(siteLinearJdotQvel(row) - linearJdotQvel(row)) < 1.0e-12);
         assert(std::fabs(siteAngularJdotQvel(row) - angularJdotQvel(row)) < 1.0e-12);
     }
+}
+
+constexpr dtDynReal kP51PointJacobianSentinel = -1234.5;
+
+void ConfigureP51PointJacobianFirstBody(dtDynBodySpec &draft)
+{
+    draft.pos(0) = 0.3;
+    draft.pos(1) = -0.4;
+    draft.pos(2) = 0.2;
+    draft.inertial.mass = 1.0;
+    draft.inertial.pos(0) = 0.15;
+    draft.inertial.pos(1) = -0.1;
+    draft.inertial.pos(2) = 0.2;
+    draft.inertial.inertia(0) = 0.2;
+    draft.inertial.inertia(1) = 0.25;
+    draft.inertial.inertia(2) = 0.3;
+}
+
+void ConfigureP51PointJacobianSecondBody(dtDynBodySpec &draft)
+{
+    draft.pos(0) = 1.0;
+    draft.pos(1) = 0.5;
+    draft.pos(2) = -0.3;
+    draft.inertial.mass = 0.75;
+    draft.inertial.pos(0) = 0.2;
+    draft.inertial.pos(1) = 0.3;
+    draft.inertial.pos(2) = -0.1;
+    draft.inertial.inertia(0) = 0.15;
+    draft.inertial.inertia(1) = 0.2;
+    draft.inertial.inertia(2) = 0.25;
+}
+
+void ConfigureP51PointJacobianSite(dtDynSiteSpec &draft)
+{
+    draft.pos(0) = 0.4;
+    draft.pos(1) = -0.2;
+    draft.pos(2) = 0.6;
+}
+
+void ConfigureP51PointJacobianFirstJoint(dtDynJointSpec &draft)
+{
+    draft.axis.SetZero();
+    draft.axis(2) = 1.0;
+}
+
+void ConfigureP51PointJacobianSecondJoint(dtDynJointSpec &draft)
+{
+    draft.axis.SetZero();
+    draft.axis(1) = 1.0;
+}
+
+void FillP51PointJacobianMatrixWithSentinel(dtDynDenseMatrix &matrix, const dtDynIndex nv)
+{
+    EnsureDenseMatrixSize(matrix, 3, nv);
+    matrix.SetFill(kP51PointJacobianSentinel);
+}
+
+void FillP51PointJacobianOutputsWithSentinel(
+    dtDynDenseMatrix &jacp,
+    dtDynDenseMatrix &jacr,
+    dtDynDenseMatrix &jacpDot,
+    dtDynDenseMatrix &jacrDot,
+    dt::Math::Vector3<dtDynReal> &linearJdotQvel,
+    dt::Math::Vector3<dtDynReal> &angularJdotQvel,
+    const dtDynIndex nv)
+{
+    FillP51PointJacobianMatrixWithSentinel(jacp, nv);
+    FillP51PointJacobianMatrixWithSentinel(jacr, nv);
+    FillP51PointJacobianMatrixWithSentinel(jacpDot, nv);
+    FillP51PointJacobianMatrixWithSentinel(jacrDot, nv);
+    linearJdotQvel.SetFill(kP51PointJacobianSentinel);
+    angularJdotQvel.SetFill(kP51PointJacobianSentinel);
+}
+
+void AssertP51PointJacobianMatrixMatches(const dtDynDenseMatrix &actual,
+                                         const dtDynDenseMatrix &expected,
+                                         const dtDynIndex nv)
+{
+    assert(actual.GetRowSize() == 3U);
+    assert(actual.GetColSize() == ToDtMathDim(nv));
+    assert(expected.GetRowSize() == 3U);
+    assert(expected.GetColSize() == ToDtMathDim(nv));
+    for (dtDynIndex row = 0; row < 3; ++row)
+    {
+        for (dtDynIndex column = 0; column < nv; ++column)
+        {
+            assert(std::fabs(actual(row, column) - expected(row, column)) < 1.0e-12);
+        }
+    }
+}
+
+void AssertP51PointJacobianMatrixIsSentinel(const dtDynDenseMatrix &matrix,
+                                            const dtDynIndex nv)
+{
+    assert(matrix.GetRowSize() == 3U);
+    assert(matrix.GetColSize() == ToDtMathDim(nv));
+    for (dtDynIndex row = 0; row < 3; ++row)
+    {
+        for (dtDynIndex column = 0; column < nv; ++column)
+        {
+            assert(std::fabs(matrix(row, column) - kP51PointJacobianSentinel) < 1.0e-12);
+        }
+    }
+}
+
+void AssertP51PointJacobianVectorMatches(const dt::Math::Vector3<dtDynReal> &actual,
+                                         const dt::Math::Vector3<dtDynReal> &expected)
+{
+    for (dtDynIndex row = 0; row < 3; ++row)
+    {
+        assert(std::fabs(actual(row) - expected(row)) < 1.0e-12);
+    }
+}
+
+void AssertP51PointJacobianVectorIsSentinel(const dt::Math::Vector3<dtDynReal> &vector)
+{
+    for (dtDynIndex row = 0; row < 3; ++row)
+    {
+        assert(std::fabs(vector(row) - kP51PointJacobianSentinel) < 1.0e-12);
+    }
+}
+
+void TestPointJacobianTermsSelectsEachOutputFamily()
+{
+    dtDynSpec spec;
+    const dtDynIndex link1 = spec.AddBody("p51_link1", 0);
+    const dtDynIndex link2 = spec.AddBody("p51_link2", link1);
+    const dtDynIndex tool = spec.AddSite(link2, "p51_tool");
+    spec.EditBody(link1, ConfigureP51PointJacobianFirstBody);
+    spec.EditBody(link2, ConfigureP51PointJacobianSecondBody);
+    spec.EditSite(tool, ConfigureP51PointJacobianSite);
+    const dtDynIndex joint1 = spec.AddJoint(link1, "p51_joint1", dtDynJointType::Hinge);
+    const dtDynIndex joint2 = spec.AddJoint(link2, "p51_joint2", dtDynJointType::Hinge);
+    spec.EditJoint(joint1, ConfigureP51PointJacobianFirstJoint);
+    spec.EditJoint(joint2, ConfigureP51PointJacobianSecondJoint);
+
+    const dtDynModel model = CompileSpecChecked(spec);
+    assert(model.nv == 2);
+
+    dtDynData data;
+    data.Resize(model);
+    data.qpos(0) = 0.35;
+    data.qpos(1) = -0.45;
+    data.qvel(0) = 1.1;
+    data.qvel(1) = -0.7;
+    dt::Math::Vector3<dtDynReal> gravity;
+    gravity.SetZero();
+    ComputeDynamicsCCRBA(model, data, gravity, DTDYN_CCRBA_TERM_ALL);
+
+    const dt::Math::Vector3<dtDynReal> &point = data.site_xpos[tool];
+    dtDynDenseMatrix expectedJacp;
+    dtDynDenseMatrix expectedJacr;
+    dtDynDenseMatrix expectedJacpDot;
+    dtDynDenseMatrix expectedJacrDot;
+    dt::Math::Vector3<dtDynReal> expectedLinearJdotQvel;
+    dt::Math::Vector3<dtDynReal> expectedAngularJdotQvel;
+    ComputePointJacobian(model, data, link2, point, expectedJacp, expectedJacr);
+    ComputePointJacobianDot(model, data, link2, point, expectedJacpDot, expectedJacrDot);
+    ComputePointJacobianDotTimesVelocity(model,
+                                         data,
+                                         link2,
+                                         point,
+                                         expectedLinearJdotQvel,
+                                         expectedAngularJdotQvel);
+
+    assert(std::fabs(expectedJacp(0, 0)) > 1.0e-12);
+    assert(std::fabs(expectedJacr(2, 0)) > 1.0e-12);
+    assert(std::fabs(expectedJacpDot(0, 0)) > 1.0e-12);
+    assert(std::fabs(expectedJacrDot(0, 1)) > 1.0e-12);
+    assert(std::fabs(expectedLinearJdotQvel(0)) > 1.0e-12);
+    assert(std::fabs(expectedAngularJdotQvel(0)) > 1.0e-12);
+
+    dtDynDenseMatrix jacp;
+    dtDynDenseMatrix jacr;
+    dtDynDenseMatrix jacpDot;
+    dtDynDenseMatrix jacrDot;
+    dt::Math::Vector3<dtDynReal> linearJdotQvel;
+    dt::Math::Vector3<dtDynReal> angularJdotQvel;
+
+    FillP51PointJacobianOutputsWithSentinel(jacp,
+                                            jacr,
+                                            jacpDot,
+                                            jacrDot,
+                                            linearJdotQvel,
+                                            angularJdotQvel,
+                                            model.nv);
+    ComputePointJacobianTerms(model,
+                              data,
+                              link2,
+                              point,
+                              &jacp,
+                              nullptr,
+                              nullptr,
+                              nullptr,
+                              nullptr,
+                              nullptr);
+    AssertP51PointJacobianMatrixMatches(jacp, expectedJacp, model.nv);
+    AssertP51PointJacobianMatrixIsSentinel(jacr, model.nv);
+    AssertP51PointJacobianMatrixIsSentinel(jacpDot, model.nv);
+    AssertP51PointJacobianMatrixIsSentinel(jacrDot, model.nv);
+    AssertP51PointJacobianVectorIsSentinel(linearJdotQvel);
+    AssertP51PointJacobianVectorIsSentinel(angularJdotQvel);
+
+    FillP51PointJacobianOutputsWithSentinel(jacp,
+                                            jacr,
+                                            jacpDot,
+                                            jacrDot,
+                                            linearJdotQvel,
+                                            angularJdotQvel,
+                                            model.nv);
+    ComputePointJacobianTerms(model,
+                              data,
+                              link2,
+                              point,
+                              nullptr,
+                              &jacr,
+                              nullptr,
+                              nullptr,
+                              nullptr,
+                              nullptr);
+    AssertP51PointJacobianMatrixIsSentinel(jacp, model.nv);
+    AssertP51PointJacobianMatrixMatches(jacr, expectedJacr, model.nv);
+    AssertP51PointJacobianMatrixIsSentinel(jacpDot, model.nv);
+    AssertP51PointJacobianMatrixIsSentinel(jacrDot, model.nv);
+    AssertP51PointJacobianVectorIsSentinel(linearJdotQvel);
+    AssertP51PointJacobianVectorIsSentinel(angularJdotQvel);
+
+    FillP51PointJacobianOutputsWithSentinel(jacp,
+                                            jacr,
+                                            jacpDot,
+                                            jacrDot,
+                                            linearJdotQvel,
+                                            angularJdotQvel,
+                                            model.nv);
+    ComputePointJacobianTerms(model,
+                              data,
+                              link2,
+                              point,
+                              nullptr,
+                              nullptr,
+                              &jacpDot,
+                              nullptr,
+                              nullptr,
+                              nullptr);
+    AssertP51PointJacobianMatrixIsSentinel(jacp, model.nv);
+    AssertP51PointJacobianMatrixIsSentinel(jacr, model.nv);
+    AssertP51PointJacobianMatrixMatches(jacpDot, expectedJacpDot, model.nv);
+    AssertP51PointJacobianMatrixIsSentinel(jacrDot, model.nv);
+    AssertP51PointJacobianVectorIsSentinel(linearJdotQvel);
+    AssertP51PointJacobianVectorIsSentinel(angularJdotQvel);
+
+    FillP51PointJacobianOutputsWithSentinel(jacp,
+                                            jacr,
+                                            jacpDot,
+                                            jacrDot,
+                                            linearJdotQvel,
+                                            angularJdotQvel,
+                                            model.nv);
+    ComputePointJacobianTerms(model,
+                              data,
+                              link2,
+                              point,
+                              nullptr,
+                              nullptr,
+                              nullptr,
+                              &jacrDot,
+                              nullptr,
+                              nullptr);
+    AssertP51PointJacobianMatrixIsSentinel(jacp, model.nv);
+    AssertP51PointJacobianMatrixIsSentinel(jacr, model.nv);
+    AssertP51PointJacobianMatrixIsSentinel(jacpDot, model.nv);
+    AssertP51PointJacobianMatrixMatches(jacrDot, expectedJacrDot, model.nv);
+    AssertP51PointJacobianVectorIsSentinel(linearJdotQvel);
+    AssertP51PointJacobianVectorIsSentinel(angularJdotQvel);
+
+    FillP51PointJacobianOutputsWithSentinel(jacp,
+                                            jacr,
+                                            jacpDot,
+                                            jacrDot,
+                                            linearJdotQvel,
+                                            angularJdotQvel,
+                                            model.nv);
+    ComputePointJacobianTerms(model,
+                              data,
+                              link2,
+                              point,
+                              nullptr,
+                              nullptr,
+                              nullptr,
+                              nullptr,
+                              &linearJdotQvel,
+                              nullptr);
+    AssertP51PointJacobianMatrixIsSentinel(jacp, model.nv);
+    AssertP51PointJacobianMatrixIsSentinel(jacr, model.nv);
+    AssertP51PointJacobianMatrixIsSentinel(jacpDot, model.nv);
+    AssertP51PointJacobianMatrixIsSentinel(jacrDot, model.nv);
+    AssertP51PointJacobianVectorMatches(linearJdotQvel, expectedLinearJdotQvel);
+    AssertP51PointJacobianVectorIsSentinel(angularJdotQvel);
+
+    FillP51PointJacobianOutputsWithSentinel(jacp,
+                                            jacr,
+                                            jacpDot,
+                                            jacrDot,
+                                            linearJdotQvel,
+                                            angularJdotQvel,
+                                            model.nv);
+    ComputePointJacobianTerms(model,
+                              data,
+                              link2,
+                              point,
+                              nullptr,
+                              nullptr,
+                              nullptr,
+                              nullptr,
+                              nullptr,
+                              &angularJdotQvel);
+    AssertP51PointJacobianMatrixIsSentinel(jacp, model.nv);
+    AssertP51PointJacobianMatrixIsSentinel(jacr, model.nv);
+    AssertP51PointJacobianMatrixIsSentinel(jacpDot, model.nv);
+    AssertP51PointJacobianMatrixIsSentinel(jacrDot, model.nv);
+    AssertP51PointJacobianVectorIsSentinel(linearJdotQvel);
+    AssertP51PointJacobianVectorMatches(angularJdotQvel, expectedAngularJdotQvel);
+
+    FillP51PointJacobianOutputsWithSentinel(jacp,
+                                            jacr,
+                                            jacpDot,
+                                            jacrDot,
+                                            linearJdotQvel,
+                                            angularJdotQvel,
+                                            model.nv);
+    ComputePointJacobianTerms(model,
+                              data,
+                              link2,
+                              point,
+                              &jacp,
+                              &jacr,
+                              &jacpDot,
+                              &jacrDot,
+                              &linearJdotQvel,
+                              &angularJdotQvel);
+    AssertP51PointJacobianMatrixMatches(jacp, expectedJacp, model.nv);
+    AssertP51PointJacobianMatrixMatches(jacr, expectedJacr, model.nv);
+    AssertP51PointJacobianMatrixMatches(jacpDot, expectedJacpDot, model.nv);
+    AssertP51PointJacobianMatrixMatches(jacrDot, expectedJacrDot, model.nv);
+    AssertP51PointJacobianVectorMatches(linearJdotQvel, expectedLinearJdotQvel);
+    AssertP51PointJacobianVectorMatches(angularJdotQvel, expectedAngularJdotQvel);
 }
 
 void TestPointJacobianTermsMatchesSeparateAPIs()
@@ -4683,39 +10650,904 @@ void TestDynamicsCCRBAAllTermsIsRepeatable()
     assert(std::fabs(firstData.cmAmat(1, 0) - ccrbaData.cmAmat(1, 0)) < 1.0e-12);
 }
 
+using P50SpatialInertia = dt::Math::Matrix<6, 6, dtDynReal>;
+
+void ConfigureP50SpatialInertiaWorld(dtDynBodySpec &draft)
+{
+    draft.inertial.mass = 2.0;
+    draft.inertial.inertia(0) = 1.0;
+    draft.inertial.inertia(1) = 2.0;
+    draft.inertial.inertia(2) = 3.0;
+}
+
+void ConfigureP50SpatialInertiaRoot(dtDynBodySpec &draft)
+{
+    draft.pos(0) = 1.0;
+    draft.pos(1) = -2.0;
+    draft.pos(2) = 3.0;
+    draft.inertial.mass = 3.0;
+    draft.inertial.pos(0) = 0.5;
+    draft.inertial.pos(1) = -1.0;
+    draft.inertial.pos(2) = 0.75;
+    draft.inertial.inertia(0) = 2.0;
+    draft.inertial.inertia(1) = 3.0;
+    draft.inertial.inertia(2) = 4.0;
+}
+
+void ConfigureP50SpatialInertiaChild(dtDynBodySpec &draft)
+{
+    const dtDynReal inverseQuaternionNorm = 1.0 / std::sqrt(30.0);
+    draft.pos(0) = 4.0;
+    draft.pos(1) = 5.0;
+    draft.pos(2) = -6.0;
+    draft.inertial.mass = 5.0;
+    draft.inertial.pos(0) = 0.25;
+    draft.inertial.pos(1) = -0.5;
+    draft.inertial.pos(2) = 1.0;
+    draft.inertial.quat(0) = inverseQuaternionNorm;
+    draft.inertial.quat(1) = 2.0 * inverseQuaternionNorm;
+    draft.inertial.quat(2) = 3.0 * inverseQuaternionNorm;
+    draft.inertial.quat(3) = 4.0 * inverseQuaternionNorm;
+    draft.inertial.inertia(0) = 5.0;
+    draft.inertial.inertia(1) = 6.0;
+    draft.inertial.inertia(2) = 7.0;
+}
+
+void ConfigureP50SpatialInertiaRootHinge(dtDynJointSpec &draft)
+{
+    draft.axis(0) = 0.0;
+    draft.axis(1) = 0.0;
+    draft.axis(2) = 1.0;
+}
+
+dt::Math::Matrix3<dtDynReal> MakeP50Matrix3(const dtDynReal value00,
+                                            const dtDynReal value01,
+                                            const dtDynReal value02,
+                                            const dtDynReal value10,
+                                            const dtDynReal value11,
+                                            const dtDynReal value12,
+                                            const dtDynReal value20,
+                                            const dtDynReal value21,
+                                            const dtDynReal value22)
+{
+    dt::Math::Matrix3<dtDynReal> result;
+    result(0, 0) = value00;
+    result(0, 1) = value01;
+    result(0, 2) = value02;
+    result(1, 0) = value10;
+    result(1, 1) = value11;
+    result(1, 2) = value12;
+    result(2, 0) = value20;
+    result(2, 1) = value21;
+    result(2, 2) = value22;
+    return result;
+}
+
+P50SpatialInertia BuildP50SpatialInertia(const dt::Math::Matrix3<dtDynReal> &topLeft,
+                                         const dt::Math::Matrix3<dtDynReal> &topRight,
+                                         const dtDynReal mass)
+{
+    P50SpatialInertia expected;
+    expected.SetZero();
+    for (dtDynIndex row = 0; row < 3; ++row)
+    {
+        for (dtDynIndex column = 0; column < 3; ++column)
+        {
+            expected(row, column) = topLeft(row, column);
+            expected(row, column + 3) = topRight(row, column);
+            expected(row + 3, column) = -topRight(row, column);
+        }
+        expected(row + 3, row + 3) = mass;
+    }
+    return expected;
+}
+
+P50SpatialInertia MakeP50ExpectedWorldSpatialInertia()
+{
+    const dt::Math::Matrix3<dtDynReal> topLeft = MakeP50Matrix3(1021.0 / 800.0,
+                                                                -861.0 / 400.0,
+                                                                -123.0 / 160.0,
+                                                                -861.0 / 400.0,
+                                                                8377.0 / 400.0,
+                                                                -7.0 / 80.0,
+                                                                -123.0 / 160.0,
+                                                                -7.0 / 80.0,
+                                                                709.0 / 32.0);
+    const dt::Math::Matrix3<dtDynReal> topRight = MakeP50Matrix3(0.0,
+                                                                 1.0 / 4.0,
+                                                                 -7.0 / 10.0,
+                                                                 -1.0 / 4.0,
+                                                                 0.0,
+                                                                 123.0 / 20.0,
+                                                                 7.0 / 10.0,
+                                                                 -123.0 / 20.0,
+                                                                 0.0);
+    return BuildP50SpatialInertia(topLeft, topRight, 2.0);
+}
+
+P50SpatialInertia MakeP50ExpectedRootSpatialInertia()
+{
+    const dt::Math::Matrix3<dtDynReal> topLeft = MakeP50Matrix3(78023.0 / 1024.0,
+                                                                -12375.0 / 512.0,
+                                                                25875.0 / 1024.0,
+                                                                -12375.0 / 512.0,
+                                                                29811.0 / 512.0,
+                                                                18975.0 / 512.0,
+                                                                25875.0 / 1024.0,
+                                                                18975.0 / 512.0,
+                                                                57271.0 / 1024.0);
+    const dt::Math::Matrix3<dtDynReal> topRight = MakeP50Matrix3(0.0,
+                                                                 -345.0 / 32.0,
+                                                                 -165.0 / 16.0,
+                                                                 345.0 / 32.0,
+                                                                 0.0,
+                                                                 225.0 / 32.0,
+                                                                 165.0 / 16.0,
+                                                                 -225.0 / 32.0,
+                                                                 0.0);
+    return BuildP50SpatialInertia(topLeft, topRight, 3.0);
+}
+
+P50SpatialInertia MakeP50ExpectedChildSpatialInertia()
+{
+    const dt::Math::Matrix3<dtDynReal> topLeft = MakeP50Matrix3(3886843.0 / 76800.0,
+                                                                -104207.0 / 7680.0,
+                                                                396317.0 / 25600.0,
+                                                                -104207.0 / 7680.0,
+                                                                20037.0 / 512.0,
+                                                                169751.0 / 7680.0,
+                                                                396317.0 / 25600.0,
+                                                                169751.0 / 7680.0,
+                                                                2846507.0 / 76800.0);
+    const dt::Math::Matrix3<dtDynReal> topRight = MakeP50Matrix3(0.0,
+                                                                 345.0 / 32.0,
+                                                                 165.0 / 16.0,
+                                                                 -345.0 / 32.0,
+                                                                 0.0,
+                                                                 -225.0 / 32.0,
+                                                                 -165.0 / 16.0,
+                                                                 225.0 / 32.0,
+                                                                 0.0);
+    return BuildP50SpatialInertia(topLeft, topRight, 5.0);
+}
+
+void AssertP50SpatialInertiaMatches(const P50SpatialInertia &actual,
+                                    const P50SpatialInertia &expected)
+{
+    for (dtDynIndex row = 0; row < 6; ++row)
+    {
+        for (dtDynIndex column = 0; column < 6; ++column)
+        {
+            assert(IsDtMathNear(actual(row, column), expected(row, column), 1.0e-11));
+        }
+    }
+}
+
+void AssertP50ChildRotationAndParallelAxis(const dtDynModel &model,
+                                           const dtDynData &data,
+                                           const dtDynIndex root,
+                                           const dtDynIndex child)
+{
+    const dt::Math::Matrix3<dtDynReal> expectedRotation = MakeP50Matrix3(-2.0 / 3.0,
+                                                                         2.0 / 15.0,
+                                                                         11.0 / 15.0,
+                                                                         2.0 / 3.0,
+                                                                         -1.0 / 3.0,
+                                                                         2.0 / 3.0,
+                                                                         1.0 / 3.0,
+                                                                         14.0 / 15.0,
+                                                                         2.0 / 15.0);
+    const dt::Math::Matrix3<dtDynReal> expectedRotatedInertia = MakeP50Matrix3(
+        457.0 / 75.0,
+        14.0 / 15.0,
+        8.0 / 25.0,
+        14.0 / 15.0,
+        6.0,
+        -2.0 / 15.0,
+        8.0 / 25.0,
+        -2.0 / 15.0,
+        443.0 / 75.0);
+    const dt::Math::Matrix3<dtDynReal> expectedParallelAxis = MakeP50Matrix3(
+        45585.0 / 1024.0,
+        -7425.0 / 512.0,
+        15525.0 / 1024.0,
+        -7425.0 / 512.0,
+        16965.0 / 512.0,
+        11385.0 / 512.0,
+        15525.0 / 1024.0,
+        11385.0 / 512.0,
+        31905.0 / 1024.0);
+    dt::Math::Matrix3<dtDynReal> identity;
+    identity.SetIdentity();
+    const dt::Math::Matrix3<dtDynReal> &actualRotation =
+        data.ximat[static_cast<std::size_t>(child)];
+    const dt::Math::Vector4<dtDynReal> &childQuaternion =
+        model.body_iquat[static_cast<std::size_t>(child)];
+    const dtDynReal inverseQuaternionNorm = 1.0 / std::sqrt(30.0);
+    dtDynReal quaternionNormSquared = 0.0;
+
+    for (dtDynIndex component = 0; component < 4; ++component)
+    {
+        quaternionNormSquared += childQuaternion(component) * childQuaternion(component);
+    }
+    assert(IsDtMathNear(childQuaternion(0), inverseQuaternionNorm));
+    assert(IsDtMathNear(childQuaternion(1), 2.0 * inverseQuaternionNorm));
+    assert(IsDtMathNear(childQuaternion(2), 3.0 * inverseQuaternionNorm));
+    assert(IsDtMathNear(childQuaternion(3), 4.0 * inverseQuaternionNorm));
+    assert(IsDtMathNear(quaternionNormSquared, 1.0));
+
+    assert(IsDtMathNear(model.body_inertia[static_cast<std::size_t>(child)](0), 5.0));
+    assert(IsDtMathNear(model.body_inertia[static_cast<std::size_t>(child)](1), 6.0));
+    assert(IsDtMathNear(model.body_inertia[static_cast<std::size_t>(child)](2), 7.0));
+    assert(model.body_inertia[static_cast<std::size_t>(child)](0) > 0.0);
+    assert(model.body_inertia[static_cast<std::size_t>(child)](1) > 0.0);
+    assert(model.body_inertia[static_cast<std::size_t>(child)](2) > 0.0);
+    assert(model.body_inertia[static_cast<std::size_t>(child)](0) !=
+           model.body_inertia[static_cast<std::size_t>(child)](1));
+    assert(model.body_inertia[static_cast<std::size_t>(child)](0) !=
+           model.body_inertia[static_cast<std::size_t>(child)](2));
+    assert(model.body_inertia[static_cast<std::size_t>(child)](1) !=
+           model.body_inertia[static_cast<std::size_t>(child)](2));
+
+    for (dtDynIndex row = 0; row < 3; ++row)
+    {
+        for (dtDynIndex column = 0; column < 3; ++column)
+        {
+            dtDynReal columnDot = 0.0;
+            assert(IsDtMathNear(actualRotation(row, column),
+                                expectedRotation(row, column)));
+            assert(std::fabs(actualRotation(row, column)) > 1.0e-12);
+            for (dtDynIndex axis = 0; axis < 3; ++axis)
+            {
+                columnDot += actualRotation(axis, row) * actualRotation(axis, column);
+            }
+            assert(IsDtMathNear(columnDot, identity(row, column)));
+        }
+    }
+
+    dt::Math::Vector3<dtDynReal> rootToChildCom;
+    for (dtDynIndex axis = 0; axis < 3; ++axis)
+    {
+        rootToChildCom(axis) = data.xipos[static_cast<std::size_t>(child)](axis) -
+                               data.subtree_com[static_cast<std::size_t>(root)](axis);
+        assert(std::fabs(rootToChildCom(axis)) > 1.0e-12);
+    }
+    assert(IsDtMathNear(rootToChildCom(0), 45.0 / 32.0));
+    assert(IsDtMathNear(rootToChildCom(1), 33.0 / 16.0));
+    assert(IsDtMathNear(rootToChildCom(2), -69.0 / 32.0));
+    assert(IsDtMathNear(rootToChildCom.Inner(rootToChildCom), 5571.0 / 512.0));
+
+    const P50SpatialInertia &actualInertia = data.cinert[static_cast<std::size_t>(child)];
+    for (dtDynIndex row = 0; row < 3; ++row)
+    {
+        for (dtDynIndex column = 0; column < 3; ++column)
+        {
+            const dtDynReal expected = expectedRotatedInertia(row, column) +
+                                       expectedParallelAxis(row, column);
+            assert(IsDtMathNear(actualInertia(row, column), expected));
+        }
+    }
+}
+
+void TestCcrbaFillBodySpatialInertiaAtRootComCoversAllP50Rows()
+{
+    dtDynSpec spec;
+    const dtDynIndex root = spec.AddBody("p50_spatial_root", 0);
+    const dtDynIndex child = spec.AddBody("p50_spatial_child", root);
+    spec.EditBody(0, ConfigureP50SpatialInertiaWorld);
+    spec.EditBody(root, ConfigureP50SpatialInertiaRoot);
+    spec.EditBody(child, ConfigureP50SpatialInertiaChild);
+    const dtDynIndex rootHinge = spec.AddJoint(root, "p50_spatial_root_hinge", dtDynJointType::Hinge);
+    spec.EditJoint(rootHinge, ConfigureP50SpatialInertiaRootHinge);
+
+    const dtDynModel model = CompileSpecChecked(spec);
+    assert(model.nbody == 3);
+    assert(model.nroot == 1);
+    assert(model.nv == 1);
+    assert(model.body_rootid[0] == 0);
+    assert(model.body_rootid[static_cast<std::size_t>(root)] == root);
+    assert(model.body_rootid[static_cast<std::size_t>(child)] == root);
+    assert(IsDtMathNear(model.body_mass(0), 2.0));
+    assert(IsDtMathNear(model.root_mass(0), 8.0));
+    assert(IsDtMathNear(model.body_subtreemass(0), 10.0));
+
+    dtDynData data;
+    data.Resize(model);
+    data.qpos(0) = 0.0;
+    data.qvel(0) = 0.0;
+    dt::Math::Vector3<dtDynReal> gravity;
+    gravity.SetZero();
+    ComputeDynamicsCCRBA(model, data, gravity, DTDYN_CCRBA_TERM_ALL);
+
+    // Body 0 selects the rootBody == 0 ternary arm; the physical root and child
+    // select the rootBody > 0 arm. Full blocks cover diagonal and off-diagonal arms.
+    AssertP50SpatialInertiaMatches(data.cinert[0], MakeP50ExpectedWorldSpatialInertia());
+    AssertP50SpatialInertiaMatches(data.cinert[static_cast<std::size_t>(root)],
+                                   MakeP50ExpectedRootSpatialInertia());
+    AssertP50SpatialInertiaMatches(data.cinert[static_cast<std::size_t>(child)],
+                                   MakeP50ExpectedChildSpatialInertia());
+    AssertP50ChildRotationAndParallelAxis(model, data, root, child);
+}
+
+// Allocation-free realtime compute proof. The counter observed here is the
+// global allocation-function counter; dtMath dense storage uses malloc directly.
+struct AllocationProofBodyEditor
+{
+    dtDynReal mass = 0.0;
+    dtDynReal position[3] = {0.0, 0.0, 0.0};
+    dtDynReal inertialPosition[3] = {0.0, 0.0, 0.0};
+    dtDynReal inertia[3] = {0.0, 0.0, 0.0};
+    bool rotated = false;
+
+    void operator()(dtDynBodySpec &draft) const
+    {
+        draft.inertial.mass = mass;
+        for (std::uint16_t axis = 0; axis < 3; ++axis)
+        {
+            draft.pos(axis) = position[axis];
+            draft.inertial.pos(axis) = inertialPosition[axis];
+            draft.inertial.inertia(axis) = inertia[axis];
+        }
+        if (rotated)
+        {
+            draft.quat(0) = 0.5;
+            draft.quat(1) = 0.5;
+            draft.quat(2) = 0.5;
+            draft.quat(3) = 0.5;
+            draft.inertial.quat(0) = 0.5;
+            draft.inertial.quat(1) = 0.5;
+            draft.inertial.quat(2) = -0.5;
+            draft.inertial.quat(3) = 0.5;
+        }
+    }
+};
+
+struct AllocationProofJointEditor
+{
+    dtDynReal position[3] = {0.0, 0.0, 0.0};
+    dtDynReal axis[3] = {0.0, 0.0, 1.0};
+    dtDynReal armature = 0.0;
+
+    void operator()(dtDynJointSpec &draft) const
+    {
+        draft.axis.SetZero();
+        for (std::uint16_t component = 0; component < 3; ++component)
+        {
+            draft.pos(component) = position[component];
+            draft.axis(component) = axis[component];
+        }
+        draft.armature = armature;
+    }
+};
+
+struct AllocationProofSiteEditor
+{
+    dtDynReal position[3] = {0.0, 0.0, 0.0};
+
+    void operator()(dtDynSiteSpec &draft) const
+    {
+        for (std::uint16_t component = 0; component < 3; ++component)
+        {
+            draft.pos(component) = position[component];
+        }
+    }
+};
+
+struct AllocationProofFixture
+{
+    dtDynIndex baseBody = DTDYN_INVALID_INDEX;
+    dtDynIndex chainBody = DTDYN_INVALID_INDEX;
+    dtDynIndex ballBody = DTDYN_INVALID_INDEX;
+    dtDynIndex slideBody = DTDYN_INVALID_INDEX;
+    dtDynIndex fixedBody = DTDYN_INVALID_INDEX;
+    dtDynIndex firstSite = DTDYN_INVALID_INDEX;
+    dtDynIndex secondSite = DTDYN_INVALID_INDEX;
+    dtDynIndex thirdSite = DTDYN_INVALID_INDEX;
+    dtDynArray<dtDynIndex> bodyIds;
+    dtDynArray<dtDynIndex> siteIds;
+    dtDynDenseMatrix jacp;
+    dtDynDenseMatrix jacr;
+    dtDynDenseMatrix jacpDot;
+    dtDynDenseMatrix jacrDot;
+    dt::Math::Vector3<dtDynReal> pointOffset;
+    dt::Math::Vector3<dtDynReal> gravity;
+    dt::Math::Vector3<dtDynReal> linear;
+    dt::Math::Vector3<dtDynReal> angular;
+};
+
+// Explicit check that survives -DNDEBUG, unlike assert().
+void RequireAllocationProof(const bool condition, const char *message)
+{
+    if (!condition)
+    {
+        throw std::runtime_error(std::string("allocation proof failed: ") + message);
+    }
+}
+
+class AllocationProofLedger
+{
+public:
+    explicit AllocationProofLedger(const bool enforce)
+        : m_enforce(enforce)
+    {
+    }
+
+    void SetPass(const char *pass)
+    {
+        m_pass = pass;
+    }
+
+    void Begin()
+    {
+        m_before = g_totalTestAllocations;
+        m_beforeRaw = g_rawCAllocatorCalls;
+    }
+
+    std::size_t CheckCount() const
+    {
+        return m_checks;
+    }
+
+    void End(const char *api)
+    {
+        const std::size_t observed = (g_totalTestAllocations - m_before) + (g_rawCAllocatorCalls - m_beforeRaw);
+        ++m_checks;
+        if (m_enforce && (observed != 0))
+        {
+            throw std::runtime_error(std::string("allocation proof failed: realtime API ") + api +
+                                     " performed " + std::to_string(observed) +
+                                     " heap allocation(s) during " + m_pass);
+        }
+    }
+
+private:
+    bool m_enforce;
+    const char *m_pass = "setup";
+    std::size_t m_before = 0;
+    std::size_t m_beforeRaw = 0;
+    std::size_t m_checks = 0;
+};
+
+void SetAllocationProofQuaternion(dtDynData &data, const dtDynIndex address, const dtDynReal phase)
+{
+    dt::Math::Vector4<dtDynReal> raw;
+    raw(0) = 1.0 + (0.3 * phase);
+    raw(1) = -0.4 + phase;
+    raw(2) = 0.5;
+    raw(3) = 0.1 - (0.2 * phase);
+    const dt::Math::Vector4<dtDynReal> unit = math::NormalizeOrIdentity(raw);
+    for (std::uint16_t component = 0; component < 4; ++component)
+    {
+        data.qpos(static_cast<std::uint16_t>(address + component)) = unit(component);
+    }
+}
+
+void SetAllocationProofState(const dtDynModel &model, dtDynData &data, const dtDynIndex pass)
+{
+    const dtDynReal phase = 0.31 * static_cast<dtDynReal>(pass + 1);
+    for (dtDynIndex jointId = 0; jointId < model.njnt; ++jointId)
+    {
+        const std::size_t jointIndex = static_cast<std::size_t>(jointId);
+        const dtDynJointType type = static_cast<dtDynJointType>(model.jnt_type[jointIndex]);
+        const dtDynIndex address = model.jnt_qposadr[jointIndex];
+        if (type == dtDynJointType::Free)
+        {
+            data.qpos(static_cast<std::uint16_t>(address + 0)) = 0.10 * phase;
+            data.qpos(static_cast<std::uint16_t>(address + 1)) = -0.20 + (0.05 * phase);
+            data.qpos(static_cast<std::uint16_t>(address + 2)) = 0.60 - (0.10 * phase);
+            SetAllocationProofQuaternion(data, address + 3, phase);
+        }
+        else if (type == dtDynJointType::Ball)
+        {
+            SetAllocationProofQuaternion(data, address, -0.7 * phase);
+        }
+        else
+        {
+            data.qpos(static_cast<std::uint16_t>(address)) =
+                0.4 * std::sin(phase + static_cast<dtDynReal>(jointId));
+        }
+    }
+    for (dtDynIndex dofId = 0; dofId < model.nv; ++dofId)
+    {
+        data.qvel(static_cast<std::uint16_t>(dofId)) =
+            (0.2 * std::cos(phase * static_cast<dtDynReal>(dofId + 1))) +
+            (0.03 * static_cast<dtDynReal>(dofId + 1));
+    }
+}
+
+bool IsAllocationProofFinite(const dtDynReal value)
+{
+    return std::isfinite(value);
+}
+
+void RequireAllocationProofOutputsAreLive(const dtDynModel &model,
+                                          const dtDynData &data,
+                                          const AllocationProofFixture &fixture)
+{
+    RequireAllocationProof(std::fabs(data.Mmat(0, 0) - model.root_mass(0)) < kAllocationProofTolerance,
+                           "free-base mass matrix entry must equal the root mass");
+    dtDynReal gravityMagnitude = 0.0;
+    dtDynReal siteSignal = 0.0;
+    for (dtDynIndex dofId = 0; dofId < model.nv; ++dofId)
+    {
+        const std::uint16_t dof = static_cast<std::uint16_t>(dofId);
+        RequireAllocationProof(IsAllocationProofFinite(data.gravityTorq(dof)), "gravity torque must be finite");
+        RequireAllocationProof(IsAllocationProofFinite(data.coriolisTorq(dof)), "Coriolis torque must be finite");
+        gravityMagnitude += std::fabs(data.gravityTorq(dof));
+        for (std::uint16_t row = 0; row < 3; ++row)
+        {
+            const std::size_t siteIndex = static_cast<std::size_t>(fixture.firstSite);
+            RequireAllocationProof(IsAllocationProofFinite(data.site_jacp[siteIndex](row, dof)),
+                                   "site Jacobian must be finite");
+            siteSignal += std::fabs(data.site_jacp[siteIndex](row, dof)) +
+                          std::fabs(data.site_jacr_dot[siteIndex](row, dof));
+        }
+    }
+    RequireAllocationProof(gravityMagnitude > kAllocationProofTolerance, "gravity torque must be nonzero");
+    RequireAllocationProof(siteSignal > kAllocationProofTolerance, "site Jacobian terms must be nonzero");
+}
+
+void RunAllocationProofJacobianApis(const dtDynModel &model,
+                                    dtDynData &data,
+                                    AllocationProofFixture &fixture,
+                                    AllocationProofLedger &ledger)
+{
+    ledger.Begin();
+    ComputeBodyJacobians(model, data);
+    ledger.End("ComputeBodyJacobians(model, data)");
+
+    ledger.Begin();
+    ComputeSiteJacobians(model, data);
+    ledger.End("ComputeSiteJacobians(model, data)");
+
+    ledger.Begin();
+    ComputeJacobians(model, data);
+    ledger.End("ComputeJacobians(model, data)");
+
+    ledger.Begin();
+    ComputeBodyJacobians(model, data, fixture.bodyIds);
+    ledger.End("ComputeBodyJacobians(model, data, bodyIds)");
+
+    ledger.Begin();
+    ComputeSiteJacobians(model, data, fixture.siteIds);
+    ledger.End("ComputeSiteJacobians(model, data, siteIds)");
+
+    ledger.Begin();
+    ComputeJacobians(model, data, fixture.bodyIds, fixture.siteIds);
+    ledger.End("ComputeJacobians(model, data, bodyIds, siteIds)");
+
+    ledger.Begin();
+    for (dtDynIndex bodyId = 0; bodyId < model.nbody; ++bodyId)
+    {
+        ComputeBodyJacobian(model, data, bodyId, fixture.jacp, fixture.jacr);
+    }
+    ledger.End("ComputeBodyJacobian");
+
+    ledger.Begin();
+    for (dtDynIndex siteId = 0; siteId < model.nsite; ++siteId)
+    {
+        ComputeSiteJacobian(model, data, siteId, fixture.jacp, fixture.jacr);
+    }
+    ledger.End("ComputeSiteJacobian");
+
+    ledger.Begin();
+    for (dtDynIndex bodyId = 0; bodyId < model.nbody; ++bodyId)
+    {
+        const dt::Math::Vector3<dtDynReal> point =
+            data.xpos[static_cast<std::size_t>(bodyId)] + fixture.pointOffset;
+        ComputePointJacobian(model, data, bodyId, point, fixture.jacp, fixture.jacr);
+    }
+    ledger.End("ComputePointJacobian");
+
+    ledger.Begin();
+    for (dtDynIndex bodyId = 0; bodyId < model.nbody; ++bodyId)
+    {
+        const dt::Math::Vector3<dtDynReal> point =
+            data.xpos[static_cast<std::size_t>(bodyId)] + fixture.pointOffset;
+        ComputePointJacobianDot(model, data, bodyId, point, fixture.jacpDot, fixture.jacrDot);
+    }
+    ledger.End("ComputePointJacobianDot");
+
+    ledger.Begin();
+    for (dtDynIndex bodyId = 0; bodyId < model.nbody; ++bodyId)
+    {
+        const dt::Math::Vector3<dtDynReal> point =
+            data.xpos[static_cast<std::size_t>(bodyId)] + fixture.pointOffset;
+        ComputePointJacobianDotTimesVelocity(model, data, bodyId, point, fixture.linear, fixture.angular);
+    }
+    ledger.End("ComputePointJacobianDotTimesVelocity");
+
+    ledger.Begin();
+    for (dtDynIndex bodyId = 0; bodyId < model.nbody; ++bodyId)
+    {
+        const dt::Math::Vector3<dtDynReal> point =
+            data.xpos[static_cast<std::size_t>(bodyId)] + fixture.pointOffset;
+        ComputePointJacobianTerms(model, data, bodyId, point,
+                                  &fixture.jacp, &fixture.jacr, &fixture.jacpDot, &fixture.jacrDot,
+                                  &fixture.linear, &fixture.angular);
+    }
+    ledger.End("ComputePointJacobianTerms(all outputs)");
+
+    ledger.Begin();
+    for (dtDynIndex bodyId = 0; bodyId < model.nbody; ++bodyId)
+    {
+        const dt::Math::Vector3<dtDynReal> point =
+            data.xpos[static_cast<std::size_t>(bodyId)] + fixture.pointOffset;
+        ComputePointJacobianTerms(model, data, bodyId, point,
+                                  &fixture.jacp, nullptr, nullptr, nullptr, nullptr, nullptr);
+        ComputePointJacobianTerms(model, data, bodyId, point,
+                                  nullptr, nullptr, &fixture.jacpDot, &fixture.jacrDot, nullptr, nullptr);
+        ComputePointJacobianTerms(model, data, bodyId, point,
+                                  nullptr, nullptr, nullptr, nullptr, &fixture.linear, &fixture.angular);
+    }
+    ledger.End("ComputePointJacobianTerms(output subsets)");
+
+    ledger.Begin();
+    for (dtDynIndex bodyId = 0; bodyId < model.nbody; ++bodyId)
+    {
+        ComputeBodyJacobianTerms(model, data, bodyId,
+                                 &fixture.jacp, &fixture.jacr, &fixture.jacpDot, &fixture.jacrDot,
+                                 &fixture.linear, &fixture.angular);
+        ComputeBodyJacobianTerms(model, data, bodyId,
+                                 nullptr, &fixture.jacr, nullptr, &fixture.jacrDot, nullptr, &fixture.angular);
+    }
+    ledger.End("ComputeBodyJacobianTerms");
+
+    ledger.Begin();
+    for (dtDynIndex siteId = 0; siteId < model.nsite; ++siteId)
+    {
+        ComputeSiteJacobianTerms(model, data, siteId,
+                                 &fixture.jacp, &fixture.jacr, &fixture.jacpDot, &fixture.jacrDot,
+                                 &fixture.linear, &fixture.angular);
+        ComputeSiteJacobianTerms(model, data, siteId,
+                                 &fixture.jacp, nullptr, nullptr, nullptr, &fixture.linear, nullptr);
+    }
+    ledger.End("ComputeSiteJacobianTerms");
+
+    ledger.Begin();
+    for (dtDynIndex bodyId = 0; bodyId < model.nbody; ++bodyId)
+    {
+        ComputeBodyJacobianDot(model, data, bodyId, fixture.jacpDot, fixture.jacrDot);
+    }
+    ledger.End("ComputeBodyJacobianDot");
+
+    ledger.Begin();
+    for (dtDynIndex siteId = 0; siteId < model.nsite; ++siteId)
+    {
+        ComputeSiteJacobianDot(model, data, siteId, fixture.jacpDot, fixture.jacrDot);
+    }
+    ledger.End("ComputeSiteJacobianDot");
+
+    ledger.Begin();
+    for (dtDynIndex bodyId = 0; bodyId < model.nbody; ++bodyId)
+    {
+        ComputeBodyJacobianDotTimesVelocity(model, data, bodyId, fixture.linear, fixture.angular);
+    }
+    ledger.End("ComputeBodyJacobianDotTimesVelocity");
+
+    ledger.Begin();
+    for (dtDynIndex siteId = 0; siteId < model.nsite; ++siteId)
+    {
+        ComputeSiteJacobianDotTimesVelocity(model, data, siteId, fixture.linear, fixture.angular);
+    }
+    ledger.End("ComputeSiteJacobianDotTimesVelocity");
+}
+
+void RunAllocationProofPass(const dtDynModel &model,
+                            dtDynData &data,
+                            AllocationProofFixture &fixture,
+                            AllocationProofLedger &ledger)
+{
+    ledger.Begin();
+    ForwardKinematics(model, data);
+    ledger.End("ForwardKinematics");
+
+    ledger.Begin();
+    ComputeDynamicsRNEA(model, data, fixture.gravity, DTDYN_RNEA_TERM_NONE);
+    ledger.End("ComputeDynamicsRNEA(DTDYN_RNEA_TERM_NONE)");
+
+    ledger.Begin();
+    ComputeDynamicsRNEA(model, data, fixture.gravity, DTDYN_RNEA_TERM_ALL);
+    ledger.End("ComputeDynamicsRNEA(DTDYN_RNEA_TERM_ALL)");
+    RunAllocationProofJacobianApis(model, data, fixture, ledger);
+
+    ledger.Begin();
+    ComputeDynamicsCCRBA(model, data, fixture.gravity, DTDYN_CCRBA_TERM_NONE);
+    ledger.End("ComputeDynamicsCCRBA(DTDYN_CCRBA_TERM_NONE)");
+
+    ledger.Begin();
+    ComputeDynamicsCCRBA(model, data, fixture.gravity, DTDYN_CCRBA_TERM_ALL);
+    ledger.End("ComputeDynamicsCCRBA(DTDYN_CCRBA_TERM_ALL)");
+    RunAllocationProofJacobianApis(model, data, fixture, ledger);
+}
+
+void TestRealtimeComputePathPerformsNoHeapAllocation()
+{
+    dtDynSpec spec;
+    AllocationProofFixture fixture;
+    fixture.baseBody = spec.AddBody("alloc_base", 0);
+    const dtDynIndex chain1 = spec.AddBody("alloc_chain1", fixture.baseBody);
+    const dtDynIndex chain2 = spec.AddBody("alloc_chain2", chain1);
+    fixture.chainBody = spec.AddBody("alloc_chain3", chain2);
+    fixture.ballBody = spec.AddBody("alloc_ball", fixture.baseBody);
+    fixture.slideBody = spec.AddBody("alloc_slide", fixture.baseBody);
+    fixture.fixedBody = spec.AddBody("alloc_fixed", fixture.chainBody);
+
+    spec.EditBody(fixture.baseBody,
+                  AllocationProofBodyEditor{3.5, {0.10, -0.20, 0.30}, {0.05, -0.04, 0.06}, {0.30, 0.40, 0.50}, true});
+    spec.EditBody(chain1,
+                  AllocationProofBodyEditor{1.2, {0.25, 0.10, -0.15}, {0.02, 0.03, -0.04}, {0.05, 0.06, 0.07}, false});
+    spec.EditBody(chain2,
+                  AllocationProofBodyEditor{0.9, {-0.10, 0.30, 0.20}, {0.03, -0.02, 0.05}, {0.04, 0.05, 0.06}, true});
+    spec.EditBody(fixture.chainBody,
+                  AllocationProofBodyEditor{0.7, {0.15, -0.25, 0.35}, {-0.01, 0.04, 0.02}, {0.03, 0.04, 0.05}, false});
+    spec.EditBody(fixture.ballBody,
+                  AllocationProofBodyEditor{1.1, {-0.30, 0.20, 0.10}, {0.04, 0.01, -0.03}, {0.06, 0.07, 0.08}, true});
+    spec.EditBody(fixture.slideBody,
+                  AllocationProofBodyEditor{0.8, {0.05, 0.35, -0.20}, {-0.02, 0.03, 0.04}, {0.04, 0.05, 0.05}, false});
+    spec.EditBody(fixture.fixedBody,
+                  AllocationProofBodyEditor{0.4, {0.20, 0.05, -0.10}, {0.01, -0.02, 0.03}, {0.02, 0.03, 0.04}, true});
+
+    const dtDynIndex freeJoint = spec.AddJoint(fixture.baseBody, "alloc_free", dtDynJointType::Free);
+    const dtDynIndex hinge1 = spec.AddJoint(chain1, "alloc_hinge1", dtDynJointType::Hinge);
+    const dtDynIndex hinge2 = spec.AddJoint(chain2, "alloc_hinge2", dtDynJointType::Hinge);
+    const dtDynIndex hinge3 = spec.AddJoint(fixture.chainBody, "alloc_hinge3", dtDynJointType::Hinge);
+    const dtDynIndex ballJoint = spec.AddJoint(fixture.ballBody, "alloc_ball_joint", dtDynJointType::Ball);
+    const dtDynIndex slideJoint = spec.AddJoint(fixture.slideBody, "alloc_slide_joint", dtDynJointType::Slide);
+    spec.EditJoint(freeJoint, AllocationProofJointEditor{{0.01, 0.02, -0.03}, {0.0, 0.0, 1.0}, 0.0});
+    spec.EditJoint(hinge1, AllocationProofJointEditor{{0.05, -0.04, 0.03}, {0.6, 0.0, 0.8}, 0.01});
+    spec.EditJoint(hinge2, AllocationProofJointEditor{{-0.03, 0.06, 0.02}, {0.0, 0.8, 0.6}, 0.02});
+    spec.EditJoint(hinge3, AllocationProofJointEditor{{0.04, 0.02, -0.05}, {0.48, 0.6, 0.64}, 0.015});
+    spec.EditJoint(ballJoint, AllocationProofJointEditor{{-0.05, 0.03, 0.04}, {0.0, 0.0, 1.0}, 0.0});
+    spec.EditJoint(slideJoint, AllocationProofJointEditor{{0.02, -0.06, 0.01}, {0.0, 0.6, 0.8}, 0.0});
+
+    fixture.firstSite = spec.AddSite(fixture.chainBody, "alloc_site_chain");
+    fixture.secondSite = spec.AddSite(fixture.ballBody, "alloc_site_ball");
+    fixture.thirdSite = spec.AddSite(fixture.fixedBody, "alloc_site_fixed");
+    spec.EditSite(fixture.firstSite, AllocationProofSiteEditor{{0.05, 0.02, -0.10}});
+    spec.EditSite(fixture.secondSite, AllocationProofSiteEditor{{-0.04, 0.06, 0.08}});
+    spec.EditSite(fixture.thirdSite, AllocationProofSiteEditor{{0.07, -0.03, 0.09}});
+
+    dtDynModel model = CompileSpecChecked(spec);
+    RequireAllocationProof(model.nq == 15, "fixture must expose 15 qpos coordinates");
+    RequireAllocationProof(model.nv == 13, "fixture must expose 13 velocity coordinates");
+    RequireAllocationProof(model.nbody == 8, "fixture must contain eight bodies");
+    RequireAllocationProof(model.njnt == 6, "fixture must contain six joints");
+    RequireAllocationProof(model.nsite == 3, "fixture must contain three sites");
+
+    dtDynData data;
+    data.Resize(model);
+
+    // Setup-time work: id lists with duplicates/out-of-order entries and
+    // caller-owned Jacobian outputs are sized before any measurement.
+    fixture.bodyIds = {fixture.fixedBody, fixture.baseBody, fixture.chainBody, fixture.ballBody,
+                       fixture.chainBody, 0, fixture.slideBody, fixture.baseBody};
+    fixture.siteIds = {fixture.thirdSite, fixture.firstSite, fixture.secondSite,
+                       fixture.firstSite, fixture.thirdSite};
+    ResizeDenseMatrix(fixture.jacp, 3, model.nv);
+    ResizeDenseMatrix(fixture.jacr, 3, model.nv);
+    ResizeDenseMatrix(fixture.jacpDot, 3, model.nv);
+    ResizeDenseMatrix(fixture.jacrDot, 3, model.nv);
+    fixture.pointOffset(0) = 0.03;
+    fixture.pointOffset(1) = -0.02;
+    fixture.pointOffset(2) = 0.04;
+    fixture.gravity.SetZero();
+    fixture.gravity(2) = -9.81;
+    fixture.linear.SetZero();
+    fixture.angular.SetZero();
+
+    // Warm-up: every API runs once so that first-call effects cannot be
+    // mistaken for steady-state behavior; its counts are not enforced.
+    AllocationProofLedger warmup(false);
+    warmup.SetPass("warm-up");
+    SetAllocationProofState(model, data, 0);
+    RunAllocationProofPass(model, data, fixture, warmup);
+    RequireAllocationProofOutputsAreLive(model, data, fixture);
+
+    const std::size_t checksPerPass = warmup.CheckCount();
+    RequireAllocationProof(checksPerPass > 0, "warm-up pass must exercise the realtime APIs");
+
+    static const char *const kPassNames[3] = {"measured pass 1", "measured pass 2", "measured pass 3"};
+    AllocationProofLedger measured(true);
+    for (dtDynIndex pass = 0; pass < 3; ++pass)
+    {
+        measured.SetPass(kPassNames[pass]);
+        SetAllocationProofState(model, data, pass + 1);
+        RunAllocationProofPass(model, data, fixture, measured);
+        RequireAllocationProofOutputsAreLive(model, data, fixture);
+    }
+
+    // UpdateSpec after a physical edit is allocation-free, and the updated
+    // model keeps the compute path allocation-free.
+    spec.EditBody(fixture.baseBody,
+                  AllocationProofBodyEditor{4.25, {0.12, -0.18, 0.33}, {0.06, -0.03, 0.05}, {0.35, 0.45, 0.55}, true});
+    spec.EditBody(chain1,
+                  AllocationProofBodyEditor{1.4, {0.22, 0.12, -0.17}, {0.03, 0.02, -0.05}, {0.06, 0.07, 0.08}, false});
+    RequireAllocationProof(measured.CheckCount() == (3 * checksPerPass),
+                           "every measured pass must run the same API sequence as warm-up");
+    measured.SetPass("UpdateSpec");
+    measured.Begin();
+    const bool updated = UpdateSpec(spec, model);
+    measured.End("UpdateSpec");
+    RequireAllocationProof(updated, "UpdateSpec must accept a physical-only edit");
+    RequireAllocationProof(std::fabs(model.root_mass(0) - 9.55) < kAllocationProofTolerance,
+                           "UpdateSpec must refresh the root mass cache");
+
+    measured.SetPass("measured pass after UpdateSpec");
+    SetAllocationProofState(model, data, 4);
+    RunAllocationProofPass(model, data, fixture, measured);
+    RequireAllocationProofOutputsAreLive(model, data, fixture);
+    RequireAllocationProof(measured.CheckCount() == ((4 * checksPerPass) + 1),
+                           "post-UpdateSpec pass must run the same API sequence as warm-up");
+}
+
 } // namespace
 
 int main()
 {
     TestCheckedCompileAcceptsValidSpec();
     TestCheckedCompileRejectsInvalidParent();
+    TestSpecValidationRejectsNegativeParentAddedPublicly();
+    TestSpecValidationRejectsForwardParentAddedPublicly();
     TestSpecValidationRejectsDetachedJoint();
+    TestSpecValidationRejectsWorldJointAddedPublicly();
+    TestSpecValidationRejectsOnePastEndJointAddedPublicly();
+    TestSpecValidationRejectsJointTypeBelowFreeAddedPublicly();
+    TestSpecValidationRejectsJointTypeAboveHingeAddedPublicly();
     TestSpecValidationRejectsSiblingCycle();
     TestSpecValidationRejectsDetachedSite();
+    TestSpecValidationRejectsWorldSiteAddedPublicly();
+    TestSpecValidationRejectsOnePastEndSiteAddedPublicly();
     TestSpecValidationRejectsInvalidActuatorReference();
     TestSpecValidationRejectsInvalidBodyJointReference();
+    TestSpecValidationPreservesSignedReferenceBounds();
+    TestSpecValidationRejectsChildListRange();
+    TestSpecValidationRejectsTerminalBodyAbsentFromChildList();
     TestSpecValidationRejectsDuplicateNames();
     TestSpecValidationRejectsDuplicateEmptyNames();
     TestSpecValidationRejectsNonFiniteValues();
+    TestModelValidationRejectsNegativeDimension();
     TestModelValidationRejectsDimensionOverflow();
     TestSpecValidationRejectsDimensionOverflowBeforeCompile();
+    TestSpecValidationRejectsTerminalJointDofOverflow();
+    TestSpecValidationPreservesPublicObjectCountBoundaries();
+    TestSpecValidationPreservesRootStackedDimensionBoundary();
     TestModelValidationRejectsArrayShapeMismatch();
     TestModelValidationRejectsMissingWorld();
+    TestModelValidationRejectsCompiledWorldAndNonWorldParents();
     TestModelValidationRejectsNonFiniteValues();
     TestModelValidationRejectsInvalidDofReferences();
     TestModelValidationRejectsInvalidAddressSegments();
+    TestModelValidationRejectsCompiledJointTypesOutsideRange();
     TestModelValidationRejectsInvalidJointSpecProvenance();
     TestModelValidationRejectsInvalidRootMetadata();
+    TestModelValidationRejectsInconsistentRootTableMetadata();
+    TestModelValidationPreservesWorldRootPropagation();
     TestModelValidationRejectsDuplicateNames();
+    TestValidationErrorResetsAfterSuccessfulCalls();
+    TestModelValidationLabelsMismatchedArrayAndDenseSizes();
     TestModelValidationRejectsOverlappingJointSpans();
     TestModelValidationRejectsOrphanBodySegments();
     TestModelValidationRejectsDofOutsideDeclaredJointSpan();
     TestModelValidationRejectsInvalidWeldId();
+    TestModelValidationPreservesWeldPropagation();
     TestModelValidationRejectsIncorrectDofParentTopology();
     TestModelValidationRejectsInconsistentDerivedMasses();
     TestSpecValidationRejectsInvalidPhysicalValues();
+    TestSpecValidationPreservesPhysicalInertiaTriangleInequalities();
+    TestSpecValidationPreservesOrderedPhysicalAndNameFailures();
     TestModelValidationRejectsInvalidPhysicalValues();
     TestModelValidationRejectsInvalidFramePairs();
+    TestModelValidationPreservesUniqueNameValidationOrder();
+    TestModelValidationPreservesJointAndSiteValidationFailures();
+    TestModelValidationRejectsCompiledSiteBodyBounds();
+    TestModelValidationRejectsCompiledActuatorJointBounds();
+    TestModelValidationRejectsCompiledJointQposDofSpanBounds();
+    TestModelValidationRejectsCompiledJointReferencingInvalidBody();
+    TestModelValidationRejectsCompiledBodySegmentBounds();
+    TestModelValidationPreservesEveryBodyNonFiniteFailure();
+    TestModelValidationPreservesEveryBodyPhysicalOrFrameFailure();
+    TestModelValidationPreservesBodyValidationPhasePrecedence();
     TestCompileSpecSupportsMaximumRootMappingWithoutNestedLookup();
     TestJointSizes();
     TestDtArrayDirectHeader();
@@ -4732,6 +11564,9 @@ int main()
     TestDtArrayPushBackPreservesAliasedLvalueOnGrowth();
     TestDtArrayPushBackPreservesCopyOnlyAliasedLvalueOnGrowth();
     TestDtArrayReserveSupportsMoveOnlyElements();
+    TestDtArrayEndPointerContract();
+    TestDtArrayAppendGrowthSequence();
+    TestSpecEditItemRejectsSignedIndexBounds();
     TestSpecWorldAndFixedBody();
     TestSpecEditorsCommitScopedCopies();
     TestSpecEditorsDiscardFailedDrafts();
@@ -4749,25 +11584,50 @@ int main()
     TestSpecNameLookupReflectsEditorMutations();
     TestModelActuatorNameLookupUsesRebuiltCache();
     TestSpecXmlReportsTypedNumericErrors();
+    TestSpecXmlPreservesNumericWhitespaceAndFirstFailure();
+    TestSpecXmlPreservesWhitespaceOnlyNumericOffset();
     TestSpecXmlRejectsWrongVectorArity();
+    TestSpecXmlPreservesVectorWhitespaceAndArityOffset();
     TestSpecXmlRejectsMalformedAttributes();
+    TestSpecXmlPreservesAttributeWhitespaceAndFirstFailure();
+    TestSpecXmlDecodePreservesTerminalTextAndDeclarationDiagnostics();
+    TestSpecXmlDecodePreservesJointTypeFallbackAndExplicitSlide();
+    TestSpecXmlDecodePreservesActuatorJointReferenceDiagnostics();
     TestSpecXmlRejectsMisnestedSupportedTags();
+    TestSpecXmlPreservesClosingElementFailureOrder();
     TestSpecXmlRejectsDuplicateObjectNames();
     TestSpecXmlRejectsUnknownReferencesWithTypedError();
+    TestSpecXmlPreservesBodyAndActuatorValidationOrigins();
+    TestSpecXmlPreservesJointAndSiteValidationOrigins();
     TestSpecXmlRejectsInvalidJointRange();
     TestSpecXmlRejectsUnsupportedSemanticValues();
     TestSpecXmlRejectsInvalidBooleanValue();
+    TestSpecXmlPreservesLimitedBooleanGrammar();
+    TestSpecXmlPreservesAttributeFallbacks();
+    TestSpecXmlPreservesNumericAttributeFallbacks();
+    TestSpecXmlPreservesCompilerAngleFallbackAndInvalidOffset();
+    TestSpecXmlPreservesDuplicateNameOffsets();
+    TestSpecXmlPreservesTagWhitespaceAndClosingSuffixOffset();
     TestSpecXmlRequiresSingleRootElement();
+    TestSpecXmlRejectsDuplicateCompilerAndActuatorSections();
     TestSpecXmlRejectsSupportedElementInWrongContext();
+    TestSpecXmlAcceptsEverySupportedElementInItsDocumentedParent();
+    TestSpecXmlPreservesWhitespaceAndTagNameGrammar();
     TestSpecXmlScannerIsQuoteAwareAndFailClosed();
+    TestSpecXmlScannerPreservesSingleQuoteTagScanning();
     TestSpecXmlRunsSetupValidationAfterParsing();
     TestSpecXmlRejectsClosingTagAttributes();
     TestSpecXmlRejectsMalformedSelfClosingSuffix();
+    TestSpecXmlPreservesSelfClosingTagDetection();
     TestSpecXmlRejectsDuplicateDeclaration();
     TestSpecXmlRejectsRawLessThanInAttributeValue();
     TestSpecXmlRejectsMalformedDeclarationGrammar();
+    TestSpecXmlPreservesDeclarationVersionAndAttributeGrammar();
     TestSpecXmlRejectsDeclarationAfterLeadingWhitespace();
+    TestSpecXmlEncodeBodyQuaternionAttributes();
     TestSpecXmlDecodeEncodeRoundTrip();
+    TestSpecXmlEncodePreservesTerminalAndSiblingBodyTraversal();
+    TestSpecXmlEncodeOmitsInvalidActuatorJointReferences();
     TestSpecXmlLoadsFromFile();
     TestSpecXmlLoadsAcrossBufferBoundaries();
     TestSpecXmlLoadReportsTypedErrorPath();
@@ -4783,23 +11643,52 @@ int main()
     TestCompiledModelCopiesIntoDefaultModel();
     TestCompiledModelCopiesZeroSizedOptionalDenseFields();
     TestCompileSpecCanFillExistingModel();
+    TestUpdateSpecPreservesWorldSiblingCompatibility();
+    TestSpecValidationRejectsRepeatedChildListEntries();
     TestUpdateSpecRejectsSameDofJointTypeChangeWithoutWriting();
     TestUpdateSpecRejectsWorldParentMutationWithoutWriting();
     TestUpdateSpecRejectsChildListMutationWithoutWriting();
     TestUpdateSpecRejectsSiteBacklinkMutationWithoutWriting();
+    TestUpdateSpecRejectsEarlyStorageMismatchWithoutWriting();
+    TestUpdateSpecRejectsLateStorageMismatchWithoutWriting();
+    TestUpdateSpecRejectsLateCompatibilityMetadataMutationsWithoutWriting();
+    TestUpdateSpecP85AcceptsZeroDimensionsWithoutTopologyWrites();
+    TestUpdateSpecP85RejectsValidSourceCollectionShapeChangesWithoutWriting();
+    TestUpdateSpecP83UpdatesWorldRootChildPhysicalModel();
+    TestUpdateSpecP83RejectsValidBodyNameAndParentChangesWithoutWriting();
+    TestUpdateSpecP88PreservesAncestorAndSiteTraversal();
     TestUpdateSpecMatchesPhysicalRecompile();
     TestUpdateSpecRefreshesMultiRootMultiDofCaches();
     TestDtMathDynamicResizeHelpers();
     TestDataResizeSeparatesBodyAndDofStorage();
+    TestDataCompatibilityRejectsLateWorkspaceMismatch();
     TestDataResizeSupportsFullyFixedZeroDofModel();
     TestDtDynMathHelpersAreReusable();
+    TestQuatToMatPreservesQuarterTurn();
+    TestMulQuatPreservesQuaternionProduct();
+    TestMatrixRotatePreservesLinearCombination();
+    TestNormalizeOrIdentityPreservesUnitAndZeroCases();
+    TestBodyInertiaInWorldPreservesRotatedPrincipalAxes();
+    TestSpatialInertiaAtWorldOriginUsesParallelAxisTheorem();
+    TestCompileSpecCheckedPreservesP89MultiJointLoopLayout();
     TestCompileSpecUsesNativeIndexLayout();
     TestCompileSpecSupportsMultipleMovableRoots();
+    TestEffectiveRootCountPreservesFallback();
+    TestCcrbaPreservesRootMassGuardedComProducts();
+    TestFreeJointCdoFDotPreservesSpatialCrossTerms();
+    TestCcrbaHalfSymmetricMotionCrossColumn2UsesPhysicalNonzeroTerms();
+    TestCcrbaFillBodySpatialInertiaAtRootComCoversAllP50Rows();
+    TestCcrbaSpatialMulIntoZeroDofDotCoversAllComponents();
+    TestAngularPointMotionSubspacePreservesCrossTerms();
     TestCompileSpecSupportsFloatingBaseQuadrupedTree();
+    TestForwardKinematicsAppliesBallJointQuaternionPose();
     TestForwardKinematicsAndPointJacobianForFixedChain();
     TestIndexedJacobiansOnlyRefreshRequestedIds();
     TestIndexedJacobiansRefreshFloatingBaseBodyAndTaskSite();
+    TestP52CachedPointJacobianDerivativeDispatchUsesBallAndFreeRotations();
+    TestMotionSubspaceAtPointMatchesIndependentFreeAndBallColumns();
     TestPointJacobianDotMatchesFiniteDifferenceForMaterialSite();
+    TestPointJacobianTermsSelectsEachOutputFamily();
     TestPointJacobianTermsMatchesSeparateAPIs();
     TestBodyAndSiteJacobianTermsMatchSeparateAPIs();
     TestMassMatrixGravityAndSubtreeComForSingleHinge();
@@ -4808,5 +11697,6 @@ int main()
     TestDynamicsCCRBAComputesOnlyRequestedExtraTerms();
     TestDynamicsRNEAComputesOnlyRneaRequestedTerms();
     TestDynamicsCCRBAAllTermsIsRepeatable();
+    TestRealtimeComputePathPerformsNoHeapAllocation();
     return 0;
 }

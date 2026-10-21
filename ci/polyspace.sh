@@ -39,9 +39,19 @@ echo "Access run label     : ${RUN_LABEL}"
 echo "=================================================="
 
 # 바이너리/라이선스 서버 연결을 초반에 확인
-polyspace-bug-finder-server -version
+polyspace-bug-finder-server -version || {
+    echo "ERROR: Polyspace binary/license-server preflight failed"
+    exit 1
+}
 
 mkdir -p "${REPORT_ROOT}" "${POLYSPACE_BUILD_DIR}"
+
+# Cached configure options can target an obsolete compilation database. Remove them
+# before configuration and require this invocation to create a nonempty replacement.
+rm -f "${CONFIG_OPTS}" || {
+    echo "ERROR: cannot clear prior Polyspace configure options"
+    exit 1
+}
 
 # cache(policy: pull-push, key가 브랜치 단위)가 직전 실행의 -results-dir를 그대로 복원해오므로,
 # 여기서 비우지 않으면 "풀스캔"이어도 이전 실행 결과가 섞인 상태로 재검증되어 실행마다 결함 집합이 달라진다
@@ -60,6 +70,10 @@ polyspace-configure \
     echo "ERROR: Polyspace configuration failed"
     exit 1
 }
+test -s "${CONFIG_OPTS}" || {
+    echo "ERROR: Polyspace configuration did not produce fresh options"
+    exit 1
+}
 
 polyspace-bug-finder-server \
     -options-file polyspace/polyspace.opts \
@@ -76,8 +90,13 @@ test -f "${RESULTS_DIR}/ps_results.psbf" || {
     exit 1
 }
 
-# CSV 결과 내보내기 — 실패 시 직전 실행의 REPORT(stale report_list.txt)가 남아있으면
-# 이후 요약 단계가 그 파일을 "이번 실행 결과"로 오독해 실패를 은폐하므로 즉시 종료한다
+# CSV 결과 내보내기 — 성공 exit만으로는 새 REPORT 생성을 보장하지 않는다.
+# 직전 cache의 report를 release gate가 재사용하지 못하도록 export 전에 지우고,
+# 새 canonical result_list.txt가 없으면 fail closed 한다.
+rm -f "${REPORT}" || {
+    echo "ERROR: cannot clear prior Polyspace result list"
+    exit 1
+}
 polyspace-results-export \
     -format csv \
     -output-name "${REPORT_ROOT}/polyspace" \
@@ -85,14 +104,26 @@ polyspace-results-export \
     echo "ERROR: Polyspace result export failed"
     exit 1
 }
+test -s "${REPORT}" || {
+    echo "ERROR: Polyspace export did not produce canonical result_list.txt"
+    exit 1
+}
 
-# PDF 리포트 생성
-polyspace-report-generator \
+# PDF report is advisory rather than a release decision source. Remove any cached
+# copy first so a generator failure cannot publish stale human-readable evidence.
+rm -f "${REPORT_ROOT}/polyspace-report.pdf" || {
+    echo "ERROR: cannot clear prior Polyspace PDF report"
+    exit 1
+}
+if ! polyspace-report-generator \
     -template "${POLYSPACE_TEMPLATES}/Developer.rpt" \
     -format PDF \
     -output-name "${REPORT_ROOT}/polyspace-report" \
     -results-dir "${RESULTS_DIR}" \
-    -set-language-english || true
+    -set-language-english
+then
+    echo "WARNING: Polyspace PDF report generation failed; canonical result_list.txt remains the gate evidence"
+fi
 
 # 라이선스 오류 감지
 PSLOG="$(ls "${RESULTS_DIR}"/Polyspace_*.log 2>/dev/null | head -1 || true)"
@@ -102,47 +133,20 @@ if [[ -n "${PSLOG}" ]] && grep -q "License error\|Licensing Error" "${PSLOG}"; t
     exit 1
 fi
 
-# 요약 출력 및 종료 코드 결정
-# CSV 컬럼: ID(1) Family(2) Group(3) Color(4) New(5) Check(6) Information(7)
-#            Class(8) Function(9) File(10) Status(11) Severity(12) ...
-# Color=Red 는 분석 결과이며 JUSTIFIED 후에도 변하지 않는다.
-# Status 로 검토 완료 여부를 판단해야 한다.
-REVIEWED_STATUSES='Justified|No action planned|Not a defect'
-
-POLYSPACE_EXIT=0
-if [[ -f "${REPORT}" ]]; then
-    NO_COMPILE="$(awk -F'\t' 'NR>1 && $6=="File does not compile" {c++} END{print c+0}' "${REPORT}" || echo 0)"
-    JUSTIFIED="$(awk -F'\t' -v pat="${REVIEWED_STATUSES}" \
-        'NR>1 && $4=="Red" && $11 ~ pat && $6!="File does not compile" {c++} END{print c+0}' \
-        "${REPORT}" || echo 0)"
-    RED="$(awk -F'\t' -v pat="${REVIEWED_STATUSES}" \
-        'NR>1 && $4=="Red" && $11 !~ pat && $6!="File does not compile" {c++} END{print c+0}' \
-        "${REPORT}" || echo 0)"
-
-    echo "=============================="
-    echo "Polyspace 결과 요약"
-    echo "  Red (미검토 결함): ${RED}개"
-    echo "  Red (검토 완료):   ${JUSTIFIED}개  (Justified / No action planned / Not a defect)"
-    echo "  컴파일 불가:       ${NO_COMPILE}개 제외"
-    echo "  PDF: ${REPORT_ROOT}/polyspace-report.pdf"
-    echo "=============================="
-
-    if [[ "${RED}" -gt 0 ]]; then
-        awk -F'\t' -v pat="${REVIEWED_STATUSES}" \
-            'NR>1 && $4=="Red" && $11 !~ pat && $6!="File does not compile" \
-             {printf "  %-50s | %s\n", $6, $9}' \
-            "${REPORT}"
-        POLYSPACE_EXIT=1
-    fi
-else
-    echo "결과 CSV를 찾을 수 없습니다"
-    POLYSPACE_EXIT=1
-fi
+# Canonical raw-defect-zero gate. It is the only release decision source: every row
+# must be Green with a blank or Unreviewed status. The parser also fails closed on
+# malformed TSV, missing values, and "File does not compile" rows.
+# 21.6.1/21.6.2/21.6.3 are accepted only for the setup-phase files listed in
+# polyspace/setup_phase_deviation.txt (provisional until the team decides the review
+# policy). Any other file reporting these rules still fails this gate.
+python3 tools/polyspace_result_gate.py --input "${REPORT}" \
+    --setup-phase-deviation polyspace/setup_phase_deviation.txt
+POLYSPACE_EXIT=$?
 
 # Polyspace Access 에 결과 업로드 (변수 미설정 시 건너뜀)
 if [[ -n "${POLYSPACE_ACCESS_LOGIN:-}" && -n "${POLYSPACE_ACCESS_ENCRYPTED_PASSWORD:-}" ]]; then
     if polyspace-access \
-        -protocol http \
+        -protocol https \
         -host "${POLYSPACE_ACCESS_HOST}" \
         -port "${POLYSPACE_ACCESS_PORT}" \
         -login "${POLYSPACE_ACCESS_LOGIN}" \
@@ -156,7 +160,7 @@ if [[ -n "${POLYSPACE_ACCESS_LOGIN:-}" && -n "${POLYSPACE_ACCESS_ENCRYPTED_PASSW
 
         if [[ -n "${RUN_ID}" ]]; then
             polyspace-access \
-                -protocol http \
+                -protocol https \
                 -host "${POLYSPACE_ACCESS_HOST}" \
                 -port "${POLYSPACE_ACCESS_PORT}" \
                 -login "${POLYSPACE_ACCESS_LOGIN}" \
