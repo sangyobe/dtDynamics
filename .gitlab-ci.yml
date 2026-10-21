@@ -24,7 +24,7 @@ variables:
   POLYSPACE_TEMPLATES: "/usr/local/Polyspace_Server/R2025b/toolbox/polyspace/psrptgen/templates"
   POLYSPACE_ACCESS_HOST: "10.20.92.67"
   POLYSPACE_ACCESS_PORT: "9444"
-  DTDYNAMICS_DTMATH_COMMIT: "b6cb3af6d0ec930d3bcfc030b146380d0fc56cfd"
+  DTDYNAMICS_DTMATH_COMMIT: "1b495575cf99beaf04a61df3074a73f73b01f09b"
   DTDYNAMICS_DTMATH_INCLUDE_DIR: "${CI_PROJECT_DIR}/.ci/dtmath/include"
 
 before_script:

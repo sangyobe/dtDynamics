@@ -217,13 +217,13 @@ bool ValidateUniqueNames(const dtArray<std::string> &objects,
 
 bool IsFinite(const dt::Math::Vector3<dtDynReal> &value)
 {
-    return std::isfinite(value.At(0)) && std::isfinite(value.At(1)) && std::isfinite(value.At(2));
+    return std::isfinite(value(0)) && std::isfinite(value(1)) && std::isfinite(value(2));
 }
 
 bool IsFinite(const dt::Math::Vector4<dtDynReal> &value)
 {
-    return std::isfinite(value.At(0)) && std::isfinite(value.At(1)) &&
-           std::isfinite(value.At(2)) && std::isfinite(value.At(3));
+    return std::isfinite(value(0)) && std::isfinite(value(1)) &&
+           std::isfinite(value(2)) && std::isfinite(value(3));
 }
 
 bool IsFinite(const dt::Math::Matrix3<dtDynReal> &value)
@@ -232,7 +232,7 @@ bool IsFinite(const dt::Math::Matrix3<dtDynReal> &value)
     {
         for (dtDynIndex column = 0; column < 3; ++column)
         {
-            if (!std::isfinite(value.At(static_cast<std::uint16_t>(row), static_cast<std::uint16_t>(column))))
+            if (!std::isfinite(value(static_cast<std::uint16_t>(row), static_cast<std::uint16_t>(column))))
             {
                 return false;
             }
@@ -259,42 +259,42 @@ bool NearlyEqualInput(const dtDynReal lhs, const dtDynReal rhs)
 
 bool IsUnitVector(const dt::Math::Vector3<dtDynReal> &value)
 {
-    const dtDynReal squaredNorm = ((value.At(0) * value.At(0)) + (value.At(1) * value.At(1))) +
-                                  (value.At(2) * value.At(2));
+    const dtDynReal squaredNorm = ((value(0) * value(0)) + (value(1) * value(1))) +
+                                  (value(2) * value(2));
     return NearlyEqualInput(squaredNorm, static_cast<dtDynReal>(1.0));
 }
 
 bool IsUnitQuaternion(const dt::Math::Vector4<dtDynReal> &value)
 {
-    const dtDynReal squaredNorm = (((value.At(0) * value.At(0)) + (value.At(1) * value.At(1))) +
-                                   (value.At(2) * value.At(2))) +
-                                  (value.At(3) * value.At(3));
+    const dtDynReal squaredNorm = (((value(0) * value(0)) + (value(1) * value(1))) +
+                                   (value(2) * value(2))) +
+                                  (value(3) * value(3));
     return NearlyEqualInput(squaredNorm, static_cast<dtDynReal>(1.0));
 }
 
 bool IsPhysicalInertia(const dt::Math::Vector3<dtDynReal> &value)
 {
-    if ((value.At(0) < 0.0) || (value.At(1) < 0.0) || (value.At(2) < 0.0))
+    if ((value(0) < 0.0) || (value(1) < 0.0) || (value(2) < 0.0))
     {
         return false;
     }
-    if (!(value.At(0) <= (value.At(1) + value.At(2))))
+    if (!(value(0) <= (value(1) + value(2))))
     {
-        if (!NearlyEqual(value.At(0), value.At(1) + value.At(2)))
+        if (!NearlyEqual(value(0), value(1) + value(2)))
         {
             return false;
         }
     }
-    if (!(value.At(1) <= (value.At(0) + value.At(2))))
+    if (!(value(1) <= (value(0) + value(2))))
     {
-        if (!NearlyEqual(value.At(1), value.At(0) + value.At(2)))
+        if (!NearlyEqual(value(1), value(0) + value(2)))
         {
             return false;
         }
     }
-    if (!(value.At(2) <= (value.At(0) + value.At(1))))
+    if (!(value(2) <= (value(0) + value(1))))
     {
-        if (!NearlyEqual(value.At(2), value.At(0) + value.At(1)))
+        if (!NearlyEqual(value(2), value(0) + value(1)))
         {
             return false;
         }
@@ -311,7 +311,7 @@ bool IsProperRotation(const dt::Math::Matrix3<dtDynReal> &value)
             dtDynReal dot = 0.0;
             for (dtDynIndex index = 0; index < 3; ++index)
             {
-                dot += value.At(static_cast<std::uint16_t>(index), static_cast<std::uint16_t>(row)) * value.At(static_cast<std::uint16_t>(index), static_cast<std::uint16_t>(column));
+                dot += value(static_cast<std::uint16_t>(index), static_cast<std::uint16_t>(row)) * value(static_cast<std::uint16_t>(index), static_cast<std::uint16_t>(column));
             }
             const dtDynReal expected = (row == column) ? 1.0 : 0.0;
             if (!NearlyEqualInput(dot, expected))
@@ -321,9 +321,9 @@ bool IsProperRotation(const dt::Math::Matrix3<dtDynReal> &value)
         }
     }
     const dtDynReal determinant =
-        ((value.At(0, 0) * ((value.At(1, 1) * value.At(2, 2)) - (value.At(1, 2) * value.At(2, 1)))) -
-         (value.At(0, 1) * ((value.At(1, 0) * value.At(2, 2)) - (value.At(1, 2) * value.At(2, 0))))) +
-        (value.At(0, 2) * ((value.At(1, 0) * value.At(2, 1)) - (value.At(1, 1) * value.At(2, 0))));
+        ((value(0, 0) * ((value(1, 1) * value(2, 2)) - (value(1, 2) * value(2, 1)))) -
+         (value(0, 1) * ((value(1, 0) * value(2, 2)) - (value(1, 2) * value(2, 0))))) +
+        (value(0, 2) * ((value(1, 0) * value(2, 1)) - (value(1, 1) * value(2, 0))));
     return NearlyEqualInput(determinant, static_cast<dtDynReal>(1.0));
 }
 
@@ -339,7 +339,7 @@ bool MatrixMatchesQuaternion(const dt::Math::Matrix3<dtDynReal> &matrix,
     {
         for (dtDynIndex column = 0; column < 3; ++column)
         {
-            if (!NearlyEqualInput(matrix.At(static_cast<std::uint16_t>(row), static_cast<std::uint16_t>(column)), expected.At(static_cast<std::uint16_t>(row), static_cast<std::uint16_t>(column))))
+            if (!NearlyEqualInput(matrix(static_cast<std::uint16_t>(row), static_cast<std::uint16_t>(column)), expected(static_cast<std::uint16_t>(row), static_cast<std::uint16_t>(column))))
             {
                 return false;
             }
@@ -908,11 +908,11 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
     for (dtDynIndex bodyId = 0; bodyId < model.nbody; ++bodyId)
     {
         const std::size_t index = static_cast<std::size_t>(bodyId);
-        if (!std::isfinite(model.body_mass.At(static_cast<std::uint16_t>(bodyId))))
+        if (!std::isfinite(model.body_mass(static_cast<std::uint16_t>(bodyId))))
         {
             return FailNonFiniteBody(error, bodyId);
         }
-        if (!std::isfinite(model.body_subtreemass.At(static_cast<std::uint16_t>(bodyId))))
+        if (!std::isfinite(model.body_subtreemass(static_cast<std::uint16_t>(bodyId))))
         {
             return FailNonFiniteBody(error, bodyId);
         }
@@ -944,7 +944,7 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
         {
             return FailNonFiniteBody(error, bodyId);
         }
-        if (model.body_mass.At(static_cast<std::uint16_t>(bodyId)) < 0.0)
+        if (model.body_mass(static_cast<std::uint16_t>(bodyId)) < 0.0)
         {
             return FailInvalidBodyPhysicalOrFrame(error, bodyId);
         }
@@ -987,11 +987,11 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
         {
             return FailInvalidJointSpecProvenance(error, jointId);
         }
-        if (!std::isfinite(model.jnt_range_min.At(static_cast<std::uint16_t>(jointId))))
+        if (!std::isfinite(model.jnt_range_min(static_cast<std::uint16_t>(jointId))))
         {
             return FailNonFiniteJoint(error, jointId);
         }
-        if (!std::isfinite(model.jnt_range_max.At(static_cast<std::uint16_t>(jointId))))
+        if (!std::isfinite(model.jnt_range_max(static_cast<std::uint16_t>(jointId))))
         {
             return FailNonFiniteJoint(error, jointId);
         }
@@ -1022,13 +1022,13 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
     }
     for (dtDynIndex dofId = 0; dofId < model.nv; ++dofId)
     {
-        if (!std::isfinite(model.dof_armature.At(static_cast<std::uint16_t>(dofId))))
+        if (!std::isfinite(model.dof_armature(static_cast<std::uint16_t>(dofId))))
         {
             return Fail(error, dtDynValidationCode::NonFiniteValue, dtDynObjectType::Joint,
                         model.dof_jntid[static_cast<std::size_t>(dofId)],
                         "compiled DOF armature is non-finite");
         }
-        if (model.dof_armature.At(static_cast<std::uint16_t>(dofId)) < 0.0)
+        if (model.dof_armature(static_cast<std::uint16_t>(dofId)) < 0.0)
         {
             return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Joint,
                         model.dof_jntid[static_cast<std::size_t>(dofId)],
@@ -1061,7 +1061,7 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
     }
     for (dtDynIndex actuatorId = 0; actuatorId < model.nu; ++actuatorId)
     {
-        if (!std::isfinite(model.actuator_gear.At(static_cast<std::uint16_t>(actuatorId))))
+        if (!std::isfinite(model.actuator_gear(static_cast<std::uint16_t>(actuatorId))))
         {
             return Fail(error, dtDynValidationCode::NonFiniteValue, dtDynObjectType::Actuator,
                         actuatorId, "compiled actuator gear is non-finite");
@@ -1069,7 +1069,7 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
     }
     for (dtDynIndex rootIndex = 0; rootIndex < model.nroot; ++rootIndex)
     {
-        if (!std::isfinite(model.root_mass.At(static_cast<std::uint16_t>(rootIndex))))
+        if (!std::isfinite(model.root_mass(static_cast<std::uint16_t>(rootIndex))))
         {
             return Fail(error, dtDynValidationCode::NonFiniteValue, dtDynObjectType::Body,
                         model.root_bodyid[static_cast<std::size_t>(rootIndex)],
@@ -1096,7 +1096,7 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
     expectedSubtreeMass.resize(model.nbody);
     for (dtDynIndex bodyId = 0; bodyId < model.nbody; ++bodyId)
     {
-        expectedSubtreeMass[static_cast<std::size_t>(bodyId)] = model.body_mass.At(static_cast<std::uint16_t>(bodyId));
+        expectedSubtreeMass[static_cast<std::size_t>(bodyId)] = model.body_mass(static_cast<std::uint16_t>(bodyId));
     }
     for (dtDynIndex bodyId = model.nbody - 1; bodyId > 0; --bodyId)
     {
@@ -1106,7 +1106,7 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
     }
     for (dtDynIndex bodyId = 0; bodyId < model.nbody; ++bodyId)
     {
-        if (!NearlyEqual(model.body_subtreemass.At(static_cast<std::uint16_t>(bodyId)),
+        if (!NearlyEqual(model.body_subtreemass(static_cast<std::uint16_t>(bodyId)),
                          expectedSubtreeMass[static_cast<std::size_t>(bodyId)]))
         {
             return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body,
@@ -1150,7 +1150,7 @@ bool ValidateModel(const dtDynModel &model, dtDynValidationError *error)
                         rootBody, "compiled root body appears more than once");
         }
         rootSeen[static_cast<std::size_t>(rootBody)] = 1;
-        if (!NearlyEqual(model.root_mass.At(static_cast<std::uint16_t>(rootIndex)),
+        if (!NearlyEqual(model.root_mass(static_cast<std::uint16_t>(rootIndex)),
                          expectedSubtreeMass[static_cast<std::size_t>(rootBody)]))
         {
             return Fail(error, dtDynValidationCode::InvalidReference, dtDynObjectType::Body,

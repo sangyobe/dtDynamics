@@ -1722,9 +1722,9 @@ struct PhysicalInertiaEditor
     void operator()(dtDynBodySpec &draft) const
     {
         draft.inertial.mass = 1.0;
-        draft.inertial.inertia.At(0) = first;
-        draft.inertial.inertia.At(1) = second;
-        draft.inertial.inertia.At(2) = third;
+        draft.inertial.inertia(0) = first;
+        draft.inertial.inertia(1) = second;
+        draft.inertial.inertia(2) = third;
     }
 };
 
@@ -5207,23 +5207,23 @@ void TestSpecXmlRejectsDeclarationAfterLeadingWhitespace()
 
 void ConfigureEncodeBodyQuaternionRegressionBody(dtDynBodySpec &draft)
 {
-    draft.quat.At(0) = 1.0;
-    draft.quat.At(1) = 2.0;
-    draft.quat.At(2) = 3.0;
-    draft.quat.At(3) = 4.0;
+    draft.quat(0) = 1.0;
+    draft.quat(1) = 2.0;
+    draft.quat(2) = 3.0;
+    draft.quat(3) = 4.0;
     draft.inertial.mass = 13.0;
-    draft.inertial.quat.At(0) = 5.0;
-    draft.inertial.quat.At(1) = 6.0;
-    draft.inertial.quat.At(2) = 7.0;
-    draft.inertial.quat.At(3) = 8.0;
+    draft.inertial.quat(0) = 5.0;
+    draft.inertial.quat(1) = 6.0;
+    draft.inertial.quat(2) = 7.0;
+    draft.inertial.quat(3) = 8.0;
 }
 
 void ConfigureEncodeBodyQuaternionRegressionSite(dtDynSiteSpec &draft)
 {
-    draft.quat.At(0) = 9.0;
-    draft.quat.At(1) = 10.0;
-    draft.quat.At(2) = 11.0;
-    draft.quat.At(3) = 12.0;
+    draft.quat(0) = 9.0;
+    draft.quat(1) = 10.0;
+    draft.quat(2) = 11.0;
+    draft.quat(3) = 12.0;
 }
 
 void AssertXmlElementOccursExactlyOnce(const std::string &xml, const std::string &element)
@@ -5767,7 +5767,7 @@ void AssertP81DenseVectorUnchanged(const dtDynDenseVector &actual,
     assert(actual.GetDim() == expected.GetDim());
     for (dtDynIndex index = 0; index < static_cast<dtDynIndex>(actual.GetDim()); ++index)
     {
-        assert(actual.At(index) == expected.At(index));
+        assert(actual(index) == expected(index));
     }
 }
 
@@ -5776,7 +5776,7 @@ void AssertP81Vector3Unchanged(const dt::Math::Vector3<dtDynReal> &actual,
 {
     for (dtDynIndex axis = 0; axis < 3; ++axis)
     {
-        assert(actual.At(axis) == expected.At(axis));
+        assert(actual(axis) == expected(axis));
     }
 }
 
@@ -5785,7 +5785,7 @@ void AssertP81Vector4Unchanged(const dt::Math::Vector4<dtDynReal> &actual,
 {
     for (dtDynIndex component = 0; component < 4; ++component)
     {
-        assert(actual.At(component) == expected.At(component));
+        assert(actual(component) == expected(component));
     }
 }
 
@@ -5796,7 +5796,7 @@ void AssertP81Matrix3Unchanged(const dt::Math::Matrix3<dtDynReal> &actual,
     {
         for (dtDynIndex column = 0; column < 3; ++column)
         {
-            assert(actual.At(row, column) == expected.At(row, column));
+            assert(actual(row, column) == expected(row, column));
         }
     }
 }
@@ -5838,7 +5838,7 @@ void AssertP81BodyPositionsUnchanged(const dtDynModel &actual, const dtDynModel 
     {
         for (dtDynIndex axis = 0; axis < 3; ++axis)
         {
-            assert(actual.body_pos[bodyIndex].At(axis) == expected.body_pos[bodyIndex].At(axis));
+            assert(actual.body_pos[bodyIndex](axis) == expected.body_pos[bodyIndex](axis));
         }
     }
 }
@@ -5980,7 +5980,7 @@ struct P81BodyPhysicalEditor
     void operator()(dtDynBodySpec &draft) const
     {
         draft.inertial.mass = mass;
-        draft.pos.At(0) = positionX;
+        draft.pos(0) = positionX;
     }
 };
 
@@ -6031,8 +6031,8 @@ void TestUpdateSpecPreservesWorldSiblingCompatibility()
     const std::size_t allocationsBeforeCompatibleUpdate = g_totalTestAllocations;
     assert(UpdateSpec(compatible, compatibleModel));
     assert(g_totalTestAllocations == allocationsBeforeCompatibleUpdate);
-    assert(compatibleModel.body_mass.At(firstRoot) == 3.0);
-    assert(compatibleModel.body_pos[static_cast<std::size_t>(firstRoot)].At(0) == 0.75);
+    assert(compatibleModel.body_mass(firstRoot) == 3.0);
+    assert(compatibleModel.body_pos[static_cast<std::size_t>(firstRoot)](0) == 0.75);
 
     dtDynValidationError error;
     assert(ValidateModel(compatibleModel, &error));
@@ -6438,21 +6438,21 @@ struct P85BodyPhysicalEditor
         dt::Math::Vector3<dtDynReal> inertialAxis;
         bodyAxis.SetZero();
         inertialAxis.SetZero();
-        bodyAxis.At(0) = 1.0;
-        inertialAxis.At(1) = 1.0;
+        bodyAxis(0) = 1.0;
+        inertialAxis(1) = 1.0;
 
-        draft.pos.At(0) = 0.25 + offset;
-        draft.pos.At(1) = -0.5 - offset;
-        draft.pos.At(2) = 0.75 + offset;
+        draft.pos(0) = 0.25 + offset;
+        draft.pos(1) = -0.5 - offset;
+        draft.pos(2) = 0.75 + offset;
         draft.quat = math::AxisAngleQuat(bodyAxis, 0.3 + (0.1 * offset));
         draft.inertial.mass = 2.0 + offset;
-        draft.inertial.pos.At(0) = -0.15 - offset;
-        draft.inertial.pos.At(1) = 0.35 + offset;
-        draft.inertial.pos.At(2) = -0.55 - offset;
+        draft.inertial.pos(0) = -0.15 - offset;
+        draft.inertial.pos(1) = 0.35 + offset;
+        draft.inertial.pos(2) = -0.55 - offset;
         draft.inertial.quat = math::AxisAngleQuat(inertialAxis, -0.45 - (0.1 * offset));
-        draft.inertial.inertia.At(0) = 0.4 + (0.1 * offset);
-        draft.inertial.inertia.At(1) = 0.5 + (0.1 * offset);
-        draft.inertial.inertia.At(2) = 0.6 + (0.1 * offset);
+        draft.inertial.inertia(0) = 0.4 + (0.1 * offset);
+        draft.inertial.inertia(1) = 0.5 + (0.1 * offset);
+        draft.inertial.inertia(2) = 0.6 + (0.1 * offset);
     }
 };
 
@@ -6463,11 +6463,11 @@ struct P85JointPhysicalEditor
         draft.limited = true;
         draft.rangeMin = -0.75;
         draft.rangeMax = 0.95;
-        draft.pos.At(0) = 0.6;
-        draft.pos.At(1) = -0.4;
-        draft.pos.At(2) = 0.2;
+        draft.pos(0) = 0.6;
+        draft.pos(1) = -0.4;
+        draft.pos(2) = 0.2;
         draft.axis.SetZero();
-        draft.axis.At(0) = 1.0;
+        draft.axis(0) = 1.0;
         draft.armature = 0.35;
     }
 };
@@ -6478,10 +6478,10 @@ struct P85SitePhysicalEditor
     {
         dt::Math::Vector3<dtDynReal> axis;
         axis.SetZero();
-        axis.At(2) = 1.0;
-        draft.pos.At(0) = 0.45;
-        draft.pos.At(1) = -0.25;
-        draft.pos.At(2) = 0.65;
+        axis(2) = 1.0;
+        draft.pos(0) = 0.45;
+        draft.pos(1) = -0.25;
+        draft.pos(2) = 0.65;
         draft.quat = math::AxisAngleQuat(axis, 0.6);
     }
 };
@@ -6526,15 +6526,15 @@ void AssertP85BodyPhysicalWriteTargetsDiffer(const dtDynModel &actual,
                                              const dtDynIndex bodyId)
 {
     const std::size_t bodyIndex = static_cast<std::size_t>(bodyId);
-    assert(actual.body_pos[bodyIndex].At(0) != expected.body_pos[bodyIndex].At(0));
-    assert(actual.body_quat[bodyIndex].At(0) != expected.body_quat[bodyIndex].At(0));
-    assert(actual.body_mat[bodyIndex].At(1, 1) != expected.body_mat[bodyIndex].At(1, 1));
-    assert(actual.body_ipos[bodyIndex].At(0) != expected.body_ipos[bodyIndex].At(0));
-    assert(actual.body_iquat[bodyIndex].At(0) != expected.body_iquat[bodyIndex].At(0));
-    assert(actual.body_imat[bodyIndex].At(0, 0) != expected.body_imat[bodyIndex].At(0, 0));
-    assert(actual.body_inertia[bodyIndex].At(0) != expected.body_inertia[bodyIndex].At(0));
-    assert(actual.body_mass.At(bodyId) != expected.body_mass.At(bodyId));
-    assert(actual.body_subtreemass.At(bodyId) != expected.body_subtreemass.At(bodyId));
+    assert(actual.body_pos[bodyIndex](0) != expected.body_pos[bodyIndex](0));
+    assert(actual.body_quat[bodyIndex](0) != expected.body_quat[bodyIndex](0));
+    assert(actual.body_mat[bodyIndex](1, 1) != expected.body_mat[bodyIndex](1, 1));
+    assert(actual.body_ipos[bodyIndex](0) != expected.body_ipos[bodyIndex](0));
+    assert(actual.body_iquat[bodyIndex](0) != expected.body_iquat[bodyIndex](0));
+    assert(actual.body_imat[bodyIndex](0, 0) != expected.body_imat[bodyIndex](0, 0));
+    assert(actual.body_inertia[bodyIndex](0) != expected.body_inertia[bodyIndex](0));
+    assert(actual.body_mass(bodyId) != expected.body_mass(bodyId));
+    assert(actual.body_subtreemass(bodyId) != expected.body_subtreemass(bodyId));
 }
 
 void AssertP85SourcePhysicalWriteTargetsDiffer(const dtDynModel &actual,
@@ -6544,17 +6544,17 @@ void AssertP85SourcePhysicalWriteTargetsDiffer(const dtDynModel &actual,
     AssertP85BodyPhysicalWriteTargetsDiffer(actual, expected, 1);
 
     assert(actual.jnt_limited[0] != expected.jnt_limited[0]);
-    assert(actual.jnt_range_min.At(0) != expected.jnt_range_min.At(0));
-    assert(actual.jnt_range_max.At(0) != expected.jnt_range_max.At(0));
-    assert(actual.jnt_pos[0].At(0) != expected.jnt_pos[0].At(0));
-    assert(actual.jnt_axis[0].At(0) != expected.jnt_axis[0].At(0));
-    assert(actual.dof_armature.At(0) != expected.dof_armature.At(0));
+    assert(actual.jnt_range_min(0) != expected.jnt_range_min(0));
+    assert(actual.jnt_range_max(0) != expected.jnt_range_max(0));
+    assert(actual.jnt_pos[0](0) != expected.jnt_pos[0](0));
+    assert(actual.jnt_axis[0](0) != expected.jnt_axis[0](0));
+    assert(actual.dof_armature(0) != expected.dof_armature(0));
 
-    assert(actual.site_pos[0].At(0) != expected.site_pos[0].At(0));
-    assert(actual.site_quat[0].At(0) != expected.site_quat[0].At(0));
-    assert(actual.site_mat[0].At(0, 0) != expected.site_mat[0].At(0, 0));
-    assert(actual.actuator_gear.At(0) != expected.actuator_gear.At(0));
-    assert(actual.root_mass.At(0) != expected.root_mass.At(0));
+    assert(actual.site_pos[0](0) != expected.site_pos[0](0));
+    assert(actual.site_quat[0](0) != expected.site_quat[0](0));
+    assert(actual.site_mat[0](0, 0) != expected.site_mat[0](0, 0));
+    assert(actual.actuator_gear(0) != expected.actuator_gear(0));
+    assert(actual.root_mass(0) != expected.root_mass(0));
 }
 
 void AssertP85RejectsValidSourceShapeWithoutWriting(const dtDynSpec &incompatible,
@@ -6733,8 +6733,8 @@ void AssertP83PhysicalStateUnchanged(const dtDynModel &actual, const dtDynModel 
         assert(actual.body_mass(bodyId) == expected.body_mass(bodyId));
         for (dtDynIndex axis = 0; axis < 3; ++axis)
         {
-            assert(actual.body_pos[bodyIndex].At(axis) == expected.body_pos[bodyIndex].At(axis));
-            assert(actual.body_ipos[bodyIndex].At(axis) == expected.body_ipos[bodyIndex].At(axis));
+            assert(actual.body_pos[bodyIndex](axis) == expected.body_pos[bodyIndex](axis));
+            assert(actual.body_ipos[bodyIndex](axis) == expected.body_ipos[bodyIndex](axis));
         }
     }
     AssertP81DenseVectorUnchanged(actual.body_subtreemass, expected.body_subtreemass);
@@ -6854,17 +6854,17 @@ struct P88JointPhysicalEditor
     void operator()(dtDynJointSpec &draft) const
     {
         draft.pos.SetZero();
-        draft.pos.At(0) = 0.15 + armature;
-        draft.pos.At(1) = -0.25 - armature;
-        draft.pos.At(2) = 0.35 + armature;
+        draft.pos(0) = 0.15 + armature;
+        draft.pos(1) = -0.25 - armature;
+        draft.pos(2) = 0.35 + armature;
         draft.axis.SetZero();
         if (limited)
         {
-            draft.axis.At(0) = 1.0;
+            draft.axis(0) = 1.0;
         }
         else
         {
-            draft.axis.At(1) = 1.0;
+            draft.axis(1) = 1.0;
         }
         draft.limited = limited;
         draft.rangeMin = -0.75 - armature;
@@ -6881,11 +6881,11 @@ struct P88SitePhysicalEditor
     {
         dt::Math::Vector3<dtDynReal> axis;
         axis.SetZero();
-        axis.At(2) = 1.0;
+        axis(2) = 1.0;
         draft.pos.SetZero();
-        draft.pos.At(0) = 0.1 + offset;
-        draft.pos.At(1) = -0.2 - offset;
-        draft.pos.At(2) = 0.3 + offset;
+        draft.pos(0) = 0.1 + offset;
+        draft.pos(1) = -0.2 - offset;
+        draft.pos(2) = 0.3 + offset;
         draft.quat = math::AxisAngleQuat(axis, 0.2 + (0.1 * offset));
     }
 };
@@ -6979,32 +6979,32 @@ void AssertP88SourcePhysicalWriteTargetsDiffer(const dtDynModel &actual,
         const dtDynIndex actualDof = actual.jnt_dofadr[jointIndex];
         const dtDynIndex expectedDof = expected.jnt_dofadr[jointIndex];
         assert(actual.jnt_limited[jointIndex] != expected.jnt_limited[jointIndex]);
-        assert(actual.jnt_range_min.At(jointId) != expected.jnt_range_min.At(jointId));
-        assert(actual.jnt_range_max.At(jointId) != expected.jnt_range_max.At(jointId));
-        assert(actual.jnt_pos[jointIndex].At(0) != expected.jnt_pos[jointIndex].At(0));
-        assert(actual.jnt_axis[jointIndex].At(0) != expected.jnt_axis[jointIndex].At(0));
-        assert(actual.dof_armature.At(actualDof) != expected.dof_armature.At(expectedDof));
+        assert(actual.jnt_range_min(jointId) != expected.jnt_range_min(jointId));
+        assert(actual.jnt_range_max(jointId) != expected.jnt_range_max(jointId));
+        assert(actual.jnt_pos[jointIndex](0) != expected.jnt_pos[jointIndex](0));
+        assert(actual.jnt_axis[jointIndex](0) != expected.jnt_axis[jointIndex](0));
+        assert(actual.dof_armature(actualDof) != expected.dof_armature(expectedDof));
     }
 
     assert(actual.nsite == expected.nsite);
     for (dtDynIndex siteId = 0; siteId < actual.nsite; ++siteId)
     {
         const std::size_t siteIndex = static_cast<std::size_t>(siteId);
-        assert(actual.site_pos[siteIndex].At(0) != expected.site_pos[siteIndex].At(0));
-        assert(actual.site_quat[siteIndex].At(0) != expected.site_quat[siteIndex].At(0));
-        assert(actual.site_mat[siteIndex].At(0, 0) != expected.site_mat[siteIndex].At(0, 0));
+        assert(actual.site_pos[siteIndex](0) != expected.site_pos[siteIndex](0));
+        assert(actual.site_quat[siteIndex](0) != expected.site_quat[siteIndex](0));
+        assert(actual.site_mat[siteIndex](0, 0) != expected.site_mat[siteIndex](0, 0));
     }
 
     assert(actual.nu == expected.nu);
     for (dtDynIndex actuatorId = 0; actuatorId < actual.nu; ++actuatorId)
     {
-        assert(actual.actuator_gear.At(actuatorId) != expected.actuator_gear.At(actuatorId));
+        assert(actual.actuator_gear(actuatorId) != expected.actuator_gear(actuatorId));
     }
 
     assert(actual.nroot == expected.nroot);
     for (dtDynIndex rootId = 0; rootId < actual.nroot; ++rootId)
     {
-        assert(actual.root_mass.At(rootId) != expected.root_mass.At(rootId));
+        assert(actual.root_mass(rootId) != expected.root_mass(rootId));
     }
 }
 
@@ -7054,14 +7054,14 @@ void TestUpdateSpecP88PreservesAncestorAndSiteTraversal()
     for (dtDynIndex bodyId = 0; bodyId < model.nbody; ++bodyId)
     {
         const std::size_t bodyIndex = static_cast<std::size_t>(bodyId);
-        assert(IsDtMathNear(model.body_mass.At(bodyId), expected.body_mass.At(bodyId)));
-        assert(IsDtMathNear(model.body_subtreemass.At(bodyId), expected.body_subtreemass.At(bodyId)));
-        assert(IsDtMathNear(model.body_pos[bodyIndex].At(0), expected.body_pos[bodyIndex].At(0)));
+        assert(IsDtMathNear(model.body_mass(bodyId), expected.body_mass(bodyId)));
+        assert(IsDtMathNear(model.body_subtreemass(bodyId), expected.body_subtreemass(bodyId)));
+        assert(IsDtMathNear(model.body_pos[bodyIndex](0), expected.body_pos[bodyIndex](0)));
     }
     for (dtDynIndex jointId = 0; jointId < model.njnt; ++jointId)
     {
-        assert(IsDtMathNear(model.dof_armature.At(model.jnt_dofadr[static_cast<std::size_t>(jointId)]),
-                            expected.dof_armature.At(expected.jnt_dofadr[static_cast<std::size_t>(jointId)])));
+        assert(IsDtMathNear(model.dof_armature(model.jnt_dofadr[static_cast<std::size_t>(jointId)]),
+                            expected.dof_armature(expected.jnt_dofadr[static_cast<std::size_t>(jointId)])));
     }
     for (dtDynIndex siteId = 0; siteId < model.nsite; ++siteId)
     {
@@ -7069,17 +7069,17 @@ void TestUpdateSpecP88PreservesAncestorAndSiteTraversal()
         assert(model.site_bodyid[siteIndex] == ids.child);
         for (dtDynIndex axis = 0; axis < 3; ++axis)
         {
-            assert(IsDtMathNear(model.site_pos[siteIndex].At(axis), expected.site_pos[siteIndex].At(axis)));
+            assert(IsDtMathNear(model.site_pos[siteIndex](axis), expected.site_pos[siteIndex](axis)));
         }
         for (dtDynIndex component = 0; component < 4; ++component)
         {
-            assert(IsDtMathNear(model.site_quat[siteIndex].At(component),
-                                expected.site_quat[siteIndex].At(component)));
+            assert(IsDtMathNear(model.site_quat[siteIndex](component),
+                                expected.site_quat[siteIndex](component)));
         }
     }
-    assert(IsDtMathNear(model.actuator_gear.At(ids.actuator),
-                        expected.actuator_gear.At(ids.actuator)));
-    assert(IsDtMathNear(model.root_mass.At(0), expected.root_mass.At(0)));
+    assert(IsDtMathNear(model.actuator_gear(ids.actuator),
+                        expected.actuator_gear(ids.actuator)));
+    assert(IsDtMathNear(model.root_mass(0), expected.root_mass(0)));
     assert(ValidateModel(model, &error));
     assert(error.code == dtDynValidationCode::None);
 
@@ -8152,10 +8152,10 @@ dt::Math::Vector6<dtDynReal> MultiplySpatialMatrixForHalfSymmetricMotionCrossCol
     dt::Math::Vector6<dtDynReal> out;
     for (dtDynIndex row = 0; row < 6; ++row)
     {
-        out.At(row) = 0.0;
+        out(row) = 0.0;
         for (dtDynIndex col = 0; col < 6; ++col)
         {
-            out.At(row) += (matrix.At(row, col) * vector.At(col));
+            out(row) += (matrix(row, col) * vector(col));
         }
     }
     return out;
@@ -8168,10 +8168,10 @@ dt::Math::Vector6<dtDynReal> MultiplySpatialMatrixTransposeForHalfSymmetricMotio
     dt::Math::Vector6<dtDynReal> out;
     for (dtDynIndex row = 0; row < 6; ++row)
     {
-        out.At(row) = 0.0;
+        out(row) = 0.0;
         for (dtDynIndex col = 0; col < 6; ++col)
         {
-            out.At(row) += (matrix.At(col, row) * vector.At(col));
+            out(row) += (matrix(col, row) * vector(col));
         }
     }
     return out;
@@ -8184,7 +8184,7 @@ dtDynReal SpatialDotForHalfSymmetricMotionCrossColumn2(
     dtDynReal out = 0.0;
     for (dtDynIndex row = 0; row < 6; ++row)
     {
-        out += (left.At(row) * right.At(row));
+        out += (left(row) * right(row));
     }
     return out;
 }
@@ -8212,13 +8212,13 @@ dt::Math::Matrix<6, 6, dtDynReal> BuildExpectedBiasMatrixForHalfSymmetricMotionC
             for (dtDynIndex component = 0; component < 6; ++component)
             {
                 transposeInertia +=
-                    (motionCross.At(component, row) * inertia.At(component, col));
+                    (motionCross(component, row) * inertia(component, col));
                 inertiaMotion +=
-                    (inertia.At(row, component) * motionCross.At(component, col));
+                    (inertia(row, component) * motionCross(component, col));
             }
-            symmetricPart.At(row, col) = -0.5 * (transposeInertia + inertiaMotion);
-            momentumPart.At(row, col) = 0.5 * momentumCross.At(row, col);
-            out.At(row, col) = symmetricPart.At(row, col) + momentumPart.At(row, col);
+            symmetricPart(row, col) = -0.5 * (transposeInertia + inertiaMotion);
+            momentumPart(row, col) = 0.5 * momentumCross(row, col);
+            out(row, col) = symmetricPart(row, col) + momentumPart(row, col);
         }
     }
     return out;
@@ -8232,7 +8232,7 @@ void AssertSpatialMatrixNearForHalfSymmetricMotionCrossColumn2(
     {
         for (dtDynIndex col = 0; col < 6; ++col)
         {
-            assert(IsDtMathNear(actual.At(row, col), expected.At(row, col), 1.0e-10));
+            assert(IsDtMathNear(actual(row, col), expected(row, col), 1.0e-10));
         }
     }
 }
@@ -8244,7 +8244,7 @@ void AssertSpatialMatrixIsSymmetricForHalfSymmetricMotionCrossColumn2(
     {
         for (dtDynIndex col = 0; col < 6; ++col)
         {
-            assert(IsDtMathNear(matrix.At(row, col), matrix.At(col, row), 1.0e-10));
+            assert(IsDtMathNear(matrix(row, col), matrix(col, row), 1.0e-10));
         }
     }
 }
@@ -8278,15 +8278,15 @@ void AssertCcrbaBiasOutputsForHalfSymmetricMotionCrossColumn2(
 
         for (dtDynIndex row = 0; row < 6; ++row)
         {
-            expectedF1[dofId].At(row) = inertiaMotionDot.At(row) + biasMotion.At(row);
-            assert(IsDtMathNear(data.f1[static_cast<std::size_t>(dofId)].At(row),
-                                expectedF1[dofId].At(row),
+            expectedF1[dofId](row) = inertiaMotionDot(row) + biasMotion(row);
+            assert(IsDtMathNear(data.f1[static_cast<std::size_t>(dofId)](row),
+                                expectedF1[dofId](row),
                                 1.0e-10));
-            assert(IsDtMathNear(data.f2[static_cast<std::size_t>(dofId)].At(row),
-                                expectedF2[dofId].At(row),
+            assert(IsDtMathNear(data.f2[static_cast<std::size_t>(dofId)](row),
+                                expectedF2[dofId](row),
                                 1.0e-10));
-            assert(IsDtMathNear(data.f3[static_cast<std::size_t>(dofId)].At(row),
-                                expectedF3[dofId].At(row),
+            assert(IsDtMathNear(data.f3[static_cast<std::size_t>(dofId)](row),
+                                expectedF3[dofId](row),
                                 1.0e-10));
         }
     }
@@ -8295,15 +8295,15 @@ void AssertCcrbaBiasOutputsForHalfSymmetricMotionCrossColumn2(
     expectedCmat.SetZero();
     for (dtDynIndex dofId = model.nv - 1; dofId >= 0; --dofId)
     {
-        expectedCmat.At(dofId, dofId) = SpatialDotForHalfSymmetricMotionCrossColumn2(
+        expectedCmat(dofId, dofId) = SpatialDotForHalfSymmetricMotionCrossColumn2(
             data.cdof[static_cast<std::size_t>(dofId)], expectedF1[dofId]);
 
         dtDynIndex ancestorDofId = model.dof_parentid[static_cast<std::size_t>(dofId)];
         while (ancestorDofId >= 0)
         {
-            expectedCmat.At(ancestorDofId, dofId) = SpatialDotForHalfSymmetricMotionCrossColumn2(
+            expectedCmat(ancestorDofId, dofId) = SpatialDotForHalfSymmetricMotionCrossColumn2(
                 data.cdof[static_cast<std::size_t>(ancestorDofId)], expectedF1[dofId]);
-            expectedCmat.At(dofId, ancestorDofId) =
+            expectedCmat(dofId, ancestorDofId) =
                 SpatialDotForHalfSymmetricMotionCrossColumn2(
                     data.cdof_dot[static_cast<std::size_t>(ancestorDofId)], expectedF2[dofId]) +
                 SpatialDotForHalfSymmetricMotionCrossColumn2(
@@ -8317,11 +8317,11 @@ void AssertCcrbaBiasOutputsForHalfSymmetricMotionCrossColumn2(
         dtDynReal expectedCoriolis = 0.0;
         for (dtDynIndex col = 0; col < model.nv; ++col)
         {
-            assert(IsDtMathNear(data.Cmat.At(row, col), expectedCmat.At(row, col), 1.0e-10));
-            expectedCoriolis += (expectedCmat.At(row, col) * data.qvel.At(col));
+            assert(IsDtMathNear(data.Cmat(row, col), expectedCmat(row, col), 1.0e-10));
+            expectedCoriolis += (expectedCmat(row, col) * data.qvel(col));
         }
-        assert(IsDtMathNear(data.coriolisTorq.At(row), expectedCoriolis, 1.0e-10));
-        assert(IsDtMathNear(data.nonlinTorq.At(row), expectedCoriolis, 1.0e-10));
+        assert(IsDtMathNear(data.coriolisTorq(row), expectedCoriolis, 1.0e-10));
+        assert(IsDtMathNear(data.nonlinTorq(row), expectedCoriolis, 1.0e-10));
     }
 }
 
@@ -8341,7 +8341,7 @@ void TestCcrbaHalfSymmetricMotionCrossColumn2UsesPhysicalNonzeroTerms()
     assert(model.body_parentid[static_cast<std::size_t>(root)] == 0);
     assert(model.body_parentid[static_cast<std::size_t>(child)] == root);
     assert(model.nv == 6);
-    assert(IsDtMathNear(model.root_mass.At(0), 5.0));
+    assert(IsDtMathNear(model.root_mass(0), 5.0));
     for (dtDynIndex dofId = 0; dofId < model.nv; ++dofId)
     {
         assert(model.dof_bodyid[static_cast<std::size_t>(dofId)] == root);
@@ -8349,55 +8349,55 @@ void TestCcrbaHalfSymmetricMotionCrossColumn2UsesPhysicalNonzeroTerms()
 
     dtDynData data;
     data.Resize(model);
-    data.qpos.At(3) = 1.0;
-    data.qvel.At(0) = 4.0;
-    data.qvel.At(1) = 5.0;
-    data.qvel.At(2) = 6.0;
-    data.qvel.At(3) = 1.0;
-    data.qvel.At(4) = 2.0;
-    data.qvel.At(5) = 3.0;
+    data.qpos(3) = 1.0;
+    data.qvel(0) = 4.0;
+    data.qvel(1) = 5.0;
+    data.qvel(2) = 6.0;
+    data.qvel(3) = 1.0;
+    data.qvel(4) = 2.0;
+    data.qvel(5) = 3.0;
     dt::Math::Vector3<dtDynReal> gravity;
     gravity.SetZero();
     ComputeDynamicsCCRBA(model, data, gravity, DTDYN_CCRBA_TERM_ALL);
 
     assert(data.BmatCompNonzero[static_cast<std::size_t>(root)] == 1);
     assert(data.BmatCompNonzero[static_cast<std::size_t>(child)] == 1);
-    assert(IsDtMathNear(data.subtree_com[static_cast<std::size_t>(root)].At(0), 6.0 / 5.0));
-    assert(IsDtMathNear(data.subtree_com[static_cast<std::size_t>(root)].At(1), 9.0 / 5.0));
-    assert(IsDtMathNear(data.subtree_com[static_cast<std::size_t>(root)].At(2), 3.0));
-    assert(IsDtMathNear(data.xipos[static_cast<std::size_t>(child)].At(0), 2.0));
-    assert(IsDtMathNear(data.xipos[static_cast<std::size_t>(child)].At(1), 3.0));
-    assert(IsDtMathNear(data.xipos[static_cast<std::size_t>(child)].At(2), 5.0));
+    assert(IsDtMathNear(data.subtree_com[static_cast<std::size_t>(root)](0), 6.0 / 5.0));
+    assert(IsDtMathNear(data.subtree_com[static_cast<std::size_t>(root)](1), 9.0 / 5.0));
+    assert(IsDtMathNear(data.subtree_com[static_cast<std::size_t>(root)](2), 3.0));
+    assert(IsDtMathNear(data.xipos[static_cast<std::size_t>(child)](0), 2.0));
+    assert(IsDtMathNear(data.xipos[static_cast<std::size_t>(child)](1), 3.0));
+    assert(IsDtMathNear(data.xipos[static_cast<std::size_t>(child)](2), 5.0));
 
     const dtDynReal expectedChildVelocity[6] = {1.0, 2.0, 3.0, 23.0 / 5.0, 28.0 / 5.0, 27.0 / 5.0};
     for (dtDynIndex row = 0; row < 6; ++row)
     {
-        assert(IsDtMathNear(data.cvel[static_cast<std::size_t>(child)].At(row),
+        assert(IsDtMathNear(data.cvel[static_cast<std::size_t>(child)](row),
                             expectedChildVelocity[row]));
-        assert(std::fabs(data.cvel[static_cast<std::size_t>(child)].At(row)) > 1.0e-12);
+        assert(std::fabs(data.cvel[static_cast<std::size_t>(child)](row)) > 1.0e-12);
     }
 
     const dt::Math::Matrix<6, 6, dtDynReal> &childInertia =
         data.cinert[static_cast<std::size_t>(child)];
-    assert(IsDtMathNear(childInertia.At(4, 0), -6.0));
-    assert(IsDtMathNear(childInertia.At(5, 0), 18.0 / 5.0));
-    assert(IsDtMathNear(childInertia.At(3, 1), 6.0));
-    assert(IsDtMathNear(childInertia.At(5, 1), -12.0 / 5.0));
-    assert(IsDtMathNear(childInertia.At(3, 2), -18.0 / 5.0));
-    assert(IsDtMathNear(childInertia.At(4, 2), 12.0 / 5.0));
+    assert(IsDtMathNear(childInertia(4, 0), -6.0));
+    assert(IsDtMathNear(childInertia(5, 0), 18.0 / 5.0));
+    assert(IsDtMathNear(childInertia(3, 1), 6.0));
+    assert(IsDtMathNear(childInertia(5, 1), -12.0 / 5.0));
+    assert(IsDtMathNear(childInertia(3, 2), -18.0 / 5.0));
+    assert(IsDtMathNear(childInertia(4, 2), 12.0 / 5.0));
 
     const dtDynReal column3FirstProduct =
-        data.cvel[static_cast<std::size_t>(child)].At(2) * childInertia.At(4, 0);
+        data.cvel[static_cast<std::size_t>(child)](2) * childInertia(4, 0);
     const dtDynReal column3SecondProduct =
-        -data.cvel[static_cast<std::size_t>(child)].At(1) * childInertia.At(5, 0);
+        -data.cvel[static_cast<std::size_t>(child)](1) * childInertia(5, 0);
     const dtDynReal column4FirstProduct =
-        -data.cvel[static_cast<std::size_t>(child)].At(2) * childInertia.At(3, 1);
+        -data.cvel[static_cast<std::size_t>(child)](2) * childInertia(3, 1);
     const dtDynReal column4SecondProduct =
-        data.cvel[static_cast<std::size_t>(child)].At(0) * childInertia.At(5, 1);
+        data.cvel[static_cast<std::size_t>(child)](0) * childInertia(5, 1);
     const dtDynReal column5FirstProduct =
-        data.cvel[static_cast<std::size_t>(child)].At(1) * childInertia.At(3, 2);
+        data.cvel[static_cast<std::size_t>(child)](1) * childInertia(3, 2);
     const dtDynReal column5SecondProduct =
-        -data.cvel[static_cast<std::size_t>(child)].At(0) * childInertia.At(4, 2);
+        -data.cvel[static_cast<std::size_t>(child)](0) * childInertia(4, 2);
 
     assert(IsDtMathNear(column3FirstProduct, -18.0));
     assert(IsDtMathNear(column3SecondProduct, -36.0 / 5.0));
@@ -8433,7 +8433,7 @@ void TestCcrbaHalfSymmetricMotionCrossColumn2UsesPhysicalNonzeroTerms()
     {
         for (dtDynIndex col = 0; col < 6; ++col)
         {
-            observedChildSymmetricPart.At(row, col) -= expectedChildMomentumPart.At(row, col);
+            observedChildSymmetricPart(row, col) -= expectedChildMomentumPart(row, col);
         }
     }
     AssertSpatialMatrixNearForHalfSymmetricMotionCrossColumn2(observedChildSymmetricPart,
@@ -8452,7 +8452,7 @@ void TestCcrbaHalfSymmetricMotionCrossColumn2UsesPhysicalNonzeroTerms()
     {
         for (dtDynIndex col = 0; col < 6; ++col)
         {
-            expectedCompositeBias.At(row, col) += expectedChildBias.At(row, col);
+            expectedCompositeBias(row, col) += expectedChildBias(row, col);
         }
     }
     AssertSpatialMatrixNearForHalfSymmetricMotionCrossColumn2(
@@ -8471,15 +8471,15 @@ void TestCcrbaHalfSymmetricMotionCrossColumn2UsesPhysicalNonzeroTerms()
     {
         for (dtDynIndex row = 0; row < 6; ++row)
         {
-            assert(IsDtMathNear(data.f1[static_cast<std::size_t>(dofId)].At(row), 0.0));
-            assert(IsDtMathNear(data.f3[static_cast<std::size_t>(dofId)].At(row), 0.0));
+            assert(IsDtMathNear(data.f1[static_cast<std::size_t>(dofId)](row), 0.0));
+            assert(IsDtMathNear(data.f3[static_cast<std::size_t>(dofId)](row), 0.0));
         }
     }
     for (dtDynIndex row = 0; row < model.nv; ++row)
     {
         for (dtDynIndex col = 0; col < model.nv; ++col)
         {
-            assert(IsDtMathNear(data.Cmat.At(row, col), 0.0));
+            assert(IsDtMathNear(data.Cmat(row, col), 0.0));
         }
     }
 }
@@ -9062,44 +9062,44 @@ constexpr dtDynReal kAllocationProofTolerance = 1.0e-9;
 
 void ConfigureP52FreeRootBody(dtDynBodySpec &draft)
 {
-    draft.pos.At(0) = 0.25;
-    draft.pos.At(1) = -0.35;
-    draft.pos.At(2) = 0.45;
+    draft.pos(0) = 0.25;
+    draft.pos(1) = -0.35;
+    draft.pos(2) = 0.45;
     draft.inertial.mass = 2.0;
-    draft.inertial.pos.At(0) = 0.15;
-    draft.inertial.pos.At(1) = -0.20;
-    draft.inertial.pos.At(2) = 0.30;
-    draft.inertial.inertia.At(0) = 0.30;
-    draft.inertial.inertia.At(1) = 0.40;
-    draft.inertial.inertia.At(2) = 0.50;
+    draft.inertial.pos(0) = 0.15;
+    draft.inertial.pos(1) = -0.20;
+    draft.inertial.pos(2) = 0.30;
+    draft.inertial.inertia(0) = 0.30;
+    draft.inertial.inertia(1) = 0.40;
+    draft.inertial.inertia(2) = 0.50;
 }
 
 void ConfigureP52BallBody(dtDynBodySpec &draft)
 {
-    draft.pos.At(0) = 0.55;
-    draft.pos.At(1) = -0.65;
-    draft.pos.At(2) = 0.75;
+    draft.pos(0) = 0.55;
+    draft.pos(1) = -0.65;
+    draft.pos(2) = 0.75;
     draft.inertial.mass = 1.5;
-    draft.inertial.pos.At(0) = -0.10;
-    draft.inertial.pos.At(1) = 0.25;
-    draft.inertial.pos.At(2) = 0.35;
-    draft.inertial.inertia.At(0) = 0.25;
-    draft.inertial.inertia.At(1) = 0.35;
-    draft.inertial.inertia.At(2) = 0.45;
+    draft.inertial.pos(0) = -0.10;
+    draft.inertial.pos(1) = 0.25;
+    draft.inertial.pos(2) = 0.35;
+    draft.inertial.inertia(0) = 0.25;
+    draft.inertial.inertia(1) = 0.35;
+    draft.inertial.inertia(2) = 0.45;
 }
 
 void ConfigureP52BallJoint(dtDynJointSpec &draft)
 {
-    draft.pos.At(0) = -0.30;
-    draft.pos.At(1) = 0.40;
-    draft.pos.At(2) = 0.50;
+    draft.pos(0) = -0.30;
+    draft.pos(1) = 0.40;
+    draft.pos(2) = 0.50;
 }
 
 void ConfigureP52TaskSite(dtDynSiteSpec &draft)
 {
-    draft.pos.At(0) = 0.60;
-    draft.pos.At(1) = -0.45;
-    draft.pos.At(2) = 0.35;
+    draft.pos(0) = 0.60;
+    draft.pos(1) = -0.45;
+    draft.pos(2) = 0.35;
 }
 
 void SetP52NormalizedQuaternion(dtDynData &data,
@@ -9111,16 +9111,16 @@ void SetP52NormalizedQuaternion(dtDynData &data,
 {
     const dtDynReal norm = std::sqrt((w * w) + (x * x) + (y * y) + (z * z));
     assert(norm > kP52JacobianTolerance);
-    data.qpos.At(qposAddress + 0) = w / norm;
-    data.qpos.At(qposAddress + 1) = x / norm;
-    data.qpos.At(qposAddress + 2) = y / norm;
-    data.qpos.At(qposAddress + 3) = z / norm;
+    data.qpos(qposAddress + 0) = w / norm;
+    data.qpos(qposAddress + 1) = x / norm;
+    data.qpos(qposAddress + 2) = y / norm;
+    data.qpos(qposAddress + 3) = z / norm;
 
     const dtDynReal normalizedSquaredNorm =
-        (data.qpos.At(qposAddress + 0) * data.qpos.At(qposAddress + 0)) +
-        (data.qpos.At(qposAddress + 1) * data.qpos.At(qposAddress + 1)) +
-        (data.qpos.At(qposAddress + 2) * data.qpos.At(qposAddress + 2)) +
-        (data.qpos.At(qposAddress + 3) * data.qpos.At(qposAddress + 3));
+        (data.qpos(qposAddress + 0) * data.qpos(qposAddress + 0)) +
+        (data.qpos(qposAddress + 1) * data.qpos(qposAddress + 1)) +
+        (data.qpos(qposAddress + 2) * data.qpos(qposAddress + 2)) +
+        (data.qpos(qposAddress + 3) * data.qpos(qposAddress + 3));
     assert(std::fabs(normalizedSquaredNorm - 1.0) < kP52JacobianTolerance);
 }
 
@@ -9130,7 +9130,7 @@ dt::Math::Vector3<dtDynReal> ReadP52QposPosition(const dtDynData &data,
     dt::Math::Vector3<dtDynReal> position;
     for (dtDynIndex axis = 0; axis < 3; ++axis)
     {
-        position.At(axis) = data.qpos.At(qposAddress + axis);
+        position(axis) = data.qpos(qposAddress + axis);
     }
     return position;
 }
@@ -9141,7 +9141,7 @@ dt::Math::Vector4<dtDynReal> ReadP52QposQuaternion(const dtDynData &data,
     dt::Math::Vector4<dtDynReal> quaternion;
     for (dtDynIndex component = 0; component < 4; ++component)
     {
-        quaternion.At(component) = data.qpos.At(qposAddress + component);
+        quaternion(component) = data.qpos(qposAddress + component);
     }
     return quaternion;
 }
@@ -9151,7 +9151,7 @@ void AssertP52Vector3Matches(const dt::Math::Vector3<dtDynReal> &actual,
 {
     for (dtDynIndex axis = 0; axis < 3; ++axis)
     {
-        assert(std::fabs(actual.At(axis) - expected.At(axis)) < kP52JacobianTolerance);
+        assert(std::fabs(actual(axis) - expected(axis)) < kP52JacobianTolerance);
     }
 }
 
@@ -9160,7 +9160,7 @@ void AssertP52Vector4Matches(const dt::Math::Vector4<dtDynReal> &actual,
 {
     for (dtDynIndex component = 0; component < 4; ++component)
     {
-        assert(std::fabs(actual.At(component) - expected.At(component)) < kP52JacobianTolerance);
+        assert(std::fabs(actual(component) - expected(component)) < kP52JacobianTolerance);
     }
 }
 
@@ -9171,7 +9171,7 @@ void AssertP52Matrix3Matches(const dt::Math::Matrix3<dtDynReal> &actual,
     {
         for (dtDynIndex column = 0; column < 3; ++column)
         {
-            assert(std::fabs(actual.At(row, column) - expected.At(row, column)) < kP52JacobianTolerance);
+            assert(std::fabs(actual(row, column) - expected(row, column)) < kP52JacobianTolerance);
         }
     }
 }
@@ -9215,7 +9215,7 @@ void AssertP52BallKinematicFrames(const dtDynModel &model,
     AssertP52Vector3Matches(data.xanchor[ballJointIndex], expectedAnchor);
     AssertP52Vector3Matches(data.xpos[ballBodyIndex], expectedBallPosition);
     AssertP52Vector3Matches(data.site_xpos[taskSiteIndex], expectedSitePosition);
-    assert(std::fabs(data.xquat[ballBodyIndex].At(0) - 1.0) > kP52JacobianTolerance);
+    assert(std::fabs(data.xquat[ballBodyIndex](0) - 1.0) > kP52JacobianTolerance);
 }
 
 void AssertP52MatrixMatches(const dtDynDenseMatrix &actual,
@@ -9230,7 +9230,7 @@ void AssertP52MatrixMatches(const dtDynDenseMatrix &actual,
     {
         for (dtDynIndex column = 0; column < nv; ++column)
         {
-            assert(std::fabs(actual.At(row, column) - expected.At(row, column)) < kP52JacobianTolerance);
+            assert(std::fabs(actual(row, column) - expected(row, column)) < kP52JacobianTolerance);
         }
     }
 }
@@ -9270,12 +9270,12 @@ bool AssertP52CachedDerivativeColumnUsesFinalBodyVelocity(const dtDynModel &mode
     bool differsFromPreparedDerivative = false;
     for (dtDynIndex row = 0; row < 3; ++row)
     {
-        assert(std::fabs(cachedJacrDot.At(row, dofId) - expected.At(row)) < kP52JacobianTolerance);
-        if (std::fabs(cachedJacrDot.At(row, dofId)) > kP52JacobianTolerance)
+        assert(std::fabs(cachedJacrDot(row, dofId) - expected(row)) < kP52JacobianTolerance);
+        if (std::fabs(cachedJacrDot(row, dofId)) > kP52JacobianTolerance)
         {
             hasNonzeroSignal = true;
         }
-        if (std::fabs(expected.At(row) - data.cdof_dot[dofIndex].At(row)) > kP52JacobianTolerance)
+        if (std::fabs(expected(row) - data.cdof_dot[dofIndex](row)) > kP52JacobianTolerance)
         {
             differsFromPreparedDerivative = true;
         }
@@ -9311,15 +9311,15 @@ void TestP52CachedPointJacobianDerivativeDispatchUsesBallAndFreeRotations()
 
     dtDynData data;
     data.Resize(model);
-    data.qpos.At(0) = 0.20;
-    data.qpos.At(1) = -0.30;
-    data.qpos.At(2) = 0.40;
+    data.qpos(0) = 0.20;
+    data.qpos(1) = -0.30;
+    data.qpos(2) = 0.40;
     SetP52NormalizedQuaternion(data, 3, 1.0, -2.0, 3.0, -4.0);
     SetP52NormalizedQuaternion(data, 7, 2.0, 3.0, -4.0, 5.0);
     const dtDynReal qvelValues[9] = {0.31, -0.47, 0.59, -0.71, 0.83, -0.97, 1.09, -1.21, 1.33};
     for (dtDynIndex dofId = 0; dofId < model.nv; ++dofId)
     {
-        data.qvel.At(dofId) = qvelValues[dofId];
+        data.qvel(dofId) = qvelValues[dofId];
     }
 
     ForwardKinematics(model, data);
@@ -9379,19 +9379,19 @@ dt::Math::Vector3<dtDynReal> MakeP111Vector3(const dtDynReal x,
                                              const dtDynReal z)
 {
     dt::Math::Vector3<dtDynReal> vector;
-    vector.At(0) = x;
-    vector.At(1) = y;
-    vector.At(2) = z;
+    vector(0) = x;
+    vector(1) = y;
+    vector(2) = z;
     return vector;
 }
 
 void FillP111RotationFromQuaternion(const dt::Math::Vector4<dtDynReal> &quaternion,
                                     dtDynReal rotation[3][3])
 {
-    const dtDynReal w = quaternion.At(0);
-    const dtDynReal x = quaternion.At(1);
-    const dtDynReal y = quaternion.At(2);
-    const dtDynReal z = quaternion.At(3);
+    const dtDynReal w = quaternion(0);
+    const dtDynReal x = quaternion(1);
+    const dtDynReal y = quaternion(2);
+    const dtDynReal z = quaternion(3);
     rotation[0][0] = 1.0 - (2.0 * ((y * y) + (z * z)));
     rotation[0][1] = 2.0 * ((x * y) - (w * z));
     rotation[0][2] = 2.0 * ((x * z) + (w * y));
@@ -9424,9 +9424,9 @@ void RotateP111Vector(const dtDynReal rotation[3][3],
 {
     for (dtDynIndex row = 0; row < 3; ++row)
     {
-        rotated[row] = (rotation[row][0] * vector.At(0)) +
-                       (rotation[row][1] * vector.At(1)) +
-                       (rotation[row][2] * vector.At(2));
+        rotated[row] = (rotation[row][0] * vector(0)) +
+                       (rotation[row][1] * vector(1)) +
+                       (rotation[row][2] * vector(2));
     }
 }
 
@@ -9451,7 +9451,7 @@ void AssertP111ColumnMatches(const dt::Math::Vector6<dtDynReal> &actual,
 {
     for (dtDynIndex component = 0; component < 6; ++component)
     {
-        assert(std::fabs(actual.At(component) - expected[component]) < kP52JacobianTolerance);
+        assert(std::fabs(actual(component) - expected[component]) < kP52JacobianTolerance);
     }
 }
 
@@ -9503,17 +9503,17 @@ void TestMotionSubspaceAtPointMatchesIndependentFreeAndBallColumns()
     assert(model.jnt_type[freeJointIndex] == static_cast<dtDynIndex>(dtDynJointType::Free));
     assert(model.jnt_type[ballJointIndex] == static_cast<dtDynIndex>(dtDynJointType::Ball));
     assert(model.body_rootid[ballBodyIndex] == freeRoot);
-    assert(IsDtMathNear(model.body_quat[ballBodyIndex].At(0), 1.0));
+    assert(IsDtMathNear(model.body_quat[ballBodyIndex](0), 1.0));
 
     dtDynData data;
     data.Resize(model);
-    data.qpos.At(0) = 0.20;
-    data.qpos.At(1) = -0.30;
-    data.qpos.At(2) = 0.40;
+    data.qpos(0) = 0.20;
+    data.qpos(1) = -0.30;
+    data.qpos(2) = 0.40;
     SetP52NormalizedQuaternion(data, 3, 1.0, -2.0, 3.0, -4.0);
     SetP52NormalizedQuaternion(data, 7, 2.0, 3.0, -4.0, 5.0);
-    assert(std::fabs(data.qpos.At(3) - 1.0) > 1.0e-3);
-    assert(std::fabs(data.qpos.At(7) - 1.0) > 1.0e-3);
+    assert(std::fabs(data.qpos(3) - 1.0) > 1.0e-3);
+    assert(std::fabs(data.qpos(7) - 1.0) > 1.0e-3);
 
     ForwardKinematics(model, data);
     dt::Math::Vector3<dtDynReal> gravity;
@@ -9544,11 +9544,11 @@ void TestMotionSubspaceAtPointMatchesIndependentFreeAndBallColumns()
     dtDynReal ballAnchor[3];
     dtDynReal childPosition[3];
     dtDynReal rootCom[3];
-    const dtDynReal rootMass = model.body_mass.At(freeRoot);
-    const dtDynReal childMass = model.body_mass.At(ballBody);
+    const dtDynReal rootMass = model.body_mass(freeRoot);
+    const dtDynReal childMass = model.body_mass(ballBody);
     for (dtDynIndex axis = 0; axis < 3; ++axis)
     {
-        rootPosition[axis] = data.qpos.At(axis);
+        rootPosition[axis] = data.qpos(axis);
         ballAnchor[axis] = rootPosition[axis] + bodyOffset[axis] + jointOffset[axis];
         childPosition[axis] = ballAnchor[axis] - childJointOffset[axis];
         const dtDynReal rootInertialPosition = rootPosition[axis] + rootInertialOffset[axis];
@@ -9730,49 +9730,49 @@ constexpr dtDynReal kP51PointJacobianSentinel = -1234.5;
 
 void ConfigureP51PointJacobianFirstBody(dtDynBodySpec &draft)
 {
-    draft.pos.At(0) = 0.3;
-    draft.pos.At(1) = -0.4;
-    draft.pos.At(2) = 0.2;
+    draft.pos(0) = 0.3;
+    draft.pos(1) = -0.4;
+    draft.pos(2) = 0.2;
     draft.inertial.mass = 1.0;
-    draft.inertial.pos.At(0) = 0.15;
-    draft.inertial.pos.At(1) = -0.1;
-    draft.inertial.pos.At(2) = 0.2;
-    draft.inertial.inertia.At(0) = 0.2;
-    draft.inertial.inertia.At(1) = 0.25;
-    draft.inertial.inertia.At(2) = 0.3;
+    draft.inertial.pos(0) = 0.15;
+    draft.inertial.pos(1) = -0.1;
+    draft.inertial.pos(2) = 0.2;
+    draft.inertial.inertia(0) = 0.2;
+    draft.inertial.inertia(1) = 0.25;
+    draft.inertial.inertia(2) = 0.3;
 }
 
 void ConfigureP51PointJacobianSecondBody(dtDynBodySpec &draft)
 {
-    draft.pos.At(0) = 1.0;
-    draft.pos.At(1) = 0.5;
-    draft.pos.At(2) = -0.3;
+    draft.pos(0) = 1.0;
+    draft.pos(1) = 0.5;
+    draft.pos(2) = -0.3;
     draft.inertial.mass = 0.75;
-    draft.inertial.pos.At(0) = 0.2;
-    draft.inertial.pos.At(1) = 0.3;
-    draft.inertial.pos.At(2) = -0.1;
-    draft.inertial.inertia.At(0) = 0.15;
-    draft.inertial.inertia.At(1) = 0.2;
-    draft.inertial.inertia.At(2) = 0.25;
+    draft.inertial.pos(0) = 0.2;
+    draft.inertial.pos(1) = 0.3;
+    draft.inertial.pos(2) = -0.1;
+    draft.inertial.inertia(0) = 0.15;
+    draft.inertial.inertia(1) = 0.2;
+    draft.inertial.inertia(2) = 0.25;
 }
 
 void ConfigureP51PointJacobianSite(dtDynSiteSpec &draft)
 {
-    draft.pos.At(0) = 0.4;
-    draft.pos.At(1) = -0.2;
-    draft.pos.At(2) = 0.6;
+    draft.pos(0) = 0.4;
+    draft.pos(1) = -0.2;
+    draft.pos(2) = 0.6;
 }
 
 void ConfigureP51PointJacobianFirstJoint(dtDynJointSpec &draft)
 {
     draft.axis.SetZero();
-    draft.axis.At(2) = 1.0;
+    draft.axis(2) = 1.0;
 }
 
 void ConfigureP51PointJacobianSecondJoint(dtDynJointSpec &draft)
 {
     draft.axis.SetZero();
-    draft.axis.At(1) = 1.0;
+    draft.axis(1) = 1.0;
 }
 
 void FillP51PointJacobianMatrixWithSentinel(dtDynDenseMatrix &matrix, const dtDynIndex nv)
@@ -9810,7 +9810,7 @@ void AssertP51PointJacobianMatrixMatches(const dtDynDenseMatrix &actual,
     {
         for (dtDynIndex column = 0; column < nv; ++column)
         {
-            assert(std::fabs(actual.At(row, column) - expected.At(row, column)) < 1.0e-12);
+            assert(std::fabs(actual(row, column) - expected(row, column)) < 1.0e-12);
         }
     }
 }
@@ -9824,7 +9824,7 @@ void AssertP51PointJacobianMatrixIsSentinel(const dtDynDenseMatrix &matrix,
     {
         for (dtDynIndex column = 0; column < nv; ++column)
         {
-            assert(std::fabs(matrix.At(row, column) - kP51PointJacobianSentinel) < 1.0e-12);
+            assert(std::fabs(matrix(row, column) - kP51PointJacobianSentinel) < 1.0e-12);
         }
     }
 }
@@ -9834,7 +9834,7 @@ void AssertP51PointJacobianVectorMatches(const dt::Math::Vector3<dtDynReal> &act
 {
     for (dtDynIndex row = 0; row < 3; ++row)
     {
-        assert(std::fabs(actual.At(row) - expected.At(row)) < 1.0e-12);
+        assert(std::fabs(actual(row) - expected(row)) < 1.0e-12);
     }
 }
 
@@ -9842,7 +9842,7 @@ void AssertP51PointJacobianVectorIsSentinel(const dt::Math::Vector3<dtDynReal> &
 {
     for (dtDynIndex row = 0; row < 3; ++row)
     {
-        assert(std::fabs(vector.At(row) - kP51PointJacobianSentinel) < 1.0e-12);
+        assert(std::fabs(vector(row) - kP51PointJacobianSentinel) < 1.0e-12);
     }
 }
 
@@ -9865,10 +9865,10 @@ void TestPointJacobianTermsSelectsEachOutputFamily()
 
     dtDynData data;
     data.Resize(model);
-    data.qpos.At(0) = 0.35;
-    data.qpos.At(1) = -0.45;
-    data.qvel.At(0) = 1.1;
-    data.qvel.At(1) = -0.7;
+    data.qpos(0) = 0.35;
+    data.qpos(1) = -0.45;
+    data.qvel(0) = 1.1;
+    data.qvel(1) = -0.7;
     dt::Math::Vector3<dtDynReal> gravity;
     gravity.SetZero();
     ComputeDynamicsCCRBA(model, data, gravity, DTDYN_CCRBA_TERM_ALL);
@@ -9889,12 +9889,12 @@ void TestPointJacobianTermsSelectsEachOutputFamily()
                                          expectedLinearJdotQvel,
                                          expectedAngularJdotQvel);
 
-    assert(std::fabs(expectedJacp.At(0, 0)) > 1.0e-12);
-    assert(std::fabs(expectedJacr.At(2, 0)) > 1.0e-12);
-    assert(std::fabs(expectedJacpDot.At(0, 0)) > 1.0e-12);
-    assert(std::fabs(expectedJacrDot.At(0, 1)) > 1.0e-12);
-    assert(std::fabs(expectedLinearJdotQvel.At(0)) > 1.0e-12);
-    assert(std::fabs(expectedAngularJdotQvel.At(0)) > 1.0e-12);
+    assert(std::fabs(expectedJacp(0, 0)) > 1.0e-12);
+    assert(std::fabs(expectedJacr(2, 0)) > 1.0e-12);
+    assert(std::fabs(expectedJacpDot(0, 0)) > 1.0e-12);
+    assert(std::fabs(expectedJacrDot(0, 1)) > 1.0e-12);
+    assert(std::fabs(expectedLinearJdotQvel(0)) > 1.0e-12);
+    assert(std::fabs(expectedAngularJdotQvel(0)) > 1.0e-12);
 
     dtDynDenseMatrix jacp;
     dtDynDenseMatrix jacr;
@@ -10644,49 +10644,49 @@ using P50SpatialInertia = dt::Math::Matrix<6, 6, dtDynReal>;
 void ConfigureP50SpatialInertiaWorld(dtDynBodySpec &draft)
 {
     draft.inertial.mass = 2.0;
-    draft.inertial.inertia.At(0) = 1.0;
-    draft.inertial.inertia.At(1) = 2.0;
-    draft.inertial.inertia.At(2) = 3.0;
+    draft.inertial.inertia(0) = 1.0;
+    draft.inertial.inertia(1) = 2.0;
+    draft.inertial.inertia(2) = 3.0;
 }
 
 void ConfigureP50SpatialInertiaRoot(dtDynBodySpec &draft)
 {
-    draft.pos.At(0) = 1.0;
-    draft.pos.At(1) = -2.0;
-    draft.pos.At(2) = 3.0;
+    draft.pos(0) = 1.0;
+    draft.pos(1) = -2.0;
+    draft.pos(2) = 3.0;
     draft.inertial.mass = 3.0;
-    draft.inertial.pos.At(0) = 0.5;
-    draft.inertial.pos.At(1) = -1.0;
-    draft.inertial.pos.At(2) = 0.75;
-    draft.inertial.inertia.At(0) = 2.0;
-    draft.inertial.inertia.At(1) = 3.0;
-    draft.inertial.inertia.At(2) = 4.0;
+    draft.inertial.pos(0) = 0.5;
+    draft.inertial.pos(1) = -1.0;
+    draft.inertial.pos(2) = 0.75;
+    draft.inertial.inertia(0) = 2.0;
+    draft.inertial.inertia(1) = 3.0;
+    draft.inertial.inertia(2) = 4.0;
 }
 
 void ConfigureP50SpatialInertiaChild(dtDynBodySpec &draft)
 {
     const dtDynReal inverseQuaternionNorm = 1.0 / std::sqrt(30.0);
-    draft.pos.At(0) = 4.0;
-    draft.pos.At(1) = 5.0;
-    draft.pos.At(2) = -6.0;
+    draft.pos(0) = 4.0;
+    draft.pos(1) = 5.0;
+    draft.pos(2) = -6.0;
     draft.inertial.mass = 5.0;
-    draft.inertial.pos.At(0) = 0.25;
-    draft.inertial.pos.At(1) = -0.5;
-    draft.inertial.pos.At(2) = 1.0;
-    draft.inertial.quat.At(0) = inverseQuaternionNorm;
-    draft.inertial.quat.At(1) = 2.0 * inverseQuaternionNorm;
-    draft.inertial.quat.At(2) = 3.0 * inverseQuaternionNorm;
-    draft.inertial.quat.At(3) = 4.0 * inverseQuaternionNorm;
-    draft.inertial.inertia.At(0) = 5.0;
-    draft.inertial.inertia.At(1) = 6.0;
-    draft.inertial.inertia.At(2) = 7.0;
+    draft.inertial.pos(0) = 0.25;
+    draft.inertial.pos(1) = -0.5;
+    draft.inertial.pos(2) = 1.0;
+    draft.inertial.quat(0) = inverseQuaternionNorm;
+    draft.inertial.quat(1) = 2.0 * inverseQuaternionNorm;
+    draft.inertial.quat(2) = 3.0 * inverseQuaternionNorm;
+    draft.inertial.quat(3) = 4.0 * inverseQuaternionNorm;
+    draft.inertial.inertia(0) = 5.0;
+    draft.inertial.inertia(1) = 6.0;
+    draft.inertial.inertia(2) = 7.0;
 }
 
 void ConfigureP50SpatialInertiaRootHinge(dtDynJointSpec &draft)
 {
-    draft.axis.At(0) = 0.0;
-    draft.axis.At(1) = 0.0;
-    draft.axis.At(2) = 1.0;
+    draft.axis(0) = 0.0;
+    draft.axis(1) = 0.0;
+    draft.axis(2) = 1.0;
 }
 
 dt::Math::Matrix3<dtDynReal> MakeP50Matrix3(const dtDynReal value00,
@@ -10700,15 +10700,15 @@ dt::Math::Matrix3<dtDynReal> MakeP50Matrix3(const dtDynReal value00,
                                             const dtDynReal value22)
 {
     dt::Math::Matrix3<dtDynReal> result;
-    result.At(0, 0) = value00;
-    result.At(0, 1) = value01;
-    result.At(0, 2) = value02;
-    result.At(1, 0) = value10;
-    result.At(1, 1) = value11;
-    result.At(1, 2) = value12;
-    result.At(2, 0) = value20;
-    result.At(2, 1) = value21;
-    result.At(2, 2) = value22;
+    result(0, 0) = value00;
+    result(0, 1) = value01;
+    result(0, 2) = value02;
+    result(1, 0) = value10;
+    result(1, 1) = value11;
+    result(1, 2) = value12;
+    result(2, 0) = value20;
+    result(2, 1) = value21;
+    result(2, 2) = value22;
     return result;
 }
 
@@ -10722,11 +10722,11 @@ P50SpatialInertia BuildP50SpatialInertia(const dt::Math::Matrix3<dtDynReal> &top
     {
         for (dtDynIndex column = 0; column < 3; ++column)
         {
-            expected.At(row, column) = topLeft.At(row, column);
-            expected.At(row, column + 3) = topRight.At(row, column);
-            expected.At(row + 3, column) = -topRight.At(row, column);
+            expected(row, column) = topLeft(row, column);
+            expected(row, column + 3) = topRight(row, column);
+            expected(row + 3, column) = -topRight(row, column);
         }
-        expected.At(row + 3, row + 3) = mass;
+        expected(row + 3, row + 3) = mass;
     }
     return expected;
 }
@@ -10807,7 +10807,7 @@ void AssertP50SpatialInertiaMatches(const P50SpatialInertia &actual,
     {
         for (dtDynIndex column = 0; column < 6; ++column)
         {
-            assert(IsDtMathNear(actual.At(row, column), expected.At(row, column), 1.0e-11));
+            assert(IsDtMathNear(actual(row, column), expected(row, column), 1.0e-11));
         }
     }
 }
@@ -10857,53 +10857,53 @@ void AssertP50ChildRotationAndParallelAxis(const dtDynModel &model,
 
     for (dtDynIndex component = 0; component < 4; ++component)
     {
-        quaternionNormSquared += childQuaternion.At(component) * childQuaternion.At(component);
+        quaternionNormSquared += childQuaternion(component) * childQuaternion(component);
     }
-    assert(IsDtMathNear(childQuaternion.At(0), inverseQuaternionNorm));
-    assert(IsDtMathNear(childQuaternion.At(1), 2.0 * inverseQuaternionNorm));
-    assert(IsDtMathNear(childQuaternion.At(2), 3.0 * inverseQuaternionNorm));
-    assert(IsDtMathNear(childQuaternion.At(3), 4.0 * inverseQuaternionNorm));
+    assert(IsDtMathNear(childQuaternion(0), inverseQuaternionNorm));
+    assert(IsDtMathNear(childQuaternion(1), 2.0 * inverseQuaternionNorm));
+    assert(IsDtMathNear(childQuaternion(2), 3.0 * inverseQuaternionNorm));
+    assert(IsDtMathNear(childQuaternion(3), 4.0 * inverseQuaternionNorm));
     assert(IsDtMathNear(quaternionNormSquared, 1.0));
 
-    assert(IsDtMathNear(model.body_inertia[static_cast<std::size_t>(child)].At(0), 5.0));
-    assert(IsDtMathNear(model.body_inertia[static_cast<std::size_t>(child)].At(1), 6.0));
-    assert(IsDtMathNear(model.body_inertia[static_cast<std::size_t>(child)].At(2), 7.0));
-    assert(model.body_inertia[static_cast<std::size_t>(child)].At(0) > 0.0);
-    assert(model.body_inertia[static_cast<std::size_t>(child)].At(1) > 0.0);
-    assert(model.body_inertia[static_cast<std::size_t>(child)].At(2) > 0.0);
-    assert(model.body_inertia[static_cast<std::size_t>(child)].At(0) !=
-           model.body_inertia[static_cast<std::size_t>(child)].At(1));
-    assert(model.body_inertia[static_cast<std::size_t>(child)].At(0) !=
-           model.body_inertia[static_cast<std::size_t>(child)].At(2));
-    assert(model.body_inertia[static_cast<std::size_t>(child)].At(1) !=
-           model.body_inertia[static_cast<std::size_t>(child)].At(2));
+    assert(IsDtMathNear(model.body_inertia[static_cast<std::size_t>(child)](0), 5.0));
+    assert(IsDtMathNear(model.body_inertia[static_cast<std::size_t>(child)](1), 6.0));
+    assert(IsDtMathNear(model.body_inertia[static_cast<std::size_t>(child)](2), 7.0));
+    assert(model.body_inertia[static_cast<std::size_t>(child)](0) > 0.0);
+    assert(model.body_inertia[static_cast<std::size_t>(child)](1) > 0.0);
+    assert(model.body_inertia[static_cast<std::size_t>(child)](2) > 0.0);
+    assert(model.body_inertia[static_cast<std::size_t>(child)](0) !=
+           model.body_inertia[static_cast<std::size_t>(child)](1));
+    assert(model.body_inertia[static_cast<std::size_t>(child)](0) !=
+           model.body_inertia[static_cast<std::size_t>(child)](2));
+    assert(model.body_inertia[static_cast<std::size_t>(child)](1) !=
+           model.body_inertia[static_cast<std::size_t>(child)](2));
 
     for (dtDynIndex row = 0; row < 3; ++row)
     {
         for (dtDynIndex column = 0; column < 3; ++column)
         {
             dtDynReal columnDot = 0.0;
-            assert(IsDtMathNear(actualRotation.At(row, column),
-                                expectedRotation.At(row, column)));
-            assert(std::fabs(actualRotation.At(row, column)) > 1.0e-12);
+            assert(IsDtMathNear(actualRotation(row, column),
+                                expectedRotation(row, column)));
+            assert(std::fabs(actualRotation(row, column)) > 1.0e-12);
             for (dtDynIndex axis = 0; axis < 3; ++axis)
             {
-                columnDot += actualRotation.At(axis, row) * actualRotation.At(axis, column);
+                columnDot += actualRotation(axis, row) * actualRotation(axis, column);
             }
-            assert(IsDtMathNear(columnDot, identity.At(row, column)));
+            assert(IsDtMathNear(columnDot, identity(row, column)));
         }
     }
 
     dt::Math::Vector3<dtDynReal> rootToChildCom;
     for (dtDynIndex axis = 0; axis < 3; ++axis)
     {
-        rootToChildCom.At(axis) = data.xipos[static_cast<std::size_t>(child)].At(axis) -
-                                  data.subtree_com[static_cast<std::size_t>(root)].At(axis);
-        assert(std::fabs(rootToChildCom.At(axis)) > 1.0e-12);
+        rootToChildCom(axis) = data.xipos[static_cast<std::size_t>(child)](axis) -
+                               data.subtree_com[static_cast<std::size_t>(root)](axis);
+        assert(std::fabs(rootToChildCom(axis)) > 1.0e-12);
     }
-    assert(IsDtMathNear(rootToChildCom.At(0), 45.0 / 32.0));
-    assert(IsDtMathNear(rootToChildCom.At(1), 33.0 / 16.0));
-    assert(IsDtMathNear(rootToChildCom.At(2), -69.0 / 32.0));
+    assert(IsDtMathNear(rootToChildCom(0), 45.0 / 32.0));
+    assert(IsDtMathNear(rootToChildCom(1), 33.0 / 16.0));
+    assert(IsDtMathNear(rootToChildCom(2), -69.0 / 32.0));
     assert(IsDtMathNear(rootToChildCom.Inner(rootToChildCom), 5571.0 / 512.0));
 
     const P50SpatialInertia &actualInertia = data.cinert[static_cast<std::size_t>(child)];
@@ -10911,9 +10911,9 @@ void AssertP50ChildRotationAndParallelAxis(const dtDynModel &model,
     {
         for (dtDynIndex column = 0; column < 3; ++column)
         {
-            const dtDynReal expected = expectedRotatedInertia.At(row, column) +
-                                       expectedParallelAxis.At(row, column);
-            assert(IsDtMathNear(actualInertia.At(row, column), expected));
+            const dtDynReal expected = expectedRotatedInertia(row, column) +
+                                       expectedParallelAxis(row, column);
+            assert(IsDtMathNear(actualInertia(row, column), expected));
         }
     }
 }
@@ -10936,14 +10936,14 @@ void TestCcrbaFillBodySpatialInertiaAtRootComCoversAllP50Rows()
     assert(model.body_rootid[0] == 0);
     assert(model.body_rootid[static_cast<std::size_t>(root)] == root);
     assert(model.body_rootid[static_cast<std::size_t>(child)] == root);
-    assert(IsDtMathNear(model.body_mass.At(0), 2.0));
-    assert(IsDtMathNear(model.root_mass.At(0), 8.0));
-    assert(IsDtMathNear(model.body_subtreemass.At(0), 10.0));
+    assert(IsDtMathNear(model.body_mass(0), 2.0));
+    assert(IsDtMathNear(model.root_mass(0), 8.0));
+    assert(IsDtMathNear(model.body_subtreemass(0), 10.0));
 
     dtDynData data;
     data.Resize(model);
-    data.qpos.At(0) = 0.0;
-    data.qvel.At(0) = 0.0;
+    data.qpos(0) = 0.0;
+    data.qvel(0) = 0.0;
     dt::Math::Vector3<dtDynReal> gravity;
     gravity.SetZero();
     ComputeDynamicsCCRBA(model, data, gravity, DTDYN_CCRBA_TERM_ALL);
@@ -10973,20 +10973,20 @@ struct AllocationProofBodyEditor
         draft.inertial.mass = mass;
         for (std::uint16_t axis = 0; axis < 3; ++axis)
         {
-            draft.pos.At(axis) = position[axis];
-            draft.inertial.pos.At(axis) = inertialPosition[axis];
-            draft.inertial.inertia.At(axis) = inertia[axis];
+            draft.pos(axis) = position[axis];
+            draft.inertial.pos(axis) = inertialPosition[axis];
+            draft.inertial.inertia(axis) = inertia[axis];
         }
         if (rotated)
         {
-            draft.quat.At(0) = 0.5;
-            draft.quat.At(1) = 0.5;
-            draft.quat.At(2) = 0.5;
-            draft.quat.At(3) = 0.5;
-            draft.inertial.quat.At(0) = 0.5;
-            draft.inertial.quat.At(1) = 0.5;
-            draft.inertial.quat.At(2) = -0.5;
-            draft.inertial.quat.At(3) = 0.5;
+            draft.quat(0) = 0.5;
+            draft.quat(1) = 0.5;
+            draft.quat(2) = 0.5;
+            draft.quat(3) = 0.5;
+            draft.inertial.quat(0) = 0.5;
+            draft.inertial.quat(1) = 0.5;
+            draft.inertial.quat(2) = -0.5;
+            draft.inertial.quat(3) = 0.5;
         }
     }
 };
@@ -11002,8 +11002,8 @@ struct AllocationProofJointEditor
         draft.axis.SetZero();
         for (std::uint16_t component = 0; component < 3; ++component)
         {
-            draft.pos.At(component) = position[component];
-            draft.axis.At(component) = axis[component];
+            draft.pos(component) = position[component];
+            draft.axis(component) = axis[component];
         }
         draft.armature = armature;
     }
@@ -11017,7 +11017,7 @@ struct AllocationProofSiteEditor
     {
         for (std::uint16_t component = 0; component < 3; ++component)
         {
-            draft.pos.At(component) = position[component];
+            draft.pos(component) = position[component];
         }
     }
 };
@@ -11100,14 +11100,14 @@ private:
 void SetAllocationProofQuaternion(dtDynData &data, const dtDynIndex address, const dtDynReal phase)
 {
     dt::Math::Vector4<dtDynReal> raw;
-    raw.At(0) = 1.0 + (0.3 * phase);
-    raw.At(1) = -0.4 + phase;
-    raw.At(2) = 0.5;
-    raw.At(3) = 0.1 - (0.2 * phase);
+    raw(0) = 1.0 + (0.3 * phase);
+    raw(1) = -0.4 + phase;
+    raw(2) = 0.5;
+    raw(3) = 0.1 - (0.2 * phase);
     const dt::Math::Vector4<dtDynReal> unit = math::NormalizeOrIdentity(raw);
     for (std::uint16_t component = 0; component < 4; ++component)
     {
-        data.qpos.At(static_cast<std::uint16_t>(address + component)) = unit.At(component);
+        data.qpos(static_cast<std::uint16_t>(address + component)) = unit(component);
     }
 }
 
@@ -11121,9 +11121,9 @@ void SetAllocationProofState(const dtDynModel &model, dtDynData &data, const dtD
         const dtDynIndex address = model.jnt_qposadr[jointIndex];
         if (type == dtDynJointType::Free)
         {
-            data.qpos.At(static_cast<std::uint16_t>(address + 0)) = 0.10 * phase;
-            data.qpos.At(static_cast<std::uint16_t>(address + 1)) = -0.20 + (0.05 * phase);
-            data.qpos.At(static_cast<std::uint16_t>(address + 2)) = 0.60 - (0.10 * phase);
+            data.qpos(static_cast<std::uint16_t>(address + 0)) = 0.10 * phase;
+            data.qpos(static_cast<std::uint16_t>(address + 1)) = -0.20 + (0.05 * phase);
+            data.qpos(static_cast<std::uint16_t>(address + 2)) = 0.60 - (0.10 * phase);
             SetAllocationProofQuaternion(data, address + 3, phase);
         }
         else if (type == dtDynJointType::Ball)
@@ -11132,13 +11132,13 @@ void SetAllocationProofState(const dtDynModel &model, dtDynData &data, const dtD
         }
         else
         {
-            data.qpos.At(static_cast<std::uint16_t>(address)) =
+            data.qpos(static_cast<std::uint16_t>(address)) =
                 0.4 * std::sin(phase + static_cast<dtDynReal>(jointId));
         }
     }
     for (dtDynIndex dofId = 0; dofId < model.nv; ++dofId)
     {
-        data.qvel.At(static_cast<std::uint16_t>(dofId)) =
+        data.qvel(static_cast<std::uint16_t>(dofId)) =
             (0.2 * std::cos(phase * static_cast<dtDynReal>(dofId + 1))) +
             (0.03 * static_cast<dtDynReal>(dofId + 1));
     }
@@ -11153,23 +11153,23 @@ void RequireAllocationProofOutputsAreLive(const dtDynModel &model,
                                           const dtDynData &data,
                                           const AllocationProofFixture &fixture)
 {
-    RequireAllocationProof(std::fabs(data.Mmat.At(0, 0) - model.root_mass.At(0)) < kAllocationProofTolerance,
+    RequireAllocationProof(std::fabs(data.Mmat(0, 0) - model.root_mass(0)) < kAllocationProofTolerance,
                            "free-base mass matrix entry must equal the root mass");
     dtDynReal gravityMagnitude = 0.0;
     dtDynReal siteSignal = 0.0;
     for (dtDynIndex dofId = 0; dofId < model.nv; ++dofId)
     {
         const std::uint16_t dof = static_cast<std::uint16_t>(dofId);
-        RequireAllocationProof(IsAllocationProofFinite(data.gravityTorq.At(dof)), "gravity torque must be finite");
-        RequireAllocationProof(IsAllocationProofFinite(data.coriolisTorq.At(dof)), "Coriolis torque must be finite");
-        gravityMagnitude += std::fabs(data.gravityTorq.At(dof));
+        RequireAllocationProof(IsAllocationProofFinite(data.gravityTorq(dof)), "gravity torque must be finite");
+        RequireAllocationProof(IsAllocationProofFinite(data.coriolisTorq(dof)), "Coriolis torque must be finite");
+        gravityMagnitude += std::fabs(data.gravityTorq(dof));
         for (std::uint16_t row = 0; row < 3; ++row)
         {
             const std::size_t siteIndex = static_cast<std::size_t>(fixture.firstSite);
-            RequireAllocationProof(IsAllocationProofFinite(data.site_jacp[siteIndex].At(row, dof)),
+            RequireAllocationProof(IsAllocationProofFinite(data.site_jacp[siteIndex](row, dof)),
                                    "site Jacobian must be finite");
-            siteSignal += std::fabs(data.site_jacp[siteIndex].At(row, dof)) +
-                          std::fabs(data.site_jacr_dot[siteIndex].At(row, dof));
+            siteSignal += std::fabs(data.site_jacp[siteIndex](row, dof)) +
+                          std::fabs(data.site_jacr_dot[siteIndex](row, dof));
         }
     }
     RequireAllocationProof(gravityMagnitude > kAllocationProofTolerance, "gravity torque must be nonzero");
@@ -11417,11 +11417,11 @@ void TestRealtimeComputePathPerformsNoHeapAllocation()
     ResizeDenseMatrix(fixture.jacr, 3, model.nv);
     ResizeDenseMatrix(fixture.jacpDot, 3, model.nv);
     ResizeDenseMatrix(fixture.jacrDot, 3, model.nv);
-    fixture.pointOffset.At(0) = 0.03;
-    fixture.pointOffset.At(1) = -0.02;
-    fixture.pointOffset.At(2) = 0.04;
+    fixture.pointOffset(0) = 0.03;
+    fixture.pointOffset(1) = -0.02;
+    fixture.pointOffset(2) = 0.04;
     fixture.gravity.SetZero();
-    fixture.gravity.At(2) = -9.81;
+    fixture.gravity(2) = -9.81;
     fixture.linear.SetZero();
     fixture.angular.SetZero();
 
@@ -11459,7 +11459,7 @@ void TestRealtimeComputePathPerformsNoHeapAllocation()
     const bool updated = UpdateSpec(spec, model);
     measured.End("UpdateSpec");
     RequireAllocationProof(updated, "UpdateSpec must accept a physical-only edit");
-    RequireAllocationProof(std::fabs(model.root_mass.At(0) - 9.55) < kAllocationProofTolerance,
+    RequireAllocationProof(std::fabs(model.root_mass(0) - 9.55) < kAllocationProofTolerance,
                            "UpdateSpec must refresh the root mass cache");
 
     measured.SetPass("measured pass after UpdateSpec");

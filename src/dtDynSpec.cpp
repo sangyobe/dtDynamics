@@ -728,9 +728,9 @@ dt::Math::Vector3<dtDynReal> ParseVector3(const AttributeValue &attribute,
 {
     const std::array<dtDynReal, 3> values = ParseFixedVector<3>(attribute, sourcePath);
     dt::Math::Vector3<dtDynReal> value;
-    value.At(0) = values[0];
-    value.At(1) = values[1];
-    value.At(2) = values[2];
+    value(0) = values[0];
+    value(1) = values[1];
+    value(2) = values[2];
     return value;
 }
 
@@ -739,10 +739,10 @@ dt::Math::Vector4<dtDynReal> ParseVector4(const AttributeValue &attribute,
 {
     const std::array<dtDynReal, 4> values = ParseFixedVector<4>(attribute, sourcePath);
     dt::Math::Vector4<dtDynReal> value;
-    value.At(0) = values[0];
-    value.At(1) = values[1];
-    value.At(2) = values[2];
-    value.At(3) = values[3];
+    value(0) = values[0];
+    value(1) = values[1];
+    value(2) = values[2];
+    value(3) = values[3];
     return value;
 }
 
@@ -755,21 +755,21 @@ std::string FormatReal(const dtDynReal value)
 
 std::string FormatVector3(const dt::Math::Vector3<dtDynReal> &value)
 {
-    return FormatReal(value.At(0)) + " " + FormatReal(value.At(1)) + " " + FormatReal(value.At(2));
+    return FormatReal(value(0)) + " " + FormatReal(value(1)) + " " + FormatReal(value(2));
 }
 
 std::string FormatVector4(const dt::Math::Vector4<dtDynReal> &value)
 {
-    return FormatReal(value.At(0)) + " " + FormatReal(value.At(1)) + " " +
-           FormatReal(value.At(2)) + " " + FormatReal(value.At(3));
+    return FormatReal(value(0)) + " " + FormatReal(value(1)) + " " +
+           FormatReal(value(2)) + " " + FormatReal(value(3));
 }
 
 void SetIdentityQuat(dt::Math::Vector4<dtDynReal> &quat)
 {
-    quat.At(0) = 1.0;
-    quat.At(1) = 0.0;
-    quat.At(2) = 0.0;
-    quat.At(3) = 0.0;
+    quat(0) = 1.0;
+    quat(1) = 0.0;
+    quat(2) = 0.0;
+    quat(3) = 0.0;
 }
 
 dtDynJointType JointTypeFromXml(const AttributeValue &attribute,
@@ -839,8 +839,8 @@ void EncodeBody(const dtDynSpec &spec,
     const dtDynBodySpec &body = spec.Bodies()[static_cast<std::size_t>(bodyId)];
     const std::string indent(static_cast<std::size_t>(depth * 2), ' ');
     out << indent << "<body name=\"" << body.name << "\" pos=\"" << FormatVector3(body.pos) << "\"";
-    if ((body.quat.At(static_cast<std::uint16_t>(0)) != 0.0) || (body.quat.At(static_cast<std::uint16_t>(1)) != 0.0) ||
-        (body.quat.At(static_cast<std::uint16_t>(2)) != 0.0) || (body.quat.At(static_cast<std::uint16_t>(3)) != 0.0))
+    if ((body.quat(static_cast<std::uint16_t>(0)) != 0.0) || (body.quat(static_cast<std::uint16_t>(1)) != 0.0) ||
+        (body.quat(static_cast<std::uint16_t>(2)) != 0.0) || (body.quat(static_cast<std::uint16_t>(3)) != 0.0))
     {
         out << " quat=\"" << FormatVector4(body.quat) << "\"";
     }
@@ -851,8 +851,8 @@ void EncodeBody(const dtDynSpec &spec,
         out << indent << "  <inertial pos=\"" << FormatVector3(body.inertial.pos)
             << "\" mass=\"" << FormatReal(body.inertial.mass)
             << "\" diaginertia=\"" << FormatVector3(body.inertial.inertia) << "\"";
-        if ((body.inertial.quat.At(static_cast<std::uint16_t>(0)) != 0.0) || (body.inertial.quat.At(static_cast<std::uint16_t>(1)) != 0.0) ||
-            (body.inertial.quat.At(static_cast<std::uint16_t>(2)) != 0.0) || (body.inertial.quat.At(static_cast<std::uint16_t>(3)) != 0.0))
+        if ((body.inertial.quat(static_cast<std::uint16_t>(0)) != 0.0) || (body.inertial.quat(static_cast<std::uint16_t>(1)) != 0.0) ||
+            (body.inertial.quat(static_cast<std::uint16_t>(2)) != 0.0) || (body.inertial.quat(static_cast<std::uint16_t>(3)) != 0.0))
         {
             out << " quat=\"" << FormatVector4(body.inertial.quat) << "\"";
         }
@@ -880,8 +880,8 @@ void EncodeBody(const dtDynSpec &spec,
         const dtDynSiteSpec &site = spec.Sites()[static_cast<std::size_t>(siteId)];
         out << indent << "  <site name=\"" << site.name
             << "\" pos=\"" << FormatVector3(site.pos) << "\"";
-        if ((site.quat.At(static_cast<std::uint16_t>(0)) != 0.0) || (site.quat.At(static_cast<std::uint16_t>(1)) != 0.0) ||
-            (site.quat.At(static_cast<std::uint16_t>(2)) != 0.0) || (site.quat.At(static_cast<std::uint16_t>(3)) != 0.0))
+        if ((site.quat(static_cast<std::uint16_t>(0)) != 0.0) || (site.quat(static_cast<std::uint16_t>(1)) != 0.0) ||
+            (site.quat(static_cast<std::uint16_t>(2)) != 0.0) || (site.quat(static_cast<std::uint16_t>(3)) != 0.0))
         {
             out << " quat=\"" << FormatVector4(site.quat) << "\"";
         }
@@ -1048,9 +1048,9 @@ dtDynIndex dtDynSpec::AddJoint(const dtDynIndex body, const std::string &name, c
     joint.name = name;
     joint.body = body;
     joint.type = type;
-    joint.axis.At(static_cast<std::uint16_t>(0)) = 0.0;
-    joint.axis.At(static_cast<std::uint16_t>(1)) = 0.0;
-    joint.axis.At(static_cast<std::uint16_t>(2)) = 1.0;
+    joint.axis(static_cast<std::uint16_t>(0)) = 0.0;
+    joint.axis(static_cast<std::uint16_t>(1)) = 0.0;
+    joint.axis(static_cast<std::uint16_t>(2)) = 1.0;
 
     const dtDynIndex id = static_cast<dtDynIndex>(m_storage.m_joints.size());
     m_storage.m_joints.push_back(std::move(joint));

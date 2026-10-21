@@ -9,7 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 CI = ROOT / ".gitlab-ci.yml"
 PREPARE = ROOT / "ci" / "prepare_dtmath_dependency.sh"
-DTMATH_MERGE_SHA = "b6cb3af6d0ec930d3bcfc030b146380d0fc56cfd"
+DTMATH_MERGE_SHA = "1b495575cf99beaf04a61df3074a73f73b01f09b"
 
 
 def main() -> None:

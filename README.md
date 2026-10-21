@@ -4,8 +4,8 @@
 - 제공 항목: 질량행렬, 중력·코리올리·비선형 토크, body/site Jacobian과 시간미분 항, CoM, centroidal momentum 항
 - 미제공 항목: 접촉 해석, 시뮬레이션 적분, 최종 토크 결정
 - 현재 패키지 버전: **0.1.3**
-- production library 의존성: `dtMath` 단일. named element accessor `At()`를 제공하는 revision 필요
-- CI 고정 revision: `b6cb3af6d0ec930d3bcfc030b146380d0fc56cfd`
+- production library 의존성: `dtMath` 단일
+- CI 고정 revision: `1b495575cf99beaf04a61df3074a73f73b01f09b`
 - 다른 위치의 dtMath 사용: `cmake --preset release -DDTDYNAMICS_DTMATH_INCLUDE_DIR=/path/to/dtMath/include` (`dtMath/dtMath.h`를 포함하는 include root)
 - MuJoCo 3.8.0, Pinocchio 3.9.0: `.validation_deps` 아래의 검증·benchmark 전용 참조 구현
 
