@@ -248,6 +248,17 @@ struct OverloadedCopyAssignment
 
 static_assert(std::is_copy_assignable<OverloadedCopyAssignment>::value);
 
+// dtDynSpec::SpecStorage declares its defaulted moves noexcept; that declaration is only
+// valid while every dtArray member (body, joint, site, actuator) moves without throwing.
+static_assert(std::is_nothrow_move_constructible<dtArray<dtDynBodySpec>>::value);
+static_assert(std::is_nothrow_move_assignable<dtArray<dtDynBodySpec>>::value);
+static_assert(std::is_nothrow_move_constructible<dtArray<dtDynJointSpec>>::value);
+static_assert(std::is_nothrow_move_assignable<dtArray<dtDynJointSpec>>::value);
+static_assert(std::is_nothrow_move_constructible<dtArray<dtDynSiteSpec>>::value);
+static_assert(std::is_nothrow_move_assignable<dtArray<dtDynSiteSpec>>::value);
+static_assert(std::is_nothrow_move_constructible<dtArray<dtDynActuatorSpec>>::value);
+static_assert(std::is_nothrow_move_assignable<dtArray<dtDynActuatorSpec>>::value);
+
 } // namespace
 
 #ifdef DTDYN_TEST_WRAP_C_ALLOCATOR

@@ -288,9 +288,9 @@ private:
     public:
         SpecStorage() = default;
         SpecStorage(const SpecStorage &other) = default;
-        SpecStorage(SpecStorage &&other) = default;
+        SpecStorage(SpecStorage &&other) noexcept = default;
         SpecStorage &operator=(const SpecStorage &other);
-        SpecStorage &operator=(SpecStorage &&other) = default;
+        SpecStorage &operator=(SpecStorage &&other) noexcept = default;
 
         void Swap(SpecStorage &other) noexcept;
 
