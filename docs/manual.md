@@ -32,6 +32,14 @@ find_package(dtDynamics 0.1.3 EXACT CONFIG REQUIRED)
 target_link_libraries(my_controller PRIVATE dt::Dynamics)
 ```
 
+- 설치 prefix(`${ARTF_INSTALL_DIR:-$HOME/.local/ART_Framework}`)는 CMake 기본 탐색 경로가 아니다. `CMAKE_PREFIX_PATH`에 prefix를 넣거나, 다른 package가 섞이지 않게 경로를 고정하려면 다음 형태를 쓴다.
+
+```cmake
+find_package(dtDynamics 0.1.3 EXACT CONFIG REQUIRED
+    PATHS "${ARTF_INSTALL_DIR}"
+    NO_DEFAULT_PATH)
+```
+
 - Canonical lifecycle (아래 2~5장이 각 단계를 실행 절차로 확장):
 
 ```text
@@ -347,7 +355,7 @@ python3 tools/validate_docs.py
 - analysis scope: test/benchmark/reference target을 끈 production `dtDynamics` compile database
 - 결과 범위: dtDynamics 자체 소스로 한정. 시스템 헤더, ART Framework prefix, 고정 SHA dtMath checkout(`.ci/dtmath`)은 `polyspace/polyspace.opts`에서 제외
 - 설정 단계 heap deviation(잠정): 21.6.1/21.6.2/21.6.3은 `polyspace/setup_phase_deviation.txt`에 적은 설정 단계 파일에 한해 인정. 실시간 경로의 21.6.x 0건과 `TestRealtimeComputePathPerformsNoHeapAllocation` 무할당 테스트를 대체 증거로 사용. 목록 밖 파일에서 나온 같은 rule은 실패. 팀 정책 결정 전까지의 잠정 방침
-- checker profile: production library compile database에 `polyspace/checkers.xml`로 고정한 Bug Finder 237개와 MISRA C++:2023 179개 rule 적용. exact profile은 `tools/test_polyspace_checker_profile.py`가 검증
+- checker profile: production library compile database에 `polyspace/checkers.xml`로 고정한 Bug Finder 237개와 MISRA C++:2023 179개 rule 활성화. 활성화 항목 수이며, 실제로 실행된 체커는 Polyspace 로그의 경고(찾을 수 없거나 옵션이 없어 무시된 체커)를 함께 확인. exact profile은 `tools/test_polyspace_checker_profile.py`가 검증
 - execution: `ci/polyspace.sh`가 cache 결과, 기존 configure options, 기존 report를 제거하고 현재 compile database에서 nonempty configure options를 새로 만든다. 이후 새 canonical `result_list.txt`만 `tools/polyspace_result_gate.py`에 전달. parser exit code가 GitLab job exit를 결정하며 Polyspace Access 업로드는 이 판정을 바꾸지 않음
 - canonical schema: TSV header는 `ID`부터 `Col`까지 정해진 16개 column을 같은 순서로 모두 포함해야 함. 축약·순서 변경·추가 column은 즉시 실패
 - TSV field boundary: 필드 경계는 literal TAB만 사용한다. 큰따옴표(`"`)는 일반 데이터로 취급하며 따옴표 처리나 행 결합에 사용하지 않는다. 따라서 큰따옴표로 감싼 TAB도 추가 field로 거부한다.

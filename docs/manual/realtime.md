@@ -35,7 +35,7 @@ Author: Joonhee Jo
 ```
 
 - 성격: arbitrary API에 대한 universal guarantee 아님
-- 별도 profiler·deployment test 필요 영역: dtMath container가 사용하는 `malloc`/`calloc`/`realloc`, external library, allocator 내부 동작, OS/runtime, logging, one-time initialization
+- 별도 profiler·deployment test 필요 영역: dtMath container가 사용하는 `malloc`/`calloc`/`realloc`(benchmark counter 범위 밖. 단 `TestRealtimeComputePathPerformsNoHeapAllocation`이 Linux에서 링커 `--wrap`으로 별도 계수), external library, allocator 내부 동작, OS/runtime, logging, one-time initialization
 
 | Phase | 예 | C++ heap policy |
 |---|---|---|

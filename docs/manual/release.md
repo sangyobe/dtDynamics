@@ -15,6 +15,14 @@ find_package(dtDynamics 0.1.3 EXACT CONFIG REQUIRED)
 target_link_libraries(my_controller PRIVATE dt::Dynamics)
 ```
 
+- 설치 prefix(`${ARTF_INSTALL_DIR:-$HOME/.local/ART_Framework}`)는 CMake 기본 탐색 경로가 아니다. `CMAKE_PREFIX_PATH`에 prefix를 넣거나, 다른 package가 섞이지 않게 경로를 고정하려면 다음 형태를 쓴다.
+
+```cmake
+find_package(dtDynamics 0.1.3 EXACT CONFIG REQUIRED
+    PATHS "${ARTF_INSTALL_DIR}"
+    NO_DEFAULT_PATH)
+```
+
 ## 11-2. 확인할 package surface
 
 - `dtDynamicsConfigVersion.cmake`가 exact `0.1.3`을 수용하고 wrong exact version을 거부
