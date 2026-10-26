@@ -28,7 +28,7 @@ std::size_t ToArraySize(const Size value)
 {
     if constexpr (std::is_signed<Size>::value)
     {
-        return value > 0 ? static_cast<std::size_t>(value) : static_cast<std::size_t>(0);
+        return (value > 0) ? static_cast<std::size_t>(value) : static_cast<std::size_t>(0);
     }
     else
     {
@@ -204,32 +204,13 @@ public:
     }
 
     /*! \brief Append a by-value capture before growth can invalidate aliased storage.
-        \details Retains the public by-value signature. A noexcept move constructor reconstructs
-                 the unused allocated slot; otherwise copy assignment or noexcept move assignment
-                 provides the destination transfer. */
+        \details Retains the public by-value signature, then hands the captured value to a
+                 private mutable-reference implementation. A noexcept move constructor
+                 reconstructs the unused allocated slot; otherwise copy assignment or noexcept
+                 move assignment provides the destination transfer. */
     void push_back(T value)
     {
-        if (m_size == m_capacity)
-        {
-            reserve(m_capacity == 0 ? 1 : 2 * m_capacity);
-        }
-        if constexpr (std::is_nothrow_move_constructible<T>::value)
-        {
-            m_data[m_size].~T();
-            ::new (static_cast<void *>(m_data + m_size)) T(std::move(value));
-        }
-        else if constexpr (std::is_copy_assignable<T>::value)
-        {
-            m_data[m_size] = value;
-        }
-        else
-        {
-            static_assert(std::is_nothrow_move_assignable<T>::value,
-                          "dtArray append requires a noexcept move constructor, copy assignment, "
-                          "or noexcept move assignment");
-            m_data[m_size] = std::move(value);
-        }
-        ++m_size;
+        AppendCaptured(value);
     }
 
     /*! \brief Return true when size() is zero. */
@@ -254,11 +235,43 @@ public:
     /*! \brief Return an immutable iterator/pointer to the first element. */
     const T *begin() const { return m_data; }
     /*! \brief Return a mutable one-past-end iterator/pointer, or nullptr when unallocated. */
-    T *end() { return m_data == nullptr ? nullptr : m_data + m_size; }
+    T *end() { return (m_data == nullptr) ? nullptr : (m_data + m_size); }
     /*! \brief Return an immutable one-past-end iterator/pointer, or nullptr when unallocated. */
-    const T *end() const { return m_data == nullptr ? nullptr : m_data + m_size; }
+    const T *end() const { return (m_data == nullptr) ? nullptr : (m_data + m_size); }
 
 private:
+    /*! \brief Assign a captured value while preserving mutable-copy overload selection. */
+    static void CopyIntoSlot(T &destination, T &source)
+    {
+        destination = source;
+    }
+
+    /*! \brief Complete append after push_back has captured any potentially aliased input. */
+    void AppendCaptured(T &value)
+    {
+        if (m_size == m_capacity)
+        {
+            reserve((m_capacity == 0) ? 1 : (2 * m_capacity));
+        }
+        if constexpr (std::is_nothrow_move_constructible<T>::value)
+        {
+            m_data[m_size].~T();
+            ::new (static_cast<void *>(m_data + m_size)) T(std::move(value));
+        }
+        else if constexpr (std::is_copy_assignable<T>::value)
+        {
+            CopyIntoSlot(m_data[m_size], value);
+        }
+        else
+        {
+            static_assert(std::is_nothrow_move_assignable<T>::value,
+                          "dtArray append requires a noexcept move constructor, copy assignment, "
+                          "or noexcept move assignment");
+            m_data[m_size] = std::move(value);
+        }
+        ++m_size;
+    }
+
     /*! \brief Ensure capacity is at least capacity, preserving existing logical elements.
         \details Elements must be copy-assignable or noexcept move-assignable so failed growth
                  never leaves a move-only source partially transferred. */

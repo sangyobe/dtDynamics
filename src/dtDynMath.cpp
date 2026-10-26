@@ -10,6 +10,7 @@
 #include "dtDynamics/dtDynMath.h"
 
 #include <cmath>
+#include <cstdint>
 #include <limits>
 
 namespace dt::Dynamics
@@ -42,7 +43,9 @@ dt::Math::Vector3<dtDynReal> NormalizeOrDefault(const dt::Math::Vector3<dtDynRea
 
 dt::Math::Vector4<dtDynReal> NormalizeOrIdentity(const dt::Math::Vector4<dtDynReal> &q)
 {
-    const dtDynReal norm = std::sqrt(q(0) * q(0) + q(1) * q(1) + q(2) * q(2) + q(3) * q(3));
+    const dtDynReal norm = std::sqrt((((q(0) * q(0)) + (q(1) * q(1))) +
+                                      (q(2) * q(2))) +
+                                     (q(3) * q(3)));
     dt::Math::Vector4<dtDynReal> out;
     if (norm <= std::numeric_limits<dtDynReal>::epsilon())
     {
@@ -61,10 +64,14 @@ dt::Math::Vector4<dtDynReal> MulQuat(const dt::Math::Vector4<dtDynReal> &a,
                                      const dt::Math::Vector4<dtDynReal> &b)
 {
     dt::Math::Vector4<dtDynReal> out;
-    out(0) = a(0) * b(0) - a(1) * b(1) - a(2) * b(2) - a(3) * b(3);
-    out(1) = a(0) * b(1) + a(1) * b(0) + a(2) * b(3) - a(3) * b(2);
-    out(2) = a(0) * b(2) - a(1) * b(3) + a(2) * b(0) + a(3) * b(1);
-    out(3) = a(0) * b(3) + a(1) * b(2) - a(2) * b(1) + a(3) * b(0);
+    out(0) = (((a(0) * b(0)) - (a(1) * b(1))) - (a(2) * b(2))) -
+             (a(3) * b(3));
+    out(1) = (((a(0) * b(1)) + (a(1) * b(0))) + (a(2) * b(3))) -
+             (a(3) * b(2));
+    out(2) = (((a(0) * b(2)) - (a(1) * b(3))) + (a(2) * b(0))) +
+             (a(3) * b(1));
+    out(3) = (((a(0) * b(3)) + (a(1) * b(2))) - (a(2) * b(1))) +
+             (a(3) * b(0));
     return NormalizeOrIdentity(out);
 }
 
@@ -100,9 +107,9 @@ dt::Math::Vector3<dtDynReal> Rotate(const dt::Math::Matrix3<dtDynReal> &m,
                                     const dt::Math::Vector3<dtDynReal> &v)
 {
     dt::Math::Vector3<dtDynReal> out;
-    out(0) = m(0, 0) * v(0) + m(0, 1) * v(1) + m(0, 2) * v(2);
-    out(1) = m(1, 0) * v(0) + m(1, 1) * v(1) + m(1, 2) * v(2);
-    out(2) = m(2, 0) * v(0) + m(2, 1) * v(1) + m(2, 2) * v(2);
+    out(0) = ((m(0, 0) * v(0)) + (m(0, 1) * v(1))) + (m(0, 2) * v(2));
+    out(1) = ((m(1, 0) * v(0)) + (m(1, 1) * v(1))) + (m(1, 2) * v(2));
+    out(2) = ((m(2, 0) * v(0)) + (m(2, 1) * v(1))) + (m(2, 2) * v(2));
     return out;
 }
 
@@ -115,15 +122,15 @@ dt::Math::Matrix3<dtDynReal> QuatToMat(const dt::Math::Vector4<dtDynReal> &quat)
     const dtDynReal z = q(3);
 
     dt::Math::Matrix3<dtDynReal> out;
-    out(0, 0) = 1.0 - 2.0 * (y * y + z * z);
-    out(0, 1) = 2.0 * (x * y - z * w);
-    out(0, 2) = 2.0 * (x * z + y * w);
-    out(1, 0) = 2.0 * (x * y + z * w);
-    out(1, 1) = 1.0 - 2.0 * (x * x + z * z);
-    out(1, 2) = 2.0 * (y * z - x * w);
-    out(2, 0) = 2.0 * (x * z - y * w);
-    out(2, 1) = 2.0 * (y * z + x * w);
-    out(2, 2) = 1.0 - 2.0 * (x * x + y * y);
+    out(0, 0) = (1.0 - (2.0 * ((y * y) + (z * z))));
+    out(0, 1) = (2.0 * ((x * y) - (z * w)));
+    out(0, 2) = (2.0 * ((x * z) + (y * w)));
+    out(1, 0) = (2.0 * ((x * y) + (z * w)));
+    out(1, 1) = (1.0 - (2.0 * ((x * x) + (z * z))));
+    out(1, 2) = (2.0 * ((y * z) - (x * w)));
+    out(2, 0) = (2.0 * ((x * z) - (y * w)));
+    out(2, 1) = (2.0 * ((y * z) + (x * w)));
+    out(2, 2) = (1.0 - (2.0 * ((x * x) + (y * y))));
     return out;
 }
 
@@ -131,25 +138,25 @@ dt::Math::Vector3<dtDynReal> UnitAxis(const dtDynIndex axis)
 {
     dt::Math::Vector3<dtDynReal> out;
     out.SetZero();
-    out(axis) = 1.0;
+    out(static_cast<std::uint16_t>(axis)) = 1.0;
     return out;
 }
 
 dt::Math::Vector3<dtDynReal> MatrixColumn(const dt::Math::Matrix3<dtDynReal> &m, const dtDynIndex col)
 {
     dt::Math::Vector3<dtDynReal> out;
-    out(0) = m(0, col);
-    out(1) = m(1, col);
-    out(2) = m(2, col);
+    out(0) = m(0, static_cast<std::uint16_t>(col));
+    out(1) = m(1, static_cast<std::uint16_t>(col));
+    out(2) = m(2, static_cast<std::uint16_t>(col));
     return out;
 }
 
 dt::Math::Vector3<dtDynReal> DenseMatrixColumn3(const dtDynDenseMatrix &matrix, const dtDynIndex col)
 {
     dt::Math::Vector3<dtDynReal> out;
-    out(0) = matrix(0, col);
-    out(1) = matrix(1, col);
-    out(2) = matrix(2, col);
+    out(0) = matrix(0, static_cast<std::uint16_t>(col));
+    out(1) = matrix(1, static_cast<std::uint16_t>(col));
+    out(2) = matrix(2, static_cast<std::uint16_t>(col));
     return out;
 }
 
@@ -163,7 +170,7 @@ dt::Math::Matrix3<dtDynReal> DenseMatrixBlock3(const dtDynDenseMatrix &matrix,
     {
         for (dtDynIndex col = 0; col < 3; ++col)
         {
-            out(row, col) = matrix(rowOffset + row, colOffset + col);
+            out(static_cast<std::uint16_t>(row), static_cast<std::uint16_t>(col)) = matrix(static_cast<std::uint16_t>(rowOffset + row), static_cast<std::uint16_t>(colOffset + col));
         }
     }
     return out;
@@ -187,7 +194,7 @@ dtDynReal SpatialDot(const dt::Math::Vector6<dtDynReal> &a, const dt::Math::Vect
     dtDynReal value = 0.0;
     for (dtDynIndex row = 0; row < 6; ++row)
     {
-        value += a(row) * b(row);
+        value += a(static_cast<std::uint16_t>(row)) * b(static_cast<std::uint16_t>(row));
     }
     return value;
 }
@@ -199,7 +206,7 @@ dtDynReal SpatialDot3(const dt::Math::Vector6<dtDynReal> &left,
     dtDynReal value = 0.0;
     for (dtDynIndex row = 0; row < 6; ++row)
     {
-        value += left(row) * (a(row) + b(row));
+        value += left(static_cast<std::uint16_t>(row)) * (a(static_cast<std::uint16_t>(row)) + b(static_cast<std::uint16_t>(row)));
     }
     return value;
 }
@@ -210,10 +217,10 @@ dt::Math::Vector6<dtDynReal> SpatialMul(const dt::Math::Matrix<6, 6, dtDynReal> 
     dt::Math::Vector6<dtDynReal> out;
     for (dtDynIndex row = 0; row < 6; ++row)
     {
-        out(row) = 0.0;
+        out(static_cast<std::uint16_t>(row)) = 0.0;
         for (dtDynIndex col = 0; col < 6; ++col)
         {
-            out(row) += matrix(row, col) * vector(col);
+            out(static_cast<std::uint16_t>(row)) += matrix(static_cast<std::uint16_t>(row), static_cast<std::uint16_t>(col)) * vector(static_cast<std::uint16_t>(col));
         }
     }
     return out;
@@ -225,10 +232,10 @@ dt::Math::Vector6<dtDynReal> SpatialMulTranspose(const dt::Math::Matrix<6, 6, dt
     dt::Math::Vector6<dtDynReal> out;
     for (dtDynIndex row = 0; row < 6; ++row)
     {
-        out(row) = 0.0;
+        out(static_cast<std::uint16_t>(row)) = 0.0;
         for (dtDynIndex col = 0; col < 6; ++col)
         {
-            out(row) += matrix(col, row) * vector(col);
+            out(static_cast<std::uint16_t>(row)) += matrix(static_cast<std::uint16_t>(col), static_cast<std::uint16_t>(row)) * vector(static_cast<std::uint16_t>(col));
         }
     }
     return out;
@@ -240,7 +247,7 @@ dt::Math::Vector6<dtDynReal> ScaleSpatial(const dt::Math::Vector6<dtDynReal> &sr
     dt::Math::Vector6<dtDynReal> out;
     for (dtDynIndex row = 0; row < 6; ++row)
     {
-        out(row) = scalar * src(row);
+        out(static_cast<std::uint16_t>(row)) = scalar * src(static_cast<std::uint16_t>(row));
     }
     return out;
 }
@@ -250,7 +257,7 @@ void AddSpatialInPlace(dt::Math::Vector6<dtDynReal> &dst,
 {
     for (dtDynIndex row = 0; row < 6; ++row)
     {
-        dst(row) += src(row);
+        dst(static_cast<std::uint16_t>(row)) += src(static_cast<std::uint16_t>(row));
     }
 }
 
@@ -264,10 +271,10 @@ dt::Math::Vector6<dtDynReal> CrossSpatialMotion(const dt::Math::Vector6<dtDynRea
 
     for (dtDynIndex row = 0; row < 3; ++row)
     {
-        omega(row) = velocity(row);
-        linear(row) = velocity(row + 3);
-        motionOmega(row) = motion(row);
-        motionLinear(row) = motion(row + 3);
+        omega(static_cast<std::uint16_t>(row)) = velocity(static_cast<std::uint16_t>(row));
+        linear(static_cast<std::uint16_t>(row)) = velocity(static_cast<std::uint16_t>(row + 3));
+        motionOmega(static_cast<std::uint16_t>(row)) = motion(static_cast<std::uint16_t>(row));
+        motionLinear(static_cast<std::uint16_t>(row)) = motion(static_cast<std::uint16_t>(row + 3));
     }
 
     const dt::Math::Vector3<dtDynReal> angularPart = omega & motionOmega;
@@ -313,7 +320,7 @@ dt::Math::Matrix<6, 6, dtDynReal> CrossSpatialMotionMatrix(const dt::Math::Vecto
 
 dt::Math::Matrix<6, 6, dtDynReal> CrossSpatialMotionMatrixStar(const dt::Math::Vector6<dtDynReal> &velocity)
 {
-    return CrossSpatialMotionMatrix(velocity).Transpose() * -1.0;
+    return CrossSpatialMotionMatrix(velocity).Transpose() * static_cast<dtDynReal>(-1.0);
 }
 
 dt::Math::Matrix<6, 6, dtDynReal> CrossSpatialMomentumMatrix(const dt::Math::Vector6<dtDynReal> &momentum)
@@ -378,9 +385,9 @@ dt::Math::Matrix3<dtDynReal> BodyInertiaInWorld(const dtDynModel &model,
     {
         for (dtDynIndex col = 0; col < 3; ++col)
         {
-            out(row, col) = rot(row, 0) * diag(0) * rot(col, 0) +
-                            rot(row, 1) * diag(1) * rot(col, 1) +
-                            rot(row, 2) * diag(2) * rot(col, 2);
+            out(static_cast<std::uint16_t>(row), static_cast<std::uint16_t>(col)) = (((rot(static_cast<std::uint16_t>(row), 0) * diag(0)) * rot(static_cast<std::uint16_t>(col), 0)) +
+                                                                                     ((rot(static_cast<std::uint16_t>(row), 1) * diag(1)) * rot(static_cast<std::uint16_t>(col), 1))) +
+                                                                                    ((rot(static_cast<std::uint16_t>(row), 2) * diag(2)) * rot(static_cast<std::uint16_t>(col), 2));
         }
     }
 
@@ -397,19 +404,19 @@ dt::Math::Matrix<6, 6, dtDynReal> SpatialInertiaAtWorldOrigin(const dtDynReal ma
     const dtDynReal c0 = com(0);
     const dtDynReal c1 = com(1);
     const dtDynReal c2 = com(2);
-    const dtDynReal c2sum = c0 * c0 + c1 * c1 + c2 * c2;
+    const dtDynReal c2sum = (((c0 * c0) + (c1 * c1)) + (c2 * c2));
 
     for (dtDynIndex row = 0; row < 3; ++row)
     {
         for (dtDynIndex col = 0; col < 3; ++col)
         {
-            out(row, col) = rotInertia(row, col);
+            out(static_cast<std::uint16_t>(row), static_cast<std::uint16_t>(col)) = rotInertia(static_cast<std::uint16_t>(row), static_cast<std::uint16_t>(col));
             if (row == col)
             {
-                out(row, col) += mass * c2sum;
+                out(static_cast<std::uint16_t>(row), static_cast<std::uint16_t>(col)) += mass * c2sum;
             }
-            out(row, col) -= mass * com(row) * com(col);
-            out(row + 3, col + 3) = row == col ? mass : 0.0;
+            out(static_cast<std::uint16_t>(row), static_cast<std::uint16_t>(col)) -= ((mass * com(static_cast<std::uint16_t>(row))) * com(static_cast<std::uint16_t>(col)));
+            out(static_cast<std::uint16_t>(row + 3), static_cast<std::uint16_t>(col + 3)) = ((row == col) ? mass : 0.0);
         }
     }
 
@@ -447,11 +454,11 @@ dtDynReal QuadraticInertia(const dt::Math::Vector3<dtDynReal> &left,
     {
         for (dtDynIndex col = 0; col < 3; ++col)
         {
-            value += left(row) * inertia(row, col) * right(col);
+            value += left(static_cast<std::uint16_t>(row)) * inertia(static_cast<std::uint16_t>(row), static_cast<std::uint16_t>(col)) * right(static_cast<std::uint16_t>(col));
         }
     }
     return value;
 }
 
-} // namespace math
+} // end of namespace math
 } // namespace dt::Dynamics

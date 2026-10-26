@@ -24,6 +24,11 @@ variables:
   POLYSPACE_TEMPLATES: "/usr/local/Polyspace_Server/R2025b/toolbox/polyspace/psrptgen/templates"
   POLYSPACE_ACCESS_HOST: "10.20.92.67"
   POLYSPACE_ACCESS_PORT: "9444"
+  DTDYNAMICS_DTMATH_COMMIT: "1b495575cf99beaf04a61df3074a73f73b01f09b"
+  DTDYNAMICS_DTMATH_INCLUDE_DIR: "${CI_PROJECT_DIR}/.ci/dtmath/include"
+
+before_script:
+  - bash ci/prepare_dtmath_dependency.sh
 
 lint-job:
   stage: lint
@@ -35,6 +40,25 @@ lint-job:
       - reports/clang-format.txt
     expire_in: 1 week
 
+release-contracts:
+  stage: lint
+  script:
+    - bash -n ci/polyspace.sh tools/package_release.sh tools/validate_install_export.sh tools/validate_package.sh tools/audit_release_readiness.sh tools/install_validation_deps.sh
+    - python3 tools/test_package_release_contract.py
+    - python3 tools/test_install_export_layout_contract.py
+    - python3 tools/test_installed_guide_provenance.py
+    - python3 tools/test_guide_install_contract.py
+    - python3 tools/test_validation_deps_installer.py
+    - python3 tools/test_dtdynamics_config_include_order.py
+    - python3 tools/test_ci_dtmath_dependency.py
+    - python3 tools/test_polyspace_result_gate.py
+    - python3 tools/test_polyspace_export_contract.py
+    - python3 tools/test_polyspace_transport.py
+    - python3 tools/test_polyspace_checker_profile.py
+    - python3 tools/test_release_gate_wiring.py
+    - python3 tools/test_gitlab_ci_contract_parser.py
+    - python3 tools/test_gitlab_ci_contract.py
+
 build-job:
   stage: build
   script:
@@ -43,6 +67,13 @@ build-job:
     paths:
       - build/
     expire_in: 1 week
+
+# Native CTest plus isolated lib/lib64 install/export and relocation consumers.
+# MuJoCo/Pinocchio reference dependencies are intentionally not present in this runner image.
+package-validation:
+  stage: build
+  script:
+    - DTDYNAMICS_INSTALL_LIBDIRS="lib lib64" ./tools/validate_package.sh --skip-reference-tests
 
 polyspace-job:
   stage: analyse
@@ -73,5 +104,7 @@ markdown-docs:
       fi
   script:
     - command -v python3
+    - python3 tools/test_guide_provenance_parser.py
+    - python3 tools/test_guide_provenance_reference_contract.py
     - python3 tools/validate_documentation_content.py
     - python3 tools/validate_docs.py

@@ -29,6 +29,18 @@ def make_fake_formatter(directory: Path) -> Path:
     return formatter
 
 
+def make_fake_package_test_python(directory: Path) -> Path:
+    python = directory / "python3"
+    python.write_text(
+        "#!/usr/bin/env sh\n"
+        "echo 'fake package-config test failure' >&2\n"
+        "exit \"${FAKE_PACKAGE_TEST_EXIT}\"\n",
+        encoding="utf-8",
+    )
+    python.chmod(0o755)
+    return python
+
+
 def make_fake_tee(directory: Path) -> Path:
     tee = directory / "tee"
     tee.write_text(
@@ -57,6 +69,7 @@ def run_lint(
     formatter_exit: int,
     tee_exit: int = 0,
     find_exit: int = 0,
+    package_test_exit: int | None = None,
 ) -> tuple[subprocess.CompletedProcess[str], Path]:
     temporary = tempfile.TemporaryDirectory()
     root = Path(temporary.name)
@@ -67,6 +80,8 @@ def run_lint(
     bin_directory = root / "bin"
     bin_directory.mkdir()
     make_fake_formatter(bin_directory)
+    if package_test_exit is not None:
+        make_fake_package_test_python(bin_directory)
     if tee_exit:
         make_fake_tee(bin_directory)
     if find_exit:
@@ -77,6 +92,7 @@ def run_lint(
         "FAKE_CLANG_FORMAT_EXIT": str(formatter_exit),
         "FAKE_TEE_EXIT": str(tee_exit),
         "FAKE_FIND_EXIT": str(find_exit),
+        "FAKE_PACKAGE_TEST_EXIT": str(package_test_exit or 0),
         "GIT_PUSH_TOKEN": "must-not-be-used",
     }
     result = subprocess.run(
@@ -98,6 +114,17 @@ def assert_clean_format_passes_without_git_or_token() -> None:
     try:
         assert result.returncode == 0, result.stdout + result.stderr
         assert report.exists()
+        assert "dtDynamics config include precedence: PASS" in result.stdout
+    finally:
+        result._lint_temporary_directory.cleanup()  # type: ignore[attr-defined]
+
+
+def assert_package_config_failure_blocks_lint() -> None:
+    result, report = run_lint(0, package_test_exit=37)
+    try:
+        assert result.returncode == 37, result.stdout + result.stderr
+        assert report.exists()
+        assert "fake package-config test failure" in result.stderr
     finally:
         result._lint_temporary_directory.cleanup()  # type: ignore[attr-defined]
 
@@ -139,6 +166,7 @@ def assert_lint_script_never_pushes_or_reads_write_token() -> None:
 
 def main() -> None:
     assert_clean_format_passes_without_git_or_token()
+    assert_package_config_failure_blocks_lint()
     assert_format_violation_fails_and_writes_report()
     assert_report_write_failure_blocks_lint()
     assert_source_discovery_failure_blocks_lint()

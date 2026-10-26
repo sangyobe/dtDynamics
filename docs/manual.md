@@ -15,7 +15,7 @@ Author: Joonhee Jo
 5. [Realtime 적용 checklist](#5-realtime-적용-checklist)
 6. [검증 실행 방법](#6-검증-실행-방법)
 7. [Benchmark 재현 방법](#7-benchmark-재현-방법)
-8. [문서 생성·Release 절차](#8-문서-생성release-절차)
+8. [Markdown 문서·Release 절차](#8-markdown-문서release-절차)
 9. [Troubleshooting](#9-troubleshooting)
 10. [상세 설명 chapter와 관련 문서](#10-상세-설명-chapter와-관련-문서)
 
@@ -30,6 +30,14 @@ Author: Joonhee Jo
 ```cmake
 find_package(dtDynamics 0.1.3 EXACT CONFIG REQUIRED)
 target_link_libraries(my_controller PRIVATE dt::Dynamics)
+```
+
+- 설치 prefix(`${ARTF_INSTALL_DIR:-$HOME/.local/ART_Framework}`)는 CMake 기본 탐색 경로가 아니다. `CMAKE_PREFIX_PATH`에 prefix를 넣거나, 다른 package가 섞이지 않게 경로를 고정하려면 다음 형태를 쓴다.
+
+```cmake
+find_package(dtDynamics 0.1.3 EXACT CONFIG REQUIRED
+    PATHS "${ARTF_INSTALL_DIR}"
+    NO_DEFAULT_PATH)
 ```
 
 - Canonical lifecycle (아래 2~5장이 각 단계를 실행 절차로 확장):
@@ -265,7 +273,8 @@ if (foot == DTDYN_INVALID_INDEX || hipMotor == DTDYN_INVALID_INDEX)
 ### 4-2. Control tick
 
 - 아래는 controller-owned symbol을 포함한 **pseudocode**
-- `Jp`, `Jr`, `JdvP`, `JdvR`: setup에서 `3 x model.nv`로 미리 sizing
+- `Jp`, `Jr`: setup에서 `3 x model.nv`로 미리 sizing
+- `JdvP`, `JdvR`: `dt::Math::Vector3<dtDynReal>`. `Jdot * qvel`의 linear/angular 3-vector
 
 ```text
 WriteEstimatorStateInto(data.qpos, data.qvel); // controller-owned mapping
@@ -327,7 +336,6 @@ python3 tools/validate_reference_benchmark.py \
 python3 tools/validate_benchmark_results.py \
   --native /path/to/native.csv \
   --stages /path/to/stages.csv \
-  --references /path/to/reference.csv \
   --generated docs/figures
 ```
 
@@ -343,15 +351,21 @@ python3 tools/validate_docs.py
 
 ### 6-3. GitLab static-analysis gate
 
-- authoritative execution: GitLab `polyspace` job와 job artifact `reports/polyspace/polyspace/result_list.txt`
+- authoritative execution: GitLab `polyspace-job` job과 job artifact `reports/polyspace/polyspace/result_list.txt`
 - analysis scope: test/benchmark/reference target을 끈 production `dtDynamics` compile database
-- checker profile: Bug Finder + MISRA C++:2023 `6.8.2`, `8.18.1`, `11.6.2`, `25.5.2`, `25.5.3`
-- raw-defect-zero policy: 모든 canonical export row는 `Color=Green`이고 status가 blank 또는 `Unreviewed`여야 한다. `Justified`, `No action planned`, `Not a defect`, non-Green row, malformed TSV, `File does not compile`은 모두 gate 실패다.
+- 결과 범위: dtDynamics 자체 소스로 한정. 시스템 헤더, ART Framework prefix, 고정 SHA dtMath checkout(`.ci/dtmath`)은 `polyspace/polyspace.opts`에서 제외
+- 설정 단계 heap deviation(잠정): 21.6.1/21.6.2/21.6.3은 `polyspace/setup_phase_deviation.txt`에 적은 설정 단계 파일에 한해 인정. 실시간 경로의 21.6.x 0건과 `TestRealtimeComputePathPerformsNoHeapAllocation` 무할당 테스트를 대체 증거로 사용. 목록 밖 파일에서 나온 같은 rule은 실패. 팀 정책 결정 전까지의 잠정 방침
+- checker profile: production library compile database에 `polyspace/checkers.xml`로 고정한 Bug Finder 237개와 MISRA C++:2023 179개 rule 활성화. 활성화 항목 수이며, 실제로 실행된 체커는 Polyspace 로그의 경고(찾을 수 없거나 옵션이 없어 무시된 체커)를 함께 확인. exact profile은 `tools/test_polyspace_checker_profile.py`가 검증
+- execution: `ci/polyspace.sh`가 cache 결과, 기존 configure options, 기존 report를 제거하고 현재 compile database에서 nonempty configure options를 새로 만든다. 이후 새 canonical `result_list.txt`만 `tools/polyspace_result_gate.py`에 전달. parser exit code가 GitLab job exit를 결정하며 Polyspace Access 업로드는 이 판정을 바꾸지 않음
+- canonical schema: TSV header는 `ID`부터 `Col`까지 정해진 16개 column을 같은 순서로 모두 포함해야 함. 축약·순서 변경·추가 column은 즉시 실패
+- TSV field boundary: 필드 경계는 literal TAB만 사용한다. 큰따옴표(`"`)는 일반 데이터로 취급하며 따옴표 처리나 행 결합에 사용하지 않는다. 따라서 큰따옴표로 감싼 TAB도 추가 field로 거부한다.
+- raw-defect-zero policy: 모든 canonical export row는 `Color=Green`이고 status가 blank 또는 `Unreviewed`여야 한다. `Justified`, `No action planned`, `Not a defect`, non-Green row, malformed TSV, `File does not compile`은 모두 gate 실패다. 예외: 21.6.1/21.6.2/21.6.3 중 `polyspace/setup_phase_deviation.txt`에 적은 설정 단계 파일의 행은 잠정 deviated로 따로 집계하며, 그 밖의 행은 모두 unresolved다.
 
 ```bash
 python3 tools/test_polyspace_checker_profile.py
 python3 tools/test_polyspace_result_gate.py
 python3 tools/test_polyspace_export_contract.py
+python3 tools/test_polyspace_transport.py
 ```
 
 - 개념(setup/native/external validation 의미, artifact 판정 기준): [validation.md](manual/validation.md)
@@ -432,7 +446,7 @@ tools/audit_release_readiness.sh
 >
 > 검증 PASS ≠ 자동 publication consent. commit/push/tag/release 또는 외부 게시 전 필수 절차: 변경 범위와 evidence 제시, 명시적 승인 획득.
 >
-> source archive 생성 조건: clean committed tree와 exact tag 승인 이후만.
+> source archive 생성 조건: clean committed tree와 exact `v0.1.3` tag 승인 이후만. archive version `0.1.3`은 `CMakeLists.txt` project version과 같고, exact `v0.1.3` tag가 현재 `HEAD`와 archive embedded commit ID를 모두 가리켜야 함.
 
 - 개념(package surface 체크리스트, publication 경계 rationale): [release.md](manual/release.md)
 

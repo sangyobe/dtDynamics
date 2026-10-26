@@ -1,15 +1,28 @@
 digraph model_layers {
-  rankdir=LR;
+  rankdir=TB;
+  graph [nodesep=0.45, ranksep=0.7];
   node [shape=box, style="rounded,filled", fillcolor="#eef5ff"];
-  spec [label="dtDynSpec
-editable model intent"];
-  compile [label="CompileSpec
-validate + assign addresses"];
-  model [label="dtDynModel
-immutable topology/indexing"];
-  data [label="dtDynData::Resize(model)
-preallocated runtime storage"];
-  loop [label="RT compute loop
-state + dynamics + Jacobians"];
-  spec -> compile -> model -> data -> loop;
+
+  spec [label="dtDynSpec\neditable model intent"];
+  checked [label="ValidateSpec + CompileSpecChecked\nexternal/editable input\nvalidate + assign addresses"];
+  trusted [label="CompileSpec\ntrusted setup input\nassign addresses"];
+  model [label="dtDynModel\nfixed topology/indexing\nphysical values mutable via UpdateSpec"];
+  data [label="dtDynData\npreallocated runtime storage\nResize only after structural compile"];
+  loop [label="RT compute loop\nstate + dynamics + Jacobians"];
+  update [label="UpdateSpec\nfixed-layout physical update\nexclusive model access\nfalse: no model writes"];
+  structural [label="topology/layout/name change\nindependent candidate"];
+  candidate [label="CompileSpecChecked + dtDynData::Resize\nrebuild caches"];
+  swap [label="reader-free safe swap\npublish candidate model/data"];
+
+  spec -> checked -> model -> data;
+  data -> loop [label="recompute before consumption"];
+  spec -> trusted [style=dashed, label="trusted input"];
+  trusted -> model;
+  spec -> update [style=dashed, label="validated physical change"];
+  update -> model [label="success: fixed-layout physical write"];
+  update -> data [style=dashed, label="success: dtDynData results stale"];
+  spec -> structural [style=dashed, color="#b45309", fontcolor="#b45309", label="structural edit"];
+  structural -> candidate [style=dashed, color="#b45309", fontcolor="#b45309", label="checked compile"];
+  candidate -> swap [style=dashed, color="#b45309"];
+  swap -> loop [style=dashed, color="#b45309", fontcolor="#b45309", label="publish candidate"];
 }

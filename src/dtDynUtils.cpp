@@ -18,7 +18,7 @@ namespace utils
 
 dtDynIndex EffectiveRootCount(const dtDynModel &model)
 {
-    return model.nroot > 0 ? model.nroot : 1;
+    return (model.nroot > 0) ? model.nroot : 1;
 }
 
 dtDynIndex RootIndex(const dtDynModel &model, const dtDynIndex bodyId)
@@ -39,7 +39,7 @@ dt::Math::Vector3<dtDynReal> RootCom(const dtDynModel &model,
     {
         return data.subtree_com[static_cast<std::size_t>(rootBody)];
     }
-    return data.subtree_com[0];
+    return data.subtree_com[static_cast<std::size_t>(0)];
 }
 
 dt::Math::Vector6<dtDynReal> MotionSubspaceAtPoint(const dtDynModel &model,
@@ -85,9 +85,14 @@ dt::Math::Vector6<dtDynReal> MotionSubspaceAtPoint(const dtDynModel &model,
         angular = math::MatrixColumn(data.xmat[static_cast<std::size_t>(jointBody)], dofOffset);
         linear = angular & (point - data.xanchor[static_cast<std::size_t>(jointId)]);
     }
+    else
+    {
+        angular.SetZero();
+        linear.SetZero();
+    }
 
     return math::SpatialMotionVector(angular, linear);
 }
 
-} // namespace utils
+} // end of namespace utils
 } // namespace dt::Dynamics

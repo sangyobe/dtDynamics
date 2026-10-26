@@ -288,9 +288,9 @@ private:
     public:
         SpecStorage() = default;
         SpecStorage(const SpecStorage &other) = default;
-        SpecStorage(SpecStorage &&other) = default;
+        SpecStorage(SpecStorage &&other) noexcept = default;
         SpecStorage &operator=(const SpecStorage &other);
-        SpecStorage &operator=(SpecStorage &&other) = default;
+        SpecStorage &operator=(SpecStorage &&other) noexcept = default;
 
         void Swap(SpecStorage &other) noexcept;
 
@@ -313,7 +313,7 @@ private:
                   const char *const itemType)
     {
         EnsureNotEditing();
-        if (itemId < 0 || static_cast<std::size_t>(itemId) >= items.size())
+        if ((itemId < 0) || (static_cast<std::size_t>(itemId) >= items.size()))
         {
             throw std::out_of_range(std::string("dtDynSpec: invalid ") + itemType + " index");
         }

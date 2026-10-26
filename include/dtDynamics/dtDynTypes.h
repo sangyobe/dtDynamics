@@ -34,7 +34,7 @@ static constexpr dtDynIndex DTDYN_INVALID_INDEX = -1; //!< Invalid model/data in
              not for validating model indices where DTDYN_INVALID_INDEX must stay invalid. */
 constexpr std::size_t ToSize(const dtDynIndex value)
 {
-    return value > 0 ? static_cast<std::size_t>(value) : static_cast<std::size_t>(0);
+    return (value > 0) ? static_cast<std::size_t>(value) : static_cast<std::size_t>(0);
 }
 
 using dtDynDenseVector = dt::Math::VectorX<dtDynReal>; //!< Dynamic dense vector storage from dtMath.

@@ -12,6 +12,7 @@
 #include "dtDynamics/dtDynMath.h"
 #include "dtDynamics/dtDynValidation.h"
 
+#include <cstdint>
 #include <stdexcept>
 
 namespace dt::Dynamics
@@ -76,77 +77,204 @@ dtDynIndex GetJointSpecId(const dtDynBodySpec &body, const dtDynIndex jointIndex
     return body.joints[static_cast<std::size_t>(jointIndex)];
 }
 
-} // namespace
+constexpr bool HasArraySize(const std::size_t actual, const dtDynIndex expected) noexcept
+{
+    return (expected >= 0) && (actual == static_cast<std::size_t>(expected));
+}
+
+bool HasDenseSize(const dtDynDenseVector &value, const dtDynIndex expected) noexcept
+{
+    return (expected >= 0) && (static_cast<dtDynIndex>(value.GetDim()) == expected);
+}
+
+} // end of anonymous namespace
 
 bool UpdateSpec(const dtDynSpec &spec, dtDynModel &model) noexcept
 {
-    const auto hasArraySize = [](const std::size_t actual, const dtDynIndex expected) noexcept
-    {
-        return expected >= 0 && actual == static_cast<std::size_t>(expected);
-    };
-    const auto hasDenseSize = [](const dtDynDenseVector &value, const dtDynIndex expected) noexcept
-    {
-        return expected >= 0 && value.GetDim() == expected;
-    };
-
     const dtArray<dtDynBodySpec> &bodies = spec.Bodies();
     const dtArray<dtDynJointSpec> &joints = spec.Joints();
     const dtArray<dtDynSiteSpec> &sites = spec.Sites();
     const dtArray<dtDynActuatorSpec> &actuators = spec.Actuators();
 
-    if (model.nq < 0 || model.nv < 0 || model.nbody < 1 || model.njnt < 0 ||
-        model.nsite < 0 || model.nu < 0 || model.nroot < 0 ||
-        !hasArraySize(bodies.size(), model.nbody) ||
-        !hasArraySize(joints.size(), model.njnt) ||
-        !hasArraySize(sites.size(), model.nsite) ||
-        !hasArraySize(actuators.size(), model.nu))
+    if ((model.nq < 0) || (model.nv < 0) || (model.nbody < 1) || (model.njnt < 0) ||
+        (model.nsite < 0) || (model.nu < 0) || (model.nroot < 0) ||
+        !HasArraySize(bodies.size(), model.nbody) ||
+        !HasArraySize(joints.size(), model.njnt) ||
+        !HasArraySize(sites.size(), model.nsite) ||
+        !HasArraySize(actuators.size(), model.nu))
     {
         return false;
     }
 
-    if (!hasArraySize(model.body_names.size(), model.nbody) ||
-        !hasArraySize(model.body_parentid.size(), model.nbody) ||
-        !hasArraySize(model.body_rootid.size(), model.nbody) ||
-        !hasArraySize(model.body_rootidx.size(), model.nbody) ||
-        !hasArraySize(model.body_jntnum.size(), model.nbody) ||
-        !hasArraySize(model.body_jntadr.size(), model.nbody) ||
-        !hasArraySize(model.body_dofnum.size(), model.nbody) ||
-        !hasArraySize(model.body_dofadr.size(), model.nbody) ||
-        !hasArraySize(model.body_weldid.size(), model.nbody) ||
-        !hasDenseSize(model.body_mass, model.nbody) ||
-        !hasDenseSize(model.body_subtreemass, model.nbody) ||
-        !hasArraySize(model.body_pos.size(), model.nbody) ||
-        !hasArraySize(model.body_quat.size(), model.nbody) ||
-        !hasArraySize(model.body_mat.size(), model.nbody) ||
-        !hasArraySize(model.body_ipos.size(), model.nbody) ||
-        !hasArraySize(model.body_iquat.size(), model.nbody) ||
-        !hasArraySize(model.body_imat.size(), model.nbody) ||
-        !hasArraySize(model.body_inertia.size(), model.nbody) ||
-        !hasArraySize(model.joint_names.size(), model.njnt) ||
-        !hasArraySize(model.jnt_type.size(), model.njnt) ||
-        !hasArraySize(model.jnt_bodyid.size(), model.njnt) ||
-        !hasArraySize(model.jnt_specid.size(), model.njnt) ||
-        !hasArraySize(model.jnt_qposadr.size(), model.njnt) ||
-        !hasArraySize(model.jnt_dofadr.size(), model.njnt) ||
-        !hasArraySize(model.jnt_limited.size(), model.njnt) ||
-        !hasDenseSize(model.jnt_range_min, model.njnt) ||
-        !hasDenseSize(model.jnt_range_max, model.njnt) ||
-        !hasArraySize(model.jnt_pos.size(), model.njnt) ||
-        !hasArraySize(model.jnt_axis.size(), model.njnt) ||
-        !hasArraySize(model.dof_bodyid.size(), model.nv) ||
-        !hasArraySize(model.dof_parentid.size(), model.nv) ||
-        !hasArraySize(model.dof_jntid.size(), model.nv) ||
-        !hasDenseSize(model.dof_armature, model.nv) ||
-        !hasArraySize(model.site_names.size(), model.nsite) ||
-        !hasArraySize(model.site_bodyid.size(), model.nsite) ||
-        !hasArraySize(model.site_pos.size(), model.nsite) ||
-        !hasArraySize(model.site_quat.size(), model.nsite) ||
-        !hasArraySize(model.site_mat.size(), model.nsite) ||
-        !hasArraySize(model.actuator_names.size(), model.nu) ||
-        !hasArraySize(model.actuator_jointid.size(), model.nu) ||
-        !hasDenseSize(model.actuator_gear, model.nu) ||
-        !hasArraySize(model.root_bodyid.size(), model.nroot) ||
-        !hasDenseSize(model.root_mass, model.nroot))
+    if (!HasArraySize(model.body_names.size(), model.nbody))
+    {
+        return false;
+    }
+    if (!HasArraySize(model.body_parentid.size(), model.nbody))
+    {
+        return false;
+    }
+    if (!HasArraySize(model.body_rootid.size(), model.nbody))
+    {
+        return false;
+    }
+    if (!HasArraySize(model.body_rootidx.size(), model.nbody))
+    {
+        return false;
+    }
+    if (!HasArraySize(model.body_jntnum.size(), model.nbody))
+    {
+        return false;
+    }
+    if (!HasArraySize(model.body_jntadr.size(), model.nbody))
+    {
+        return false;
+    }
+    if (!HasArraySize(model.body_dofnum.size(), model.nbody))
+    {
+        return false;
+    }
+    if (!HasArraySize(model.body_dofadr.size(), model.nbody))
+    {
+        return false;
+    }
+    if (!HasArraySize(model.body_weldid.size(), model.nbody))
+    {
+        return false;
+    }
+    if (!HasDenseSize(model.body_mass, model.nbody))
+    {
+        return false;
+    }
+    if (!HasDenseSize(model.body_subtreemass, model.nbody))
+    {
+        return false;
+    }
+    if (!HasArraySize(model.body_pos.size(), model.nbody))
+    {
+        return false;
+    }
+    if (!HasArraySize(model.body_quat.size(), model.nbody))
+    {
+        return false;
+    }
+    if (!HasArraySize(model.body_mat.size(), model.nbody))
+    {
+        return false;
+    }
+    if (!HasArraySize(model.body_ipos.size(), model.nbody))
+    {
+        return false;
+    }
+    if (!HasArraySize(model.body_iquat.size(), model.nbody))
+    {
+        return false;
+    }
+    if (!HasArraySize(model.body_imat.size(), model.nbody))
+    {
+        return false;
+    }
+    if (!HasArraySize(model.body_inertia.size(), model.nbody))
+    {
+        return false;
+    }
+    if (!HasArraySize(model.joint_names.size(), model.njnt))
+    {
+        return false;
+    }
+    if (!HasArraySize(model.jnt_type.size(), model.njnt))
+    {
+        return false;
+    }
+    if (!HasArraySize(model.jnt_bodyid.size(), model.njnt))
+    {
+        return false;
+    }
+    if (!HasArraySize(model.jnt_specid.size(), model.njnt))
+    {
+        return false;
+    }
+    if (!HasArraySize(model.jnt_qposadr.size(), model.njnt))
+    {
+        return false;
+    }
+    if (!HasArraySize(model.jnt_dofadr.size(), model.njnt))
+    {
+        return false;
+    }
+    if (!HasArraySize(model.jnt_limited.size(), model.njnt))
+    {
+        return false;
+    }
+    if (!HasDenseSize(model.jnt_range_min, model.njnt))
+    {
+        return false;
+    }
+    if (!HasDenseSize(model.jnt_range_max, model.njnt))
+    {
+        return false;
+    }
+    if (!HasArraySize(model.jnt_pos.size(), model.njnt))
+    {
+        return false;
+    }
+    if (!HasArraySize(model.jnt_axis.size(), model.njnt))
+    {
+        return false;
+    }
+    if (!HasArraySize(model.dof_bodyid.size(), model.nv))
+    {
+        return false;
+    }
+    if (!HasArraySize(model.dof_parentid.size(), model.nv))
+    {
+        return false;
+    }
+    if (!HasArraySize(model.dof_jntid.size(), model.nv))
+    {
+        return false;
+    }
+    if (!HasDenseSize(model.dof_armature, model.nv))
+    {
+        return false;
+    }
+    if (!HasArraySize(model.site_names.size(), model.nsite))
+    {
+        return false;
+    }
+    if (!HasArraySize(model.site_bodyid.size(), model.nsite))
+    {
+        return false;
+    }
+    if (!HasArraySize(model.site_pos.size(), model.nsite))
+    {
+        return false;
+    }
+    if (!HasArraySize(model.site_quat.size(), model.nsite))
+    {
+        return false;
+    }
+    if (!HasArraySize(model.site_mat.size(), model.nsite))
+    {
+        return false;
+    }
+    if (!HasArraySize(model.actuator_names.size(), model.nu))
+    {
+        return false;
+    }
+    if (!HasArraySize(model.actuator_jointid.size(), model.nu))
+    {
+        return false;
+    }
+    if (!HasDenseSize(model.actuator_gear, model.nu))
+    {
+        return false;
+    }
+    if (!HasArraySize(model.root_bodyid.size(), model.nroot))
+    {
+        return false;
+    }
+    if (!HasDenseSize(model.root_mass, model.nroot))
     {
         return false;
     }
@@ -158,9 +286,9 @@ bool UpdateSpec(const dtDynSpec &spec, dtDynModel &model) noexcept
     {
         const std::size_t bodyIndex = static_cast<std::size_t>(bodyId);
         const dtDynBodySpec &body = bodies[bodyIndex];
-        const dtDynIndex expectedParent = bodyId == 0 ? 0 : body.parent;
-        if (model.body_names[bodyIndex] != body.name ||
-            model.body_parentid[bodyIndex] != expectedParent ||
+        const dtDynIndex expectedParent = (bodyId == 0) ? 0 : body.parent;
+        if ((model.body_names[bodyIndex] != body.name) ||
+            (model.body_parentid[bodyIndex] != expectedParent) ||
             (bodyId == 0 && body.parent != DTDYN_INVALID_INDEX) ||
             (bodyId > 0 && (body.parent < 0 || body.parent >= bodyId)) ||
             body.joints.size() > static_cast<std::size_t>(model.njnt))
@@ -184,21 +312,22 @@ bool UpdateSpec(const dtDynSpec &spec, dtDynModel &model) noexcept
         dtDynIndex parentDof = DTDYN_INVALID_INDEX;
         if (bodyId > 0)
         {
-            for (dtDynIndex ancestor = body.parent; ancestor > 0;
-                 ancestor = model.body_parentid[static_cast<std::size_t>(ancestor)])
+            dtDynIndex ancestor = body.parent;
+            while (ancestor > 0)
             {
                 const std::size_t ancestorIndex = static_cast<std::size_t>(ancestor);
                 const dtDynIndex ancestorDofCount = model.body_dofnum[ancestorIndex];
                 const dtDynIndex ancestorDofAdr = model.body_dofadr[ancestorIndex];
                 if (ancestorDofCount > 0)
                 {
-                    if (ancestorDofAdr < 0 || ancestorDofAdr > model.nv - ancestorDofCount)
+                    if ((ancestorDofAdr < 0) || (ancestorDofAdr > (model.nv - ancestorDofCount)))
                     {
                         return false;
                     }
                     parentDof = ancestorDofAdr + ancestorDofCount - 1;
                     break;
                 }
+                ancestor = model.body_parentid[static_cast<std::size_t>(ancestor)];
             }
         }
 
@@ -206,7 +335,7 @@ bool UpdateSpec(const dtDynSpec &spec, dtDynModel &model) noexcept
         for (dtDynIndex localJointId = 0; localJointId < bodyJointCount; ++localJointId)
         {
             const dtDynIndex specJointId = GetJointSpecId(body, localJointId);
-            if (specJointId < 0 || specJointId >= model.njnt || nextJointId >= model.njnt)
+            if ((specJointId < 0) || (specJointId >= model.njnt) || (nextJointId >= model.njnt))
             {
                 return false;
             }
@@ -215,23 +344,47 @@ bool UpdateSpec(const dtDynSpec &spec, dtDynModel &model) noexcept
             const std::size_t modelJointIndex = static_cast<std::size_t>(nextJointId);
             const dtDynJointSpec &joint = joints[specJointIndex];
             const dtDynIndex type = static_cast<dtDynIndex>(joint.type);
-            if (joint.body != bodyId ||
-                type < static_cast<dtDynIndex>(dtDynJointType::Free) ||
-                type > static_cast<dtDynIndex>(dtDynJointType::Hinge) ||
-                model.joint_names[modelJointIndex] != joint.name ||
-                model.jnt_specid[modelJointIndex] != specJointId ||
-                model.jnt_type[modelJointIndex] != type ||
-                model.jnt_bodyid[modelJointIndex] != bodyId ||
-                model.jnt_qposadr[modelJointIndex] != nextQposAdr ||
-                model.jnt_dofadr[modelJointIndex] != nextDofAdr)
+            if (joint.body != bodyId)
+            {
+                return false;
+            }
+            if (type < static_cast<dtDynIndex>(dtDynJointType::Free))
+            {
+                return false;
+            }
+            if (type > static_cast<dtDynIndex>(dtDynJointType::Hinge))
+            {
+                return false;
+            }
+            if (model.joint_names[modelJointIndex] != joint.name)
+            {
+                return false;
+            }
+            if (model.jnt_specid[modelJointIndex] != specJointId)
+            {
+                return false;
+            }
+            if (model.jnt_type[modelJointIndex] != type)
+            {
+                return false;
+            }
+            if (model.jnt_bodyid[modelJointIndex] != bodyId)
+            {
+                return false;
+            }
+            if (model.jnt_qposadr[modelJointIndex] != nextQposAdr)
+            {
+                return false;
+            }
+            if (model.jnt_dofadr[modelJointIndex] != nextDofAdr)
             {
                 return false;
             }
 
             const dtDynJointDofSize dofSize = GetJointDofSize(joint.type);
-            if (dofSize.qposSize < 0 || dofSize.qvelSize < 0 ||
-                nextQposAdr > model.nq - dofSize.qposSize ||
-                nextDofAdr > model.nv - dofSize.qvelSize)
+            if ((dofSize.qposSize < 0) || (dofSize.qvelSize < 0) ||
+                (nextQposAdr > (model.nq - dofSize.qposSize)) ||
+                (nextDofAdr > (model.nv - dofSize.qvelSize)))
             {
                 return false;
             }
@@ -239,9 +392,9 @@ bool UpdateSpec(const dtDynSpec &spec, dtDynModel &model) noexcept
             {
                 const dtDynIndex dofId = nextDofAdr + dofOffset;
                 const std::size_t dofIndex = static_cast<std::size_t>(dofId);
-                if (model.dof_bodyid[dofIndex] != bodyId ||
-                    model.dof_parentid[dofIndex] != parentDof ||
-                    model.dof_jntid[dofIndex] != nextJointId)
+                if ((model.dof_bodyid[dofIndex] != bodyId) ||
+                    (model.dof_parentid[dofIndex] != parentDof) ||
+                    (model.dof_jntid[dofIndex] != nextJointId))
                 {
                     return false;
                 }
@@ -263,7 +416,7 @@ bool UpdateSpec(const dtDynSpec &spec, dtDynModel &model) noexcept
     for (dtDynIndex parentId = 0; parentId < model.nbody; ++parentId)
     {
         const dtDynBodySpec &parent = bodies[static_cast<std::size_t>(parentId)];
-        if (parentId == 0 && parent.nextSibling != DTDYN_INVALID_INDEX)
+        if ((parentId == 0) && (parent.nextSibling != DTDYN_INVALID_INDEX))
         {
             return false;
         }
@@ -272,8 +425,20 @@ bool UpdateSpec(const dtDynSpec &spec, dtDynModel &model) noexcept
         dtDynIndex siblingSteps = 0;
         while (child != DTDYN_INVALID_INDEX)
         {
-            if (child <= 0 || child >= model.nbody || ++siblingSteps > model.nbody ||
-                childLinkCount >= model.nbody - 1)
+            if (child <= 0)
+            {
+                return false;
+            }
+            if (child >= model.nbody)
+            {
+                return false;
+            }
+            ++siblingSteps;
+            if (siblingSteps > model.nbody)
+            {
+                return false;
+            }
+            if (childLinkCount >= (model.nbody - 1))
             {
                 return false;
             }
@@ -285,14 +450,15 @@ bool UpdateSpec(const dtDynSpec &spec, dtDynModel &model) noexcept
             child = bodies[static_cast<std::size_t>(child)].nextSibling;
         }
     }
-    if (childLinkCount != model.nbody - 1)
+    if (childLinkCount != (model.nbody - 1))
     {
         return false;
     }
 
-    if (nextJointId != model.njnt || nextQposAdr != model.nq || nextDofAdr != model.nv ||
-        model.body_rootid[0] != 0 || model.body_rootidx[0] != DTDYN_INVALID_INDEX ||
-        model.body_weldid[0] != 0)
+    if ((nextJointId != model.njnt) || (nextQposAdr != model.nq) || (nextDofAdr != model.nv) ||
+        (model.body_rootid[static_cast<std::size_t>(0)] != 0) ||
+        (model.body_rootidx[static_cast<std::size_t>(0)] != DTDYN_INVALID_INDEX) ||
+        (model.body_weldid[static_cast<std::size_t>(0)] != 0))
     {
         return false;
     }
@@ -303,24 +469,24 @@ bool UpdateSpec(const dtDynSpec &spec, dtDynModel &model) noexcept
         const std::size_t bodyIndex = static_cast<std::size_t>(bodyId);
         const dtDynIndex parent = model.body_parentid[bodyIndex];
         const dtDynIndex expectedRoot =
-            parent == 0 ? bodyId : model.body_rootid[static_cast<std::size_t>(parent)];
+            (parent == 0) ? bodyId : model.body_rootid[static_cast<std::size_t>(parent)];
         const dtDynIndex expectedRootSlot =
-            parent == 0 ? expectedRootIndex : model.body_rootidx[static_cast<std::size_t>(parent)];
-        const dtDynIndex expectedWeld = model.body_jntnum[bodyIndex] > 0
-                                           ? bodyId
-                                           : (parent > 0
-                                                  ? model.body_weldid[static_cast<std::size_t>(parent)]
-                                                  : 0);
-        if (model.body_rootid[bodyIndex] != expectedRoot ||
-            model.body_rootidx[bodyIndex] != expectedRootSlot ||
-            model.body_weldid[bodyIndex] != expectedWeld)
+            (parent == 0) ? expectedRootIndex : model.body_rootidx[static_cast<std::size_t>(parent)];
+        const dtDynIndex expectedWeld = (model.body_jntnum[bodyIndex] > 0)
+                                            ? bodyId
+                                            : ((parent > 0)
+                                                   ? model.body_weldid[static_cast<std::size_t>(parent)]
+                                                   : 0);
+        if ((model.body_rootid[bodyIndex] != expectedRoot) ||
+            (model.body_rootidx[bodyIndex] != expectedRootSlot) ||
+            (model.body_weldid[bodyIndex] != expectedWeld))
         {
             return false;
         }
         if (parent == 0)
         {
-            if (expectedRootIndex >= model.nroot ||
-                model.root_bodyid[static_cast<std::size_t>(expectedRootIndex)] != bodyId)
+            if ((expectedRootIndex >= model.nroot) ||
+                (model.root_bodyid[static_cast<std::size_t>(expectedRootIndex)] != bodyId))
             {
                 return false;
             }
@@ -336,8 +502,19 @@ bool UpdateSpec(const dtDynSpec &spec, dtDynModel &model) noexcept
     {
         const std::size_t siteIndex = static_cast<std::size_t>(siteId);
         const dtDynSiteSpec &site = sites[siteIndex];
-        if (site.body < 0 || site.body >= model.nbody ||
-            model.site_names[siteIndex] != site.name || model.site_bodyid[siteIndex] != site.body)
+        if (site.body < 0)
+        {
+            return false;
+        }
+        if (site.body >= model.nbody)
+        {
+            return false;
+        }
+        if (model.site_names[siteIndex] != site.name)
+        {
+            return false;
+        }
+        if (model.site_bodyid[siteIndex] != site.body)
         {
             return false;
         }
@@ -346,14 +523,16 @@ bool UpdateSpec(const dtDynSpec &spec, dtDynModel &model) noexcept
     for (dtDynIndex bodyId = 0; bodyId < model.nbody; ++bodyId)
     {
         const dtDynBodySpec &body = bodies[static_cast<std::size_t>(bodyId)];
-        for (std::size_t localSiteId = 0; localSiteId < body.sites.size(); ++localSiteId)
+        std::size_t localSiteId = 0;
+        while (localSiteId < body.sites.size())
         {
             const dtDynIndex siteId = body.sites[localSiteId];
-            if (siteId < 0 || siteId >= model.nsite ||
-                sites[static_cast<std::size_t>(siteId)].body != bodyId)
+            if ((siteId < 0) || (siteId >= model.nsite) ||
+                (sites[static_cast<std::size_t>(siteId)].body != bodyId))
             {
                 return false;
             }
+            ++localSiteId;
         }
     }
     for (dtDynIndex siteId = 0; siteId < model.nsite; ++siteId)
@@ -361,12 +540,18 @@ bool UpdateSpec(const dtDynSpec &spec, dtDynModel &model) noexcept
         const dtDynSiteSpec &site = sites[static_cast<std::size_t>(siteId)];
         const dtDynBodySpec &owner = bodies[static_cast<std::size_t>(site.body)];
         dtDynIndex backlinkCount = 0;
-        for (std::size_t localSiteId = 0; localSiteId < owner.sites.size(); ++localSiteId)
+        std::size_t localSiteId = 0;
+        while (localSiteId < owner.sites.size())
         {
-            if (owner.sites[localSiteId] == siteId && ++backlinkCount > 1)
+            if (owner.sites[localSiteId] == siteId)
             {
-                return false;
+                ++backlinkCount;
+                if (backlinkCount > 1)
+                {
+                    return false;
+                }
             }
+            ++localSiteId;
         }
         if (backlinkCount != 1)
         {
@@ -379,10 +564,27 @@ bool UpdateSpec(const dtDynSpec &spec, dtDynModel &model) noexcept
         const std::size_t actuatorIndex = static_cast<std::size_t>(actuatorId);
         const dtDynActuatorSpec &actuator = actuators[actuatorIndex];
         const dtDynIndex modelJointId = model.actuator_jointid[actuatorIndex];
-        if (actuator.joint < 0 || actuator.joint >= model.njnt ||
-            model.actuator_names[actuatorIndex] != actuator.name ||
-            modelJointId < 0 || modelJointId >= model.njnt ||
-            model.jnt_specid[static_cast<std::size_t>(modelJointId)] != actuator.joint)
+        if (actuator.joint < 0)
+        {
+            return false;
+        }
+        if (actuator.joint >= model.njnt)
+        {
+            return false;
+        }
+        if (model.actuator_names[actuatorIndex] != actuator.name)
+        {
+            return false;
+        }
+        if (modelJointId < 0)
+        {
+            return false;
+        }
+        if (modelJointId >= model.njnt)
+        {
+            return false;
+        }
+        if (model.jnt_specid[static_cast<std::size_t>(modelJointId)] != actuator.joint)
         {
             return false;
         }
@@ -395,14 +597,14 @@ bool UpdateSpec(const dtDynSpec &spec, dtDynModel &model) noexcept
         model.body_pos[bodyIndex] = body.pos;
         model.body_quat[bodyIndex] = math::NormalizeOrIdentity(body.quat);
         model.body_mat[bodyIndex] = math::QuatToMat(model.body_quat[bodyIndex]);
-        model.body_ipos[bodyIndex] = body.inertial.mass == 0.0 ? body.pos : body.inertial.pos;
-        model.body_iquat[bodyIndex] = body.inertial.mass == 0.0
-                                           ? model.body_quat[bodyIndex]
-                                           : math::NormalizeOrIdentity(body.inertial.quat);
+        model.body_ipos[bodyIndex] = (body.inertial.mass == 0.0) ? body.pos : body.inertial.pos;
+        model.body_iquat[bodyIndex] = (body.inertial.mass == 0.0)
+                                          ? model.body_quat[bodyIndex]
+                                          : math::NormalizeOrIdentity(body.inertial.quat);
         model.body_imat[bodyIndex] = math::QuatToMat(model.body_iquat[bodyIndex]);
         model.body_inertia[bodyIndex] = body.inertial.inertia;
-        model.body_mass(bodyId) = body.inertial.mass;
-        model.body_subtreemass(bodyId) = body.inertial.mass;
+        model.body_mass(static_cast<std::uint16_t>(bodyId)) = body.inertial.mass;
+        model.body_subtreemass(static_cast<std::uint16_t>(bodyId)) = body.inertial.mass;
     }
 
     for (dtDynIndex modelJointId = 0; modelJointId < model.njnt; ++modelJointId)
@@ -412,13 +614,13 @@ bool UpdateSpec(const dtDynSpec &spec, dtDynModel &model) noexcept
         const dtDynJointSpec &joint = joints[static_cast<std::size_t>(specJointId)];
         const dtDynJointDofSize dofSize = GetJointDofSize(joint.type);
         model.jnt_limited[modelJointIndex] = joint.limited ? 1 : 0;
-        model.jnt_range_min(modelJointId) = joint.rangeMin;
-        model.jnt_range_max(modelJointId) = joint.rangeMax;
+        model.jnt_range_min(static_cast<std::uint16_t>(modelJointId)) = joint.rangeMin;
+        model.jnt_range_max(static_cast<std::uint16_t>(modelJointId)) = joint.rangeMax;
         model.jnt_pos[modelJointIndex] = joint.pos;
         model.jnt_axis[modelJointIndex] = joint.axis;
         for (dtDynIndex dofOffset = 0; dofOffset < dofSize.qvelSize; ++dofOffset)
         {
-            model.dof_armature(model.jnt_dofadr[modelJointIndex] + dofOffset) = joint.armature;
+            model.dof_armature(static_cast<std::uint16_t>(model.jnt_dofadr[modelJointIndex] + dofOffset)) = joint.armature;
         }
     }
 
@@ -433,18 +635,20 @@ bool UpdateSpec(const dtDynSpec &spec, dtDynModel &model) noexcept
 
     for (dtDynIndex actuatorId = 0; actuatorId < model.nu; ++actuatorId)
     {
-        model.actuator_gear(actuatorId) = actuators[static_cast<std::size_t>(actuatorId)].gear;
+        model.actuator_gear(static_cast<std::uint16_t>(actuatorId)) = actuators[static_cast<std::size_t>(actuatorId)].gear;
     }
 
     for (dtDynIndex bodyId = model.nbody - 1; bodyId > 0; --bodyId)
     {
         const dtDynIndex parent = model.body_parentid[static_cast<std::size_t>(bodyId)];
-        model.body_subtreemass(parent) += model.body_subtreemass(bodyId);
+        model.body_subtreemass(static_cast<std::uint16_t>(parent)) +=
+            model.body_subtreemass(static_cast<std::uint16_t>(bodyId));
     }
     for (dtDynIndex rootIndex = 0; rootIndex < model.nroot; ++rootIndex)
     {
         const dtDynIndex rootBody = model.root_bodyid[static_cast<std::size_t>(rootIndex)];
-        model.root_mass(rootIndex) = model.body_subtreemass(rootBody);
+        model.root_mass(static_cast<std::uint16_t>(rootIndex)) =
+            model.body_subtreemass(static_cast<std::uint16_t>(rootBody));
     }
 
     return true;
@@ -468,7 +672,8 @@ void CompileSpec(const dtDynSpec &spec, dtDynModel &model)
     for (dtDynIndex bodyId = 0; bodyId < model.nbody; ++bodyId)
     {
         const dtDynBodySpec &body = spec.Bodies()[static_cast<std::size_t>(bodyId)];
-        for (dtDynIndex localJointId = 0; localJointId < static_cast<dtDynIndex>(body.joints.size()); ++localJointId)
+        const dtDynIndex localJointCount = static_cast<dtDynIndex>(body.joints.size());
+        for (dtDynIndex localJointId = 0; localJointId < localJointCount; ++localJointId)
         {
             const dtDynJointSpec &joint = spec.Joints()[static_cast<std::size_t>(GetJointSpecId(body, localJointId))];
             const dtDynJointDofSize dofSize = GetJointDofSize(joint.type);
@@ -493,7 +698,7 @@ void CompileSpec(const dtDynSpec &spec, dtDynModel &model)
         const dtDynBodySpec &body = spec.Bodies()[static_cast<std::size_t>(bodyId)];
 
         model.body_names[static_cast<std::size_t>(bodyId)] = body.name;
-        model.body_parentid[static_cast<std::size_t>(bodyId)] = bodyId == 0 ? 0 : body.parent;
+        model.body_parentid[static_cast<std::size_t>(bodyId)] = (bodyId == 0) ? 0 : body.parent;
 
         if (bodyId == 0)
         {
@@ -502,9 +707,9 @@ void CompileSpec(const dtDynSpec &spec, dtDynModel &model)
 
         const dtDynIndex parent = body.parent;
         model.body_rootid[static_cast<std::size_t>(bodyId)] =
-            parent > 0 ? model.body_rootid[static_cast<std::size_t>(parent)] : bodyId;
+            (parent > 0) ? model.body_rootid[static_cast<std::size_t>(parent)] : bodyId;
         model.body_weldid[static_cast<std::size_t>(bodyId)] =
-            parent > 0 ? model.body_weldid[static_cast<std::size_t>(parent)] : 0;
+            (parent > 0) ? model.body_weldid[static_cast<std::size_t>(parent)] : 0;
 
         if (!body.joints.empty())
         {
@@ -513,9 +718,10 @@ void CompileSpec(const dtDynSpec &spec, dtDynModel &model)
             model.body_dofadr[static_cast<std::size_t>(bodyId)] = nextDofAdr;
 
             dtDynIndex bodyDofNum = 0;
-            dtDynIndex parentDof = parent >= 0 ? bodyLastDof[static_cast<std::size_t>(parent)] : DTDYN_INVALID_INDEX;
+            dtDynIndex parentDof = (parent >= 0) ? bodyLastDof[static_cast<std::size_t>(parent)] : DTDYN_INVALID_INDEX;
+            const dtDynIndex localJointCount = static_cast<dtDynIndex>(body.joints.size());
 
-            for (dtDynIndex localJointId = 0; localJointId < static_cast<dtDynIndex>(body.joints.size()); ++localJointId)
+            for (dtDynIndex localJointId = 0; localJointId < localJointCount; ++localJointId)
             {
                 const dtDynIndex specJointId = GetJointSpecId(body, localJointId);
                 const dtDynJointSpec &joint = spec.Joints()[static_cast<std::size_t>(specJointId)];
@@ -552,6 +758,10 @@ void CompileSpec(const dtDynSpec &spec, dtDynModel &model)
         {
             bodyLastDof[static_cast<std::size_t>(bodyId)] = bodyLastDof[static_cast<std::size_t>(parent)];
         }
+        else
+        {
+            bodyLastDof[static_cast<std::size_t>(bodyId)] = DTDYN_INVALID_INDEX;
+        }
     }
 
     for (dtDynIndex siteId = 0; siteId < model.nsite; ++siteId)
@@ -565,7 +775,7 @@ void CompileSpec(const dtDynSpec &spec, dtDynModel &model)
     {
         const dtDynActuatorSpec &actuator = spec.Actuators()[static_cast<std::size_t>(actuatorId)];
         model.actuator_names[static_cast<std::size_t>(actuatorId)] = actuator.name;
-        if (actuator.joint >= 0 && actuator.joint < static_cast<dtDynIndex>(jointIdMap.size()))
+        if ((actuator.joint >= 0) && (actuator.joint < static_cast<dtDynIndex>(jointIdMap.size())))
         {
             model.actuator_jointid[static_cast<std::size_t>(actuatorId)] =
                 jointIdMap[static_cast<std::size_t>(actuator.joint)];
@@ -628,4 +838,4 @@ dtDynModel CompileSpecChecked(const dtDynSpec &spec)
     return model;
 }
 
-} // namespace dt::Dynamics
+} // end of namespace dt::Dynamics
