@@ -58,6 +58,7 @@ option(DTDYNAMICS_BUILD_BENCHMARK "Build benchmarks for ${PROJECT_NAME}" ${DTDYN
 option(DTDYNAMICS_BUILD_REFERENCE_BENCHMARK "Build MuJoCo/Pinocchio reference benchmark executable" ON)
 option(BUILD_DTDYNAMICS_MUJOCO_TEST "Build MuJoCo reference validation tests" ON)
 option(BUILD_DTDYNAMICS_PINOCCHIO_TEST "Build Pinocchio reference validation tests" ON)
+option(USE_FLOATING_POINT_DOUBLE "floating point handling. (ON: SYSREAL is double, OFF: SYSREAL is float)" ON)
 set(DTDYNAMICS_VALIDATION_DEPS_DIR
     "${PROJECT_SOURCE_DIR}/.validation_deps"
     CACHE PATH "Private dependency prefix used only by dtDynamics validation tests")
@@ -104,6 +105,10 @@ target_include_directories(${PROJECT_NAME}
 )
 
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_17)
+
+if(NOT USE_FLOATING_POINT_DOUBLE)
+    target_compile_definitions(${PROJECT_NAME} PUBLIC DTDYNAMICS_USE_FLOAT)
+endif()
 
 if(DTDYNAMICS_BUILD_TEST)
     enable_testing()
@@ -179,3 +184,4 @@ message(STATUS "DTDYNAMICS_VALIDATION_DEPS_DIR      : ${DTDYNAMICS_VALIDATION_DE
 message(STATUS "DTDYNAMICS_MUJOCO_VERSION           : ${DTDYNAMICS_MUJOCO_VERSION}")
 message(STATUS "DTDYNAMICS_PINOCCHIO_VERSION        : ${DTDYNAMICS_PINOCCHIO_VERSION}")
 message(STATUS "DTDYNAMICS_DTMATH_INCLUDE_DIR       : ${DTDYNAMICS_DTMATH_INCLUDE_DIR}")
+message(STATUS "USE_FLOATING_POINT_DOUBLE           : ${USE_FLOATING_POINT_DOUBLE}")
